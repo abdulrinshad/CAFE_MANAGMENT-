@@ -1,0 +1,127 @@
+/* ── Top Header ── */
+.top-header {
+  height: 58px;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  background: var(--color-bg-alt);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 16px;
+}
+
+/* Search */
+.top-header__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: 7px 14px;
+  width: 280px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.top-header__search:focus-within {
+  border-color: var(--color-tan);
+  box-shadow: 0 0 0 3px rgba(212,165,116,0.12);
+}
+
+.top-header__search-icon {
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.top-header__search-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text-primary);
+  width: 100%;
+}
+
+.top-header__search-input::placeholder {
+  color: var(--color-text-light);
+}
+
+/* Actions */
+.top-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.top-header__icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  transition: background var(--transition), color var(--transition);
+}
+
+.top-header__icon-btn:hover {
+  background: var(--color-cream);
+  color: var(--color-espresso);
+}
+
+/* Avatar */
+.top-header__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  background: var(--color-cream);
+  padding: 0;
+  transition: border-color var(--transition);
+}
+
+.top-header__avatar:hover {
+  border-color: var(--color-tan);
+}
+
+.top-header__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Page title mode (Reports, Settings) */
+.top-header__page-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+}
+.top-header__page-icon { display: flex; align-items: center; color: var(--color-text-muted); }
+.top-header__page-name {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-espresso);
+}
+
+/* Right slot */
+.top-header__right-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}

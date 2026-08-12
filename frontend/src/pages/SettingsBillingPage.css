@@ -1,0 +1,84 @@
+/* ── Billing Settings Page ── */
+.billing-page.settings-page { max-width: 900px; }
+
+.billing-cards-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.billing-card {
+  gap: 18px;
+}
+.billing-card__title {
+  font-size: 22px;
+}
+
+/* Input with % suffix */
+.input-suffix-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-suffix-field {
+  flex: 1;
+  border-radius: 8px 0 0 8px !important;
+}
+.input-suffix {
+  padding: 0 14px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-cream);
+  border: 1px solid var(--color-border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+/* Billing select */
+.select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.billing-select {
+  appearance: none;
+  width: 100%;
+  padding-right: 36px !important;
+  cursor: pointer;
+}
+.select-chevron {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  color: var(--color-text-muted);
+}
+
+/* Textarea */
+.billing-textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+/* Separator */
+.billing-sep {
+  border: none;
+  border-top: 1px solid var(--color-border-light);
+  margin: 0;
+}
+
+/* Form hint */
+.form-hint {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+@media (max-width: 700px) {
+  .billing-cards-row { grid-template-columns: 1fr; }
+}

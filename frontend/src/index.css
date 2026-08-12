@@ -1,0 +1,180 @@
+/* ============================================================
+   ARTISAN BREW — Global Design System
+   ============================================================ */
+
+/* ── Reset & Base ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Color Palette */
+  --color-bg:           #fdf6f0;
+  --color-bg-alt:       #fef9f5;
+  --color-sidebar-bg:   #fdf6f0;
+  --color-white:        #ffffff;
+  --color-espresso:     #2c1810;
+  --color-brown:        #4a2c1a;
+  --color-brown-mid:    #6b3d2e;
+  --color-brown-light:  #8b5e3c;
+  --color-peach-active: #fde8d0;
+  --color-peach-border: #f5d5b8;
+  --color-tan:          #d4a574;
+  --color-tan-dark:     #b8935a;
+  --color-cream:        #f5ede4;
+  --color-cream-dark:   #e8d9cc;
+  --color-beige:        #f0e6da;
+  --color-border:       #e8ddd5;
+  --color-border-light: #ede3da;
+  --color-text-primary: #2c1810;
+  --color-text-secondary: #6b5a4e;
+  --color-text-muted:   #9c857a;
+  --color-text-light:   #b8a49c;
+  --color-green:        #4a7c59;
+  --color-red:          #c0392b;
+  --color-orange:       #d4601a;
+
+  /* Typography */
+  --font-serif:  'Playfair Display', Georgia, serif;
+  --font-sans:   'Inter', -apple-system, sans-serif;
+
+  /* Spacing */
+  --sidebar-width: 220px;
+
+  /* Transitions */
+  --transition: 0.2s ease;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-cream-dark); border-radius: 2px; }
+
+/* ── Utility ── */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ── Global Button Classes ── */
+.btn-primary {
+  background: var(--color-espresso);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition), transform var(--transition);
+  white-space: nowrap;
+}
+.btn-primary:hover { background: var(--color-brown); transform: translateY(-1px); }
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+.btn-outline {
+  background: transparent;
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+  white-space: nowrap;
+}
+.btn-outline:hover { background: var(--color-cream); border-color: var(--color-tan); }
+
+.btn-danger {
+  background: var(--color-red);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition);
+  white-space: nowrap;
+}
+.btn-danger:hover { opacity: 0.85; }
+
+.btn-ghost {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: background var(--transition), color var(--transition);
+}
+.btn-ghost:hover { background: var(--color-cream); color: var(--color-espresso); }
+
+/* ── Form elements ── */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-label {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-primary);
+}
+.form-label span { color: var(--color-red); margin-left: 2px; }
+.form-input, .form-select, .form-textarea {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-white);
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  width: 100%;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  border-color: var(--color-tan);
+  box-shadow: 0 0 0 3px rgba(212,165,116,0.12);
+}
+.form-input::placeholder, .form-textarea::placeholder { color: var(--color-text-light); }
+.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 7L11 1' stroke='%239c857a' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+.form-textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
+

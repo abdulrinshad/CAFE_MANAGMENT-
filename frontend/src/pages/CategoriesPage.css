@@ -1,0 +1,280 @@
+/* ── Categories Page ── */
+.categories-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Header */
+.categories-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Drag hint */
+.categories-page__drag-hint {
+  font-size: 12px;
+  color: var(--color-text-light);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  user-select: none;
+}
+
+
+.categories-page__section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--color-tan-dark);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.categories-page__title {
+  font-family: var(--font-serif);
+  font-size: 38px;
+  font-weight: 700;
+  color: var(--color-espresso);
+  line-height: 1.05;
+}
+
+/* Add Category Button */
+.btn-add-category {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-espresso);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 20px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition), transform var(--transition);
+  white-space: nowrap;
+}
+.btn-add-category:hover {
+  background: var(--color-brown);
+  transform: translateY(-1px);
+}
+
+/* ── Categories Grid ── */
+.categories-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+/* ── Category Card ── */
+.cat-card {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 22px 22px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: box-shadow var(--transition), transform var(--transition), opacity var(--transition), border-color var(--transition);
+  cursor: grab;
+  position: relative;
+}
+.cat-card:hover {
+  box-shadow: 0 4px 16px rgba(44,24,16,0.07);
+  transform: translateY(-1px);
+}
+.cat-card--inactive {
+  opacity: 0.75;
+}
+
+/* Dragging — the card being moved */
+.cat-card--dragging {
+  opacity: 0.35 !important;
+  cursor: grabbing;
+  transform: scale(0.98);
+  box-shadow: none !important;
+}
+
+/* Drop target highlight */
+.cat-card--drag-over {
+  border-color: var(--color-tan);
+  box-shadow: 0 0 0 2px rgba(212,165,116,0.25), 0 4px 16px rgba(44,24,16,0.08);
+  transform: translateY(-2px);
+}
+
+/* Drag handle */
+.cat-card__drag-handle {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--color-text-light);
+  opacity: 0;
+  transition: opacity var(--transition);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+.cat-card:hover .cat-card__drag-handle {
+  opacity: 1;
+}
+
+
+/* Top Row: Icon + Toggle */
+.cat-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.cat-card__icon-wrap {
+  width: 52px;
+  height: 52px;
+  background: var(--color-cream);
+  border: 1px solid var(--color-border-light);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-brown-mid);
+}
+
+/* Toggle Switch */
+.toggle-switch {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  background: var(--color-cream-dark);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.25s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.toggle-switch--active {
+  background: var(--color-tan-dark);
+}
+.toggle-switch__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.toggle-switch--active .toggle-switch__knob {
+  transform: translateX(20px);
+}
+.toggle-switch__check {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}
+
+/* Info */
+.cat-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cat-card__name {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-espresso);
+}
+.cat-card__count {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+/* Divider */
+.cat-card__divider {
+  border: none;
+  border-top: 1px solid var(--color-border-light);
+  margin: 0;
+}
+
+/* Footer */
+.cat-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cat-card__order-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.cat-card__order-input {
+  width: 50px;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text-primary);
+  text-align: center;
+  background: var(--color-white);
+  outline: none;
+  transition: border-color var(--transition);
+}
+.cat-card__order-input:focus {
+  border-color: var(--color-tan);
+}
+.cat-card__order-input::-webkit-inner-spin-button,
+.cat-card__order-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cat-card__edit-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background var(--transition), color var(--transition);
+}
+.cat-card__edit-btn:hover {
+  background: var(--color-cream);
+  color: var(--color-espresso);
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .categories-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 700px) {
+  .categories-grid {
+    grid-template-columns: 1fr;
+  }
+  .categories-page__title {
+    font-size: 28px;
+  }
+}

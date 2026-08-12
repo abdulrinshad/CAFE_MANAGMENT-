@@ -1,0 +1,44 @@
+/* ── Admin Layout ── */
+.admin-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.admin-layout__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.admin-layout__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 32px;
+  background: var(--color-bg);
+}
+
+/* ── Responsive ── */
+@media (max-width: 1280px) {
+  .admin-layout__content {
+    padding: 24px 24px;
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-layout {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .admin-layout__main {
+    height: auto;
+  }
+
+  .admin-layout__content {
+    overflow: visible;
+  }
+}
