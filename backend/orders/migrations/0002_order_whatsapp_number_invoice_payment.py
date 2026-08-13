@@ -21,16 +21,17 @@ class Migration(migrations.Migration):
             name='Invoice',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('invoice_number', models.CharField(blank=True, help_text='e.g. INV-10452', max_length=20, unique=True)),
-                ('token', models.UUIDField(default=uuid.uuid4, editable=False, help_text='Secure token for public receipt URL', unique=True)),
-                ('whatsapp_number', models.CharField(blank=True, default='', max_length=15)),
-                ('status', models.CharField(choices=[('unpaid', 'Unpaid'), ('paid', 'Paid'), ('cancelled', 'Cancelled')], default='unpaid', max_length=20)),
+                ('invoice_number', models.CharField(blank=True, max_length=30, unique=True)),
+                ('whatsapp_number', models.CharField(blank=True, default='', max_length=20)),
                 ('subtotal', models.DecimalField(decimal_places=2, default=0, max_digits=12)),
                 ('tax_amount', models.DecimalField(decimal_places=2, default=0, max_digits=12)),
                 ('total', models.DecimalField(decimal_places=2, default=0, max_digits=12)),
+                ('payment_method', models.CharField(default='pending', max_length=20)),
+                ('payment_status', models.CharField(default='unpaid', max_length=20)),
+                ('transaction_ref', models.CharField(blank=True, default='', max_length=50)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('paid_at', models.DateTimeField(blank=True, null=True)),
+
                 ('order', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='invoice', to='orders.order')),
             ],
             options={
@@ -40,6 +41,7 @@ class Migration(migrations.Migration):
             },
         ),
         migrations.CreateModel(
+
             name='Payment',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),

@@ -203,9 +203,61 @@ class OrderViewSet(viewsets.ModelViewSet):
         except OrderItem.DoesNotExist:
             return Response({'detail': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+    @action(detail=True, methods=['patch', 'post'], url_path='update_item_qty')
+    def update_item_qty(self, request, pk=None):
+        """PATCH /orders/{id}/update_item_qty/  { item_id: N, delta: 1, quantity: N }"""
+        order = self.get_object()
+        item_id = request.data.get('item_id')
+        try:
+            item = order.items.get(pk=item_id)
+        except OrderItem.DoesNotExist:
+            return Response({'detail': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        qty = request.data.get('quantity')
+        delta = request.data.get('delta')
+        if qty is not None:
+            new_qty = int(qty)
+        elif delta is not None:
+            new_qty = item.quantity + int(delta)
+        else:
+            new_qty = item.quantity
+
+        if new_qty <= 0:
+            item.delete()
+        else:
+            item.quantity = new_qty
+            item.subtotal = item.unit_price * new_qty
+            item.save(update_fields=['quantity', 'subtotal'])
+
+        order.recalculate_totals()
+        order.refresh_from_db()
+        return Response(OrderSerializer(order, context={'request': request}).data)
+
     @action(detail=True, methods=['patch'], url_path=r'update_item/(?P<item_id>\d+)')
     def update_item(self, request, pk=None, item_id=None):
         """PATCH /orders/{id}/update_item/{item_id}/  { quantity: N }"""
+        order = self.get_object()
+        try:
+            item = order.items.get(pk=item_id)
+        except OrderItem.DoesNotExist:
+            return Response({'detail': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        qty = request.data.get('quantity')
+        try:
+            qty = int(qty)
+            if qty < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response({'detail': 'quantity must be a positive integer.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        item.quantity = qty
+        item.subtotal = item.unit_price * qty
+        item.save(update_fields=['quantity', 'subtotal'])
+        order.recalculate_totals()
+        order.refresh_from_db()
+        return Response(OrderSerializer(order, context={'request': request}).data)
+
         order = self.get_object()
         try:
             item = order.items.get(pk=item_id)
@@ -308,6 +360,10 @@ class OrderViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=['post', 'patch'], url_path='complete_payment')
+    def complete_payment(self, request, pk=None):
+        return self.complete_order(request, pk=pk)
+
     @action(detail=True, methods=['post'], url_path='complete_order')
     def complete_order(self, request, pk=None):
         """
@@ -323,8 +379,8 @@ class OrderViewSet(viewsets.ModelViewSet):
         from django.db import transaction
 
         order = self.get_object()
-        method = request.data.get('method', 'cash').lower()
-        pay_status = request.data.get('status', 'paid').lower()
+        method = str(request.data.get('method') or request.data.get('payment_method') or 'cash').lower()
+        pay_status = str(request.data.get('status') or request.data.get('payment_status') or 'paid').lower()
 
         if method not in [Payment.METHOD_CASH, Payment.METHOD_CARD,
                           Payment.METHOD_UPI, Payment.METHOD_OTHER]:
@@ -383,7 +439,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                     title=f'Payment Complete: {order.order_number}',
                     message=(
                         f'Order {order.order_number} paid via {method.title()}. '
-                        f'Total: \u20b9{order.total}. '
+                        f'Total: ₹{order.total}. '
                         f'Table {order.table_label} is now available.'
                     ),
                     order=order,
@@ -397,6 +453,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             'order':   OrderSerializer(order, context={'request': request}).data,
             'payment': PaymentSerializer(payment).data,
         })
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
