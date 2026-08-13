@@ -158,10 +158,6 @@ export const tableApi = {
 
   /** PATCH /tables/{id}/set_active/   { active: false } */
   setActive: (id, data) => request('PATCH', `/tables/${id}/set_active/`, data),
-
-  /** GET /tables/{id}/active_order/ */
-  getActiveOrder: (id) => request('GET', `/tables/${id}/active_order/`),
-
 }
 
 // ── QR Code API ───────────────────────────────────────────────────────────────
@@ -213,20 +209,33 @@ export const orderApi = {
   /** POST /orders/{id}/add_item/  { product, product_name, unit_price, quantity } */
   addItem: (id, data) => request('POST', `/orders/${id}/add_item/`, data),
 
-  /** PATCH /orders/{id}/update_item_qty/ { item_id, quantity, delta } */
-  updateItemQty: (id, data) => request('PATCH', `/orders/${id}/update_item_qty/`, data),
-
   /** DELETE /orders/{id}/remove_item/{itemId}/ */
   removeItem: (orderId, itemId) => request('DELETE', `/orders/${orderId}/remove_item/${itemId}/`),
 
-  /** POST /orders/{id}/generate_bill/ { whatsapp_number } */
-  generateBill: (id, data) => request('POST', `/orders/${id}/generate_bill/`, data),
+  /** PATCH /orders/{id}/update_item/{itemId}/  { quantity: N } */
+  updateItem: (orderId, itemId, data) =>
+    request('PATCH', `/orders/${orderId}/update_item/${itemId}/`, data),
 
-  /** POST /orders/{id}/complete_payment/ { payment_method, payment_status } */
-  completePayment: (id, data) => request('POST', `/orders/${id}/complete_payment/`, data),
+  /** POST /orders/{id}/generate_bill/  { whatsapp_number: '...' } */
+  generateBill: (orderId, data) =>
+    request('POST', `/orders/${orderId}/generate_bill/`, data),
 
-  /** GET /orders/{id}/receipt/ */
-  getReceipt: (id) => request('GET', `/orders/${id}/receipt/`),
+  /** POST /orders/{id}/complete_order/  { method: 'cash', status: 'paid' } */
+  completeOrder: (orderId, data) =>
+    request('POST', `/orders/${orderId}/complete_order/`, data),
+
+  /** GET /orders/{id}/invoice/ */
+  getInvoice: (orderId) => request('GET', `/orders/${orderId}/invoice/`),
+}
+
+// ── Invoice API ───────────────────────────────────────────────────────────────
+
+export const invoiceApi = {
+  /** GET /orders/{orderId}/invoice/ — get invoice by order */
+  getByOrder: (orderId) => request('GET', `/orders/${orderId}/invoice/`),
+
+  /** GET /receipt/{token}/ — public receipt by UUID token */
+  getByToken: (token) => request('GET', `/receipt/${token}/`),
 }
 
 
@@ -291,29 +300,3 @@ export const notificationApi = {
   /** POST /notifications/mark_all_read/ */
   markAllRead: () => request('POST', '/notifications/mark_all_read/'),
 }
-
-// ── Waiter Request API ────────────────────────────────────────────────────────
-
-export const requestApi = {
-  /** GET /requests/ */
-  list: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
-    return request('GET', `/requests/${qs ? `?${qs}` : ''}`)
-  },
-
-  /** GET /requests/{id}/ */
-  get: (id) => request('GET', `/requests/${id}/`),
-
-  /** POST /requests/ */
-  create: (data) => request('POST', '/requests/', data),
-
-  /** PATCH /requests/{id}/ */
-  patch: (id, data) => request('PATCH', `/requests/${id}/`, data),
-
-  /** PATCH /requests/{id}/set_status/ */
-  setStatus: (id, data) => request('PATCH', `/requests/${id}/set_status/`, data),
-
-  /** DELETE /requests/{id}/ */
-  delete: (id) => request('DELETE', `/requests/${id}/`),
-}
-

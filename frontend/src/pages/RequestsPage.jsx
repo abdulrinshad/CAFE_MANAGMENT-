@@ -1,30 +1,121 @@
+/**
+ * RequestsPage — Active Requests
+ *
+ * Drives from real backend notifications:
+ *   new_order        → "New Request"  (accept → in_progress)
+ *   bill_requested   → "Bill Request" (accept → go to order invoice)
+ *   table_attention  → "New Request"  (general assistance)
+ *   in_progress      → Mark Completed
+ *
+ * Waiter actions persist to:
+ *   - Notification.is_read (mark read = dismiss)
+ *   - Table status (bill_requested notifications link to the table)
+ */
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
 import './RequestsPage.css'
 
-const FILTER_TABS = ['All Requests', 'New', 'In Progress', 'Completed']
+const REQUEST_TYPES = ['All Requests', 'New', 'In Progress', 'Completed']
+
+function relativeTime(dateStr) {
+  if (!dateStr) return ''
+  const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000)
+  if (diff < 60) return `${diff}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return new Date(dateStr).toLocaleDateString('en-IN')
+}
+
+function notifToRequest(n) {
+  return {
+    id:       n.id,
+    type:     n.type,
+    title:    n.title,
+    message:  n.message,
+    tableId:  n.table_name ? n.table_name : (n.table ? `T-${n.table}` : '—'),
+    tableFK:  n.table,       // raw table FK id
+    orderId:  n.order,       // raw order FK id
+    orderRef: n.order_number,
+    time:     relativeTime(n.created_at),
+    rawTime:  n.created_at,
+    // Map to request status based on is_read + type
+    status: n.is_read
+      ? 'completed'
+      : (n._in_progress ? 'in_progress' : 'new'),
+  }
+}
+
+// Request type pill label
+function typeLabel(type) {
+  if (type === 'new_order')         return 'New Order'
+  if (type === 'bill_requested')    return 'Bill Request'
+  if (type === 'table_attention')   return 'Needs Attention'
+  if (type === 'payment_completed') return 'Payment Done'
+  if (type === 'status_changed')    return 'Status Changed'
+  return type
+}
 
 export default function RequestsPage() {
-  const { waiterRequests, updateRequestStatus, dismissRequest } = useApp()
+  const navigate = useNavigate()
+  const { notifications, markNotificationRead, fetchNotifications } = useApp()
+
+  // Local in-progress tracking (persisted in component until page reload)
+  const [inProgress, setInProgress] = useState({})  // { [notifId]: true }
+
+  // Only show actionable types on Requests page
+  const actionable = (notifications || []).filter((n) =>
+    ['new_order', 'bill_requested', 'table_attention'].includes(n.type)
+  )
+
+  const requests = actionable.map((n) => ({
+    ...notifToRequest(n),
+    status: n.is_read ? 'completed' : (inProgress[n.id] ? 'in_progress' : 'new'),
+  }))
+
   const [activeTab, setActiveTab] = useState('All Requests')
 
   const countFor = (tab) => {
-    if (!waiterRequests) return 0
-    if (tab === 'All Requests') return waiterRequests.length
-    if (tab === 'New') return waiterRequests.filter(r => r.status === 'new').length
-    if (tab === 'In Progress') return waiterRequests.filter(r => r.status === 'in_progress').length
-    if (tab === 'Completed') return waiterRequests.filter(r => r.status === 'completed').length
+    if (tab === 'All Requests') return requests.length
+    if (tab === 'New')          return requests.filter((r) => r.status === 'new').length
+    if (tab === 'In Progress')  return requests.filter((r) => r.status === 'in_progress').length
+    if (tab === 'Completed')    return requests.filter((r) => r.status === 'completed').length
     return 0
   }
 
-  const filtered = waiterRequests ? waiterRequests.filter((req) => {
+  const filtered = requests.filter((r) => {
     if (activeTab === 'All Requests') return true
-    if (activeTab === 'New') return req.status === 'new'
-    if (activeTab === 'In Progress') return req.status === 'in_progress'
-    if (activeTab === 'Completed') return req.status === 'completed'
+    if (activeTab === 'New')          return r.status === 'new'
+    if (activeTab === 'In Progress')  return r.status === 'in_progress'
+    if (activeTab === 'Completed')    return r.status === 'completed'
     return true
-  }) : []
+  })
+
+  const handleAccept = (req) => {
+    setInProgress((prev) => ({ ...prev, [req.id]: true }))
+    // If it's a bill request and we have an order id, navigate to invoice
+    if (req.type === 'bill_requested' && req.orderId) {
+      navigate(`/orders/${req.orderId}/invoice`)
+    }
+  }
+
+  const handleDismiss = async (req) => {
+    await markNotificationRead(req.id)
+  }
+
+  const handleMarkCompleted = async (req) => {
+    await markNotificationRead(req.id)
+    setInProgress((prev) => {
+      const next = { ...prev }
+      delete next[req.id]
+      return next
+    })
+    await fetchNotifications()
+  }
+
+  const newCount = requests.filter((r) => r.status === 'new').length
+  const ipCount  = requests.filter((r) => r.status === 'in_progress').length
 
   return (
     <AdminLayout
@@ -37,83 +128,103 @@ export default function RequestsPage() {
         <div className="requests-page__header">
           <div className="requests-page__title-wrap">
             <h1 className="requests-page__title">Active Requests</h1>
-            <p className="requests-page__subtitle">
-              Respond to customer table requests, refills, and billing signals.
-            </p>
+            <p className="requests-page__subtitle">Manage customer assistance calls.</p>
+          </div>
+          <div className="requests-page__counts">
+            {newCount > 0 && <span className="req-count-pill req-count-pill--new">{newCount} New</span>}
+            {ipCount  > 0 && <span className="req-count-pill req-count-pill--ip">{ipCount} In Progress</span>}
           </div>
         </div>
 
         {/* Tab Filters */}
         <div className="requests-filter-bar">
-          {FILTER_TABS.map((tab) => (
+          {REQUEST_TYPES.map((tab) => (
             <button
               key={tab}
               className={`requests-filter-tab${activeTab === tab ? ' requests-filter-tab--active' : ''}`}
               onClick={() => setActiveTab(tab)}
               id={`request-tab-${tab.toLowerCase().replace(/\s/g, '-')}`}
             >
-              {tab} {`(${countFor(tab)})`}
+              {tab} ({countFor(tab)})
             </button>
           ))}
         </div>
 
         {/* Requests Grid */}
         <div className="requests-grid">
+          {filtered.length === 0 && (
+            <div className="requests-empty-state">
+              {activeTab === 'All Requests'
+                ? 'No active requests right now. All clear! ✓'
+                : `No ${activeTab.toLowerCase()} requests.`}
+            </div>
+          )}
+
           {filtered.map((req) => (
-            <div key={req.id} className={`waiter-request-card ${req.status}`}>
+            <div
+              key={req.id}
+              className={`waiter-request-card ${req.status}${req.type === 'bill_requested' ? ' bill-req' : ''}`}
+            >
               <div className="waiter-request-card__header">
-                <span className="request-table-badge">Table {req.tableId ? String(req.tableId).replace('T-', '') : (req.table_name || '')}</span>
-                <span className="request-time">{req.time}</span>
+                <span className="request-table-badge">
+                  {req.tableId !== '—' ? `Table ${req.tableId.replace('T-', '')}` : req.title}
+                </span>
+                <div className="request-header-right">
+                  <span className={`req-type-pill req-type-pill--${req.type}`}>
+                    {req.status === 'new' ? 'NEW REQUEST' : req.status === 'in_progress' ? 'IN PROGRESS' : 'DONE'}
+                  </span>
+                </div>
               </div>
 
               <div className="waiter-request-card__body">
-                <div className="request-type-label">{req.type}</div>
-                <p className="request-msg">{req.message}</p>
-                {req.assignedWaiter && (
-                  <div className="request-waiter-assign">
-                    Assigned: <strong>{req.assignedWaiter}</strong>
-                  </div>
-                )}
-                {req.amount && <div className="request-amount">Amount: ₹{req.amount}</div>}
+                <div className="request-type-label">{typeLabel(req.type)}</div>
+                <p className="request-msg">"{req.message}"</p>
+                <div className="request-time">
+                  <ClockIcon /> {req.time}
+                </div>
               </div>
+
               <div className="waiter-request-card__actions">
                 {req.status === 'new' && (
                   <>
                     <button
                       className="btn-outline btn-sm"
-                      onClick={() => dismissRequest(req.id)}
+                      onClick={() => handleDismiss(req)}
+                      id={`dismiss-req-${req.id}`}
                     >
                       Dismiss
                     </button>
                     <button
                       className="btn-primary btn-sm"
-                      onClick={() => updateRequestStatus(req.id, 'in_progress')}
+                      onClick={() => handleAccept(req)}
+                      id={`accept-req-${req.id}`}
                     >
-                      Accept
+                      ✓ Accept
                     </button>
                   </>
                 )}
                 {req.status === 'in_progress' && (
                   <button
-                    className="btn-primary btn-sm btn-success-bg w-full"
-                    onClick={() => updateRequestStatus(req.id, 'completed')}
+                    className="btn-primary btn-sm w-full"
+                    onClick={() => handleMarkCompleted(req)}
+                    id={`complete-req-${req.id}`}
+                    style={{ background: 'var(--color-green, #16a34a)' }}
                   >
                     Mark Completed
                   </button>
                 )}
                 {req.status === 'completed' && (
-                  <span className="badge badge--completed w-full text-center py-2">
-                    Request Completed
-                  </span>
+                  <span className="req-done-label">✓ Completed</span>
                 )}
               </div>
             </div>
           ))}
-          {filtered.length === 0 && (
-            <div className="requests-empty-state">No requests match this filter.</div>
-          )}
         </div>
       </div>
     </AdminLayout>
   )
+}
+
+function ClockIcon() {
+  return <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
 }

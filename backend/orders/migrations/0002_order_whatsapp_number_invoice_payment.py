@@ -31,6 +31,7 @@ class Migration(migrations.Migration):
                 ('transaction_ref', models.CharField(blank=True, default='', max_length=50)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
+
                 ('order', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='invoice', to='orders.order')),
             ],
             options={
@@ -39,8 +40,8 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
             },
         ),
-
         migrations.CreateModel(
+
             name='Payment',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
