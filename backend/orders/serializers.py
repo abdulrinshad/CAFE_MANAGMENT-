@@ -1,28 +1,28 @@
 """
 Serializers for the orders app.
+
+OrderItemSerializer       — nested items in OrderSerializer
+OrderSerializer           — full Order CRUD
+OrderListSerializer       — lightweight list representation
+OrderStatusSerializer     — PATCH status only
+InvoiceSerializer         — full Invoice (returned after generate_bill)
+PaymentSerializer         — full Payment (returned after complete_order)
 """
 from rest_framework import serializers
-from .models import Order, OrderItem
+from .models import Order, OrderItem, Invoice, Payment
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
     # Both fields are auto-filled from the Product FK if not explicitly provided
-    product_name  = serializers.CharField(required=False, allow_blank=True, default='')
-    unit_price    = serializers.DecimalField(
+    product_name = serializers.CharField(required=False, allow_blank=True, default='')
+    unit_price   = serializers.DecimalField(
         max_digits=10, decimal_places=2, required=False, allow_null=True, default=None
     )
-    product_image = serializers.SerializerMethodField()
 
     class Meta:
         model  = OrderItem
-        fields = ['id', 'product', 'product_name', 'product_image', 'unit_price', 'quantity', 'subtotal']
-        read_only_fields = ['id', 'subtotal', 'product_image']
-
-    def get_product_image(self, obj):
-        if obj.product and obj.product.image:
-            return obj.product.image.url
-        return None
-
+        fields = ['id', 'product', 'product_name', 'unit_price', 'quantity', 'subtotal']
+        read_only_fields = ['id', 'subtotal']
 
     def create(self, validated_data):
         # Snapshot product name + price from product FK if not provided
@@ -48,8 +48,7 @@ class OrderSerializer(serializers.ModelSerializer):
         model  = Order
         fields = [
             'id', 'order_number', 'table', 'table_label',
-            'customer_name', 'whatsapp_number', 'waiter_name', 'notes',
-            'invoice_number', 'transaction_ref', 'payment_method', 'payment_status',
+            'customer_name', 'waiter_name', 'notes', 'whatsapp_number',
             'status', 'subtotal', 'tax_amount', 'total',
             'item_count', 'items_summary',
             'items', 'created_at', 'updated_at', 'completed_at',
@@ -59,7 +58,6 @@ class OrderSerializer(serializers.ModelSerializer):
             'subtotal', 'tax_amount', 'total',
             'created_at', 'updated_at', 'completed_at',
         ]
-
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
@@ -72,11 +70,19 @@ class OrderSerializer(serializers.ModelSerializer):
                 item_data['unit_price'] = product.price
             item_data['subtotal'] = item_data['unit_price'] * item_data.get('quantity', 1)
             OrderItem.objects.create(order=order, **item_data)
+        
+        # Mark table as occupied
+        if order.table:
+            from menu.models import Table
+            Table.objects.filter(pk=order.table_id).update(
+                status=Table.STATUS_OCCUPIED,
+                current_order_ref=order.order_number
+            )
+        
         order.recalculate_totals()
         order.refresh_from_db()
 
         # Update the notification created by the signal with accurate totals
-        # (The signal fires before items exist, so we patch it here)
         try:
             from notifications.models import Notification
             notif = Notification.objects.filter(
@@ -121,3 +127,82 @@ class OrderStatusSerializer(serializers.ModelSerializer):
         model  = Order
         fields = ['id', 'status']
         read_only_fields = ['id']
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Invoice + Payment serializers
+# ─────────────────────────────────────────────────────────────────────────────
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    order_number = serializers.CharField(source='order.order_number', read_only=True)
+    table_label  = serializers.CharField(source='order.table_label', read_only=True)
+    table_id     = serializers.IntegerField(source='order.table_id', read_only=True, allow_null=True)
+    receipt_url  = serializers.SerializerMethodField()
+    items        = serializers.SerializerMethodField()
+    order_status = serializers.CharField(source='order.status', read_only=True)
+    created_at_str = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = Invoice
+        fields = [
+            'id', 'invoice_number', 'token',
+            'order', 'order_number', 'table_label', 'table_id', 'order_status',
+            'whatsapp_number', 'status',
+            'subtotal', 'tax_amount', 'total',
+            'receipt_url', 'items',
+            'created_at', 'created_at_str', 'updated_at', 'paid_at',
+        ]
+        read_only_fields = [
+            'id', 'invoice_number', 'token',
+            'order_number', 'table_label', 'table_id', 'order_status',
+            'subtotal', 'tax_amount', 'total',
+            'receipt_url', 'items',
+            'created_at', 'created_at_str', 'updated_at',
+        ]
+
+    def get_receipt_url(self, obj):
+        request = self.context.get('request')
+        path = obj.receipt_url_path
+        if request:
+            return request.build_absolute_uri(path)
+        return path
+
+    def get_items(self, obj):
+        return [
+            {
+                'id':           item.id,
+                'product_name': item.product_name,
+                'unit_price':   str(item.unit_price),
+                'quantity':     item.quantity,
+                'subtotal':     str(item.subtotal),
+            }
+            for item in obj.order.items.all()
+        ]
+
+    def get_created_at_str(self, obj):
+        from django.utils import timezone as tz
+        local = obj.created_at.astimezone(tz.get_current_timezone())
+        return {
+            'date': local.strftime('%d %b %Y'),
+            'time': local.strftime('%I:%M %p'),
+        }
+
+
+class PaymentSerializer(serializers.ModelSerializer):
+    order_number   = serializers.CharField(source='order.order_number', read_only=True)
+    invoice_number = serializers.CharField(source='invoice.invoice_number', read_only=True,
+                                           allow_null=True)
+
+    class Meta:
+        model  = Payment
+        fields = [
+            'id', 'order', 'order_number',
+            'invoice', 'invoice_number',
+            'method', 'status', 'amount',
+            'transaction_ref',
+            'created_at', 'paid_at',
+        ]
+        read_only_fields = [
+            'id', 'order_number', 'invoice_number',
+            'transaction_ref', 'created_at',
+        ]

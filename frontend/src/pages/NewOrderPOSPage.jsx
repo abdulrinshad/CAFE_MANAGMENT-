@@ -1,68 +1,84 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
-import { tableApi } from '../api'
-import { getCategoryName } from '../utils/categoryHelper'
 import './NewOrderPOSPage.css'
+
+const CATEGORIES = ['All', 'Coffee', 'Tea', 'Pastries', 'Desserts', 'Cold Beverages', 'Snacks']
+
+/**
+ * Safely extract a category name string from whatever shape the API returns.
+ * product.category may be: a string, an integer FK id, a nested object, null, or undefined.
+ * We prefer category_name (string label stored by AppContext normaliser) first.
+ */
+const getCategoryName = (product) => {
+  // AppContext normaliser exposes `category_name` as a plain string
+  if (product.category_name && typeof product.category_name === 'string') {
+    return product.category_name.trim()
+  }
+  // category_label is UPPERCASED version — normalise it
+  if (product.category_label && typeof product.category_label === 'string') {
+    return product.category_label.trim()
+  }
+  const cat = product.category
+  if (cat == null) return ''
+  if (typeof cat === 'string') return cat.trim()
+  if (typeof cat === 'object') {
+    return (
+      cat.name ||
+      cat.category_name ||
+      cat.title ||
+      cat.label ||
+      ''
+    ).toString().trim()
+  }
+  return String(cat)
+}
+
+/** Map a product to a simple emoji icon based on category name. */
+const getCategoryIcon = (product) => {
+  const cat = getCategoryName(product).toLowerCase()
+  if (cat.includes('coffee') || cat.includes('espresso')) return '☕'
+  if (cat.includes('tea'))                                  return '🫖'
+  if (cat.includes('cold') || cat.includes('beverage'))    return '🧊'
+  if (cat.includes('dessert'))                              return '🍰'
+  if (cat.includes('snack'))                                return '🍿'
+  return '🥐'
+}
+
 
 export default function NewOrderPOSPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { products, categories, tables, createOrder, currentWaiter } = useApp()
+  const { products, tables, createOrder, currentWaiter } = useApp()
 
-  // Get selected table from URL
-  const tableParam = searchParams.get('table')
-  const tableNameParam = searchParams.get('tableName')
-
-  const [fetchedTable, setFetchedTable] = useState(null)
-
-  useEffect(() => {
-    if (tableParam && (!tables || tables.length === 0)) {
-      tableApi.get(tableParam).then(t => setFetchedTable(t)).catch(() => {})
-    }
-  }, [tableParam, tables])
-
-  const selectedTable = useMemo(() => {
-    if (fetchedTable) return fetchedTable
-    if (!tables || tables.length === 0) return null
-    if (!tableParam) return tables[0]
-    return tables.find((t) => String(t.id) === String(tableParam) || t.name === tableParam || t.label === tableParam) || null
-  }, [tables, tableParam, fetchedTable])
-
-  const tableLabel = selectedTable
-    ? (selectedTable.name || selectedTable.label)
-    : (tableNameParam || (tableParam ? (tableParam.startsWith('T-') ? tableParam : `Table ${tableParam}`) : 'Table 01'))
-
+  // Resolve table from URL param — prefer matching by id or name
+  const tableParam = searchParams.get('table')  // may be id (e.g. "9") or name (e.g. "T-01")
+  const matchedTable = tables?.find(
+    (t) => String(t.id) === String(tableParam) || t.name === tableParam
+  ) || null
+  const tableLabel = matchedTable
+    ? matchedTable.name
+    : tableParam
+    ? tableParam.replace('T-', 'Table ')
+    : 'Table 08'
 
   const [activeCategory, setActiveCategory] = useState('All')
   const [cart, setCart] = useState([])
   const [orderNotes, setOrderNotes] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [errMessage, setErrMessage] = useState(null)
 
-  // Build categories list from database
-  const categoryList = useMemo(() => {
-    const activeCats = categories ? categories.filter((c) => c.active !== false).map((c) => getCategoryName(c)) : []
-    return ['All', ...activeCats]
-  }, [categories])
-
-  // Filter available products from database
-  const filteredProducts = useMemo(() => {
-    if (!products) return []
-    return products.filter((p) => {
-      // Must be available on POS terminal
-      if (p.available === false || p.soldOut === true || p.availableOnPOS === false) return false
-      if (activeCategory === 'All') return true
-
-      const productCat = getCategoryName(p.category || p.category_name || p.categoryLabel).toLowerCase()
-      const activeCat = activeCategory.toLowerCase()
-
-      if (activeCat === 'pastries') return productCat === 'pastry' || productCat === 'pastries'
-      if (activeCat === 'cold beverages') return productCat === 'cold beverage' || productCat === 'cold beverages'
-      return productCat === activeCat
-    })
-  }, [products, activeCategory])
+  // Filter products by active category — safe against any category shape
+  const filteredProducts = products ? products.filter((p) => {
+    if (activeCategory === 'All') return true
+    const productCat = getCategoryName(p).toLowerCase()
+    const activeCat  = activeCategory.toLowerCase()
+    // Alias plurals / short forms used in the sidebar
+    if (activeCat === 'pastries')       return productCat.includes('pastry') || productCat.includes('pastri')
+    if (activeCat === 'cold beverages') return productCat.includes('cold')   || productCat.includes('beverage')
+    if (activeCat === 'desserts')       return productCat.includes('dessert')
+    if (activeCat === 'snacks')         return productCat.includes('snack')
+    return productCat.includes(activeCat)
+  }) : []
 
   const addToCart = (product) => {
     setCart((prev) => {
@@ -77,13 +93,12 @@ export default function NewOrderPOSPage() {
       return [
         ...prev,
         {
-          id: product.id,
-          name: product.name,
-          qty: 1,
+          id:        product.id,
+          name:      product.name,
+          qty:       1,
           unitPrice: Number(product.price),
-          total: Number(product.price),
-          image: product.image,
-          category: getCategoryName(product.category || product.category_name).toLowerCase(),
+          total:     Number(product.price),
+          icon:      getCategoryIcon(product),
         }
       ]
     })
@@ -109,44 +124,32 @@ export default function NewOrderPOSPage() {
 
   // Calculations
   const subtotal = cart.reduce((acc, curr) => acc + curr.total, 0)
-  const tax = Math.round(subtotal * 0.05 * 100) / 100
-  const total = Math.round((subtotal + tax) * 100) / 100
+  const tax = Math.round(subtotal * 0.05)
+  const total = subtotal + tax
+
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
   const handleGenerateBill = async () => {
-    if (cart.length === 0 || submitting) return
+    if (cart.length === 0) return
     setSubmitting(true)
-    setErrMessage(null)
-
+    setSubmitError('')
     try {
-      // Find matching table PK ID in PostgreSQL
-      const targetTableId = selectedTable
-        ? selectedTable.id
-        : (tables.find((t) => t.name === tableLabel || t.label === tableLabel)?.id || null)
-
       const orderPayload = {
-        table: targetTableId,
-        waiter_name: currentWaiter?.name || 'Waiter',
-        customer_name: 'Dine-in Guest',
-        notes: orderNotes,
-        status: 'pending',
+        table:         matchedTable?.id ?? null,
+        customer_name: '',
+        waiter_name:   currentWaiter?.name || '',
+        notes:         orderNotes,
         items: cart.map((item) => ({
-          product: item.id,
-          product_name: item.name,
-          unit_price: item.unitPrice,
-          quantity: item.qty,
+          product:    item.id,
+          quantity:   item.qty,
         })),
       }
-
       const created = await createOrder(orderPayload)
-      // Navigate to order detail page or active order screen
-      if (created && created.id) {
-        navigate(`/orders/${created.id}`)
-      } else {
-        navigate('/orders')
-      }
+      navigate(`/orders/${created.id}`)
     } catch (err) {
-      console.error('Failed to create order:', err)
-      setErrMessage(err.message || 'Failed to place order in database.')
+      console.error('createOrder failed:', err)
+      setSubmitError('Failed to save order. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -161,7 +164,7 @@ export default function NewOrderPOSPage() {
       <div className="pos-layout-container">
         {/* Left Category Selection */}
         <div className="pos-categories-sidebar">
-          {categoryList.map((cat) => (
+          {CATEGORIES.map((cat) => (
             <button
               key={cat}
               className={`pos-category-pill ${activeCategory === cat ? 'active' : ''}`}
@@ -174,41 +177,28 @@ export default function NewOrderPOSPage() {
 
         {/* Center Product Menu Grid */}
         <div className="pos-menu-grid-wrap">
-          {errMessage && (
-            <div style={{ color: '#ef4444', backgroundColor: '#fee2e2', padding: '12px 16px', borderRadius: 8, marginBottom: 16 }}>
-              {errMessage}
-            </div>
-          )}
           <div className="pos-products-grid">
-            {filteredProducts.map((product) => {
-              const catName = getCategoryName(product.category || product.category_name || product.categoryLabel).toLowerCase()
-              return (
-                <button
-                  key={product.id}
-                  type="button"
-                  className="pos-product-card"
-                  onClick={() => addToCart(product)}
-                >
-                  {product.popular && <span className="popular-badge">POPULAR</span>}
-                  <div className="pos-product-image-container">
-                    {product.image ? (
-                      <img src={product.image} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
-                    ) : (
-                      <div className="product-image-placeholder">
-                        {catName.includes('coffee') ? '☕' : catName.includes('tea') ? '🫖' : '🥐'}
-                      </div>
-                    )}
+            {filteredProducts.map((product) => (
+              <button
+                key={product.id}
+                type="button"
+                className="pos-product-card"
+                onClick={() => addToCart(product)}
+              >
+                {product.popular && <span className="popular-badge">POPULAR</span>}
+                <div className="pos-product-image-container">
+                  <div className="product-image-placeholder">
+                    {getCategoryIcon(product)}
                   </div>
-                  <div className="pos-product-details">
-                    <h3 className="pos-product-name">{product.name}</h3>
-                    <span className="pos-product-price">₹{Number(product.price).toLocaleString('en-IN')}</span>
-                  </div>
-                </button>
-              )
-            })}
-
+                </div>
+                <div className="pos-product-details">
+                  <h3 className="pos-product-name">{product.name}</h3>
+                  <span className="pos-product-price">₹{product.price.toLocaleString()}</span>
+                </div>
+              </button>
+            ))}
             {filteredProducts.length === 0 && (
-              <div className="pos-empty-products">No items available in this category.</div>
+              <div className="pos-empty-products">No items found in this category.</div>
             )}
           </div>
         </div>
@@ -221,7 +211,8 @@ export default function NewOrderPOSPage() {
               <span className="pos-order-dine-in">Dine-in</span>
             </div>
             <div className="pos-order-meta">
-              <span>Server: {currentWaiter?.name || 'Waiter'}</span>
+              <span>Order #4092</span>
+              <span>Server: {currentWaiter?.name || 'Alex'}</span>
             </div>
           </div>
 
@@ -233,7 +224,7 @@ export default function NewOrderPOSPage() {
               <div key={item.id} className="pos-cart-row">
                 <div className="pos-cart-item-info">
                   <span className="pos-cart-item-name">{item.name}</span>
-                  <span className="pos-cart-item-unit-price">₹{item.unitPrice.toLocaleString('en-IN')}</span>
+                  <span className="pos-cart-item-unit-price">₹{item.unitPrice.toLocaleString()}</span>
                 </div>
                 <div className="pos-cart-qty-wrap">
                   <div className="item-qty-controls">
@@ -242,7 +233,7 @@ export default function NewOrderPOSPage() {
                     <button className="qty-btn" onClick={() => updateQty(item.id, 1)}>+</button>
                   </div>
                 </div>
-                <span className="pos-cart-item-total">₹{item.total.toLocaleString('en-IN')}</span>
+                <span className="pos-cart-item-total">₹{item.total.toLocaleString()}</span>
                 <button
                   type="button"
                   className="pos-cart-delete-btn"
@@ -278,25 +269,31 @@ export default function NewOrderPOSPage() {
           <div className="pos-totals-summary">
             <div className="pos-summary-row">
               <span>Subtotal</span>
-              <span>₹{subtotal.toLocaleString('en-IN')}</span>
+              <span>₹{subtotal.toLocaleString()}</span>
             </div>
             <div className="pos-summary-row">
               <span>Tax (5%)</span>
-              <span>₹{tax.toLocaleString('en-IN')}</span>
+              <span>₹{tax.toLocaleString()}</span>
             </div>
             <hr className="pos-summary-divider" />
             <div className="pos-summary-row pos-grand-total">
               <span>Total</span>
-              <span>₹{total.toLocaleString('en-IN')}</span>
+              <span>₹{total.toLocaleString()}</span>
             </div>
           </div>
 
           {/* Action Buttons */}
           <div className="pos-bottom-actions">
+            {submitError && (
+              <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
+                {submitError}
+              </div>
+            )}
             <button
               type="button"
               className="btn-outline pos-action-btn"
               onClick={() => navigate('/tables')}
+              disabled={submitting}
             >
               Review Order
             </button>
@@ -306,7 +303,7 @@ export default function NewOrderPOSPage() {
               onClick={handleGenerateBill}
               disabled={cart.length === 0 || submitting}
             >
-              {submitting ? 'Creating Order…' : 'Generate Bill'}
+              {submitting ? 'Saving…' : 'Generate Bill'}
             </button>
           </div>
         </div>
@@ -314,4 +311,3 @@ export default function NewOrderPOSPage() {
     </AdminLayout>
   )
 }
-

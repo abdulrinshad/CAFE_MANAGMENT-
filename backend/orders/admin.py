@@ -1,42 +1,52 @@
 """
-Django Admin for Orders app.
+Admin registration for the orders app.
 """
 from django.contrib import admin
-from .models import Order, OrderItem
+from .models import Order, OrderItem, Invoice, Payment
 
 
 class OrderItemInline(admin.TabularInline):
-    model           = OrderItem
-    extra           = 0
-    readonly_fields = ['subtotal']
-    fields          = ['product', 'product_name', 'unit_price', 'quantity', 'subtotal']
+    model   = OrderItem
+    extra   = 0
+    readonly_fields = ['product_name', 'unit_price', 'subtotal']
+    fields  = ['product', 'product_name', 'unit_price', 'quantity', 'subtotal']
 
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display    = ['order_number', 'table', 'status', 'total', 'created_at']
-    list_filter     = ['status', 'created_at']
-    search_fields   = ['order_number', 'customer_name', 'table__name']
+    list_display  = ['order_number', 'table', 'status', 'total', 'waiter_name',
+                     'whatsapp_number', 'created_at', 'completed_at']
+    list_filter   = ['status', 'created_at']
+    search_fields = ['order_number', 'customer_name', 'waiter_name', 'table__name']
     readonly_fields = ['order_number', 'subtotal', 'tax_amount', 'total',
                        'created_at', 'updated_at', 'completed_at']
-    ordering        = ['-created_at']
-    inlines         = [OrderItemInline]
+    inlines = [OrderItemInline]
+    ordering = ['-created_at']
 
 
 @admin.register(OrderItem)
 class OrderItemAdmin(admin.ModelAdmin):
-    list_display  = ['order', 'product_name', 'quantity', 'unit_price', 'subtotal']
-    list_filter   = ['order__status']
-    search_fields = ['product_name', 'order__order_number']
+    list_display  = ['order', 'product_name', 'unit_price', 'quantity', 'subtotal']
+    search_fields = ['order__order_number', 'product_name']
     readonly_fields = ['subtotal']
 
 
-from .models import Invoice
-
 @admin.register(Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
-    list_display = ['invoice_number', 'order', 'whatsapp_number', 'total', 'payment_method', 'payment_status', 'created_at']
-    list_filter = ['payment_status', 'payment_method', 'created_at']
-    search_fields = ['invoice_number', 'whatsapp_number', 'order__order_number', 'transaction_ref']
-    readonly_fields = ['created_at', 'updated_at']
+    list_display  = ['invoice_number', 'order', 'status', 'whatsapp_number',
+                     'subtotal', 'tax_amount', 'total', 'created_at', 'paid_at']
+    list_filter   = ['status', 'created_at']
+    search_fields = ['invoice_number', 'order__order_number', 'whatsapp_number']
+    readonly_fields = ['invoice_number', 'token', 'subtotal', 'tax_amount', 'total',
+                       'created_at', 'updated_at', 'paid_at']
+    ordering = ['-created_at']
 
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display  = ['order', 'method', 'status', 'amount', 'transaction_ref',
+                     'created_at', 'paid_at']
+    list_filter   = ['method', 'status', 'created_at']
+    search_fields = ['order__order_number', 'transaction_ref']
+    readonly_fields = ['transaction_ref', 'created_at', 'paid_at']
+    ordering = ['-created_at']

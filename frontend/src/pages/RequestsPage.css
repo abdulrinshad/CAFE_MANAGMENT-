@@ -5,23 +5,43 @@
   gap: 24px;
 }
 
+/* Header */
+.requests-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
 .requests-page__title-wrap {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-
 .requests-page__title {
   font-family: var(--font-serif);
   font-size: 28px;
   font-weight: 700;
   color: var(--color-espresso);
+  margin: 0;
 }
-
 .requests-page__subtitle {
   font-size: 14px;
   color: var(--color-text-secondary);
 }
+.requests-page__counts {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.req-count-pill {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+.req-count-pill--new { background: #fef3c7; color: #92400e; }
+.req-count-pill--ip  { background: #e0f2fe; color: #075985; }
 
 /* Filter Tab Bar */
 .requests-filter-bar {
@@ -33,7 +53,6 @@
   border-radius: 12px;
   padding: 8px 12px;
 }
-
 .requests-filter-tab {
   background: none;
   border: 1px solid transparent;
@@ -46,12 +65,10 @@
   cursor: pointer;
   transition: all var(--transition);
 }
-
 .requests-filter-tab:hover {
   background: var(--color-bg);
   color: var(--color-espresso);
 }
-
 .requests-filter-tab--active {
   background: var(--color-espresso);
   color: var(--color-white);
@@ -65,6 +82,123 @@
   gap: 20px;
 }
 
+/* Request Card */
+.waiter-request-card {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: box-shadow .15s;
+}
+.waiter-request-card:hover {
+  box-shadow: 0 4px 20px rgba(44,24,16,.07);
+}
+.waiter-request-card.bill-req {
+  border-color: #ef4444;
+  border-width: 1.5px;
+}
+.waiter-request-card.completed {
+  opacity: .65;
+}
+
+.waiter-request-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.request-table-badge {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-espresso);
+}
+.request-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Type pill (NEW REQUEST / IN PROGRESS) */
+.req-type-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.req-type-pill--new_order,
+.req-type-pill--table_attention {
+  background: #fef3c7;
+  color: #92400e;
+}
+.req-type-pill--bill_requested {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.req-type-pill--in_progress {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.req-type-pill--completed {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.waiter-request-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.request-type-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--color-text-muted);
+}
+.request-msg {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  font-style: italic;
+  line-height: 1.4;
+  margin: 0;
+}
+.request-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+.request-amount {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-espresso);
+  margin-top: 4px;
+}
+
+.waiter-request-card__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.waiter-request-card__actions .btn-sm { flex: 1; justify-content: center; }
+.req-done-label {
+  font-size: 12px;
+  color: var(--color-green, #15803d);
+  font-weight: 600;
+  padding: 8px;
+  text-align: center;
+  width: 100%;
+}
+
 .requests-empty-state {
   grid-column: 1 / -1;
   padding: 60px;
@@ -76,15 +210,7 @@
   border-radius: 12px;
 }
 
-.request-waiter-assign {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  margin-top: 6px;
-}
-
 /* Responsiveness */
 @media (max-width: 600px) {
-  .requests-grid {
-    grid-template-columns: 1fr;
-  }
+  .requests-grid { grid-template-columns: 1fr; }
 }

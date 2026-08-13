@@ -1,100 +1,106 @@
+/**
+ * CheckoutPage — /orders/:id/checkout
+ *
+ * Waiter selects payment method + marks as paid.
+ * Calls POST /orders/:id/complete_order/ which atomically:
+ *   - marks order completed
+ *   - marks invoice paid
+ *   - creates payment record
+ *   - releases table
+ */
 import { useState, useEffect } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
-import { orderApi } from '../api'
+import { orderApi, invoiceApi } from '../api'
 import './CheckoutPage.css'
 
+const PAYMENT_METHODS = [
+  { id: 'cash',  label: 'Cash',  icon: '💵' },
+  { id: 'card',  label: 'Card',  icon: '💳' },
+  { id: 'upi',   label: 'UPI',   icon: '📲' },
+  { id: 'other', label: 'Other', icon: '🧾' },
+]
+
 export default function CheckoutPage() {
-  const { id } = useParams()
+  const { id }   = useParams()
   const navigate = useNavigate()
-  const location = useLocation()
-  const { fetchTables, fetchNotifications } = useApp()
+  const { completeOrder } = useApp()
 
-  const [order, setOrder] = useState(location.state?.order || null)
-  const [loading, setLoading] = useState(!order)
-  const [submitting, setSubmitting] = useState(false)
-  const [err, setErr] = useState(null)
+  const [order,         setOrder]         = useState(null)
+  const [invoice,       setInvoice]       = useState(null)
+  const [loading,       setLoading]       = useState(true)
+  const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [completing,    setCompleting]    = useState(false)
+  const [error,         setError]         = useState('')
 
-  const passedPhone = location.state?.phone || ''
-
+  // ── Load order + invoice ───────────────────────────────────────────────────
   useEffect(() => {
-    if (!id) return
-    let isMounted = true
-    orderApi.get(id)
-      .then((data) => {
-        if (isMounted && data) {
-          setOrder(data)
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      try {
+        const [orderData, invoiceData] = await Promise.allSettled([
+          orderApi.get(id),
+          invoiceApi.getByOrder(id),
+        ])
+        if (!cancelled) {
+          if (orderData.status === 'fulfilled') setOrder(orderData.value)
+          if (invoiceData.status === 'fulfilled') setInvoice(invoiceData.value)
         }
-      })
-      .catch((e) => {
-        console.error('Checkout fetch error:', e)
-        if (isMounted) setErr('Unable to load payment details.')
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false)
-      })
-    return () => { isMounted = false }
+      } catch (err) {
+        console.error('CheckoutPage load error:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [id])
 
-  const [paymentMethod, setPaymentMethod] = useState('Cash')
-  const [paymentStatus, setPaymentStatus] = useState('Paid') // 'Pending' | 'Paid'
-
+  // ── Complete order ─────────────────────────────────────────────────────────
   const handleCompleteOrder = async () => {
-    if (!order || submitting) return
-    setSubmitting(true)
-    setErr(null)
-
+    setCompleting(true)
+    setError('')
     try {
-      const updated = await orderApi.completePayment(order.id, {
-        payment_method: paymentMethod,
-        payment_status: paymentStatus,
+      // Use AppContext.completeOrder which calls the API AND refreshes
+      // tables + orders + notifications so the floor plan updates immediately
+      const result = await completeOrder(id, {
+        method: paymentMethod,
+        status: 'paid',
       })
-
-      await fetchTables()
-      await fetchNotifications()
-
-      navigate(`/orders/${order.id}/success`, {
+      const payment = result.payment || {}
+      navigate(`/orders/${id}/success`, {
         state: {
-          phone: passedPhone || order.whatsapp_number || '',
-          order: updated,
-          transactionRef: updated.transaction_ref || order.transaction_ref || `#AB-${order.id}`,
+          transaction_ref: payment.transaction_ref || '',
+          invoice_number:  invoice?.invoice_number  || '',
+          payment_method:  paymentMethod,
+          total:           order?.total             || 0,
+          whatsapp_opened: false,
         }
       })
-    } catch (e) {
-      console.error('Complete payment error:', e)
-      setErr(e.message || 'Payment could not be completed. Please try again.')
+    } catch (err) {
+      console.error('completeOrder error:', err)
+      setError('Payment could not be completed. Please try again.')
     } finally {
-      setSubmitting(false)
+      setCompleting(false)
     }
   }
 
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const amountDue   = invoice ? Number(invoice.total) : (order ? Number(order.total) : 0)
+  const orderNumber = order   ? (order.order_number || `#${id}`) : `#${id}`
+  const tableLabel  = order   ? (order.table_label  || '')       : ''
+
   if (loading) {
     return (
-      <AdminLayout searchPlaceholder="Checkout order...">
-        <div style={{ textAlign: 'center', padding: '100px 20px', color: '#6b7280' }}>
-          <div style={{ fontSize: 24, marginBottom: 12 }}>💳</div>
-          <div>Loading payment details from PostgreSQL database…</div>
+      <AdminLayout>
+        <div style={{ textAlign: 'center', padding: 80, color: 'var(--color-text-muted)' }}>
+          Loading checkout…
         </div>
       </AdminLayout>
     )
   }
-
-  if (err && !order) {
-    return (
-      <AdminLayout searchPlaceholder="Checkout order...">
-        <div style={{ textAlign: 'center', padding: '80px 20px', color: '#ef4444' }}>
-          <div style={{ fontSize: 28, marginBottom: 12 }}>⚠️</div>
-          <h2 style={{ fontSize: 20, color: '#1f2937', marginBottom: 8 }}>Order Not Found</h2>
-          <p style={{ color: '#6b7280', marginBottom: 20 }}>{err}</p>
-          <button className="btn-primary" onClick={() => navigate('/orders')}>Back to Orders</button>
-        </div>
-      </AdminLayout>
-    )
-  }
-
-  const orderNum = order ? (order.order_number || `ORD-${order.id}`) : id
-  const totalVal = order ? Number(order.total || 0) : 0
 
   return (
     <AdminLayout
@@ -104,104 +110,89 @@ export default function CheckoutPage() {
     >
       <div className="checkout-outer-wrap">
         <div className="checkout-card">
+
           {/* Header */}
           <div className="checkout-card-header">
-            <button className="checkout-back-btn" onClick={() => navigate(`/orders/${order.id}/invoice`)} aria-label="Go back">
-              ←
-            </button>
-            <span className="checkout-order-number">Order #{orderNum}</span>
+            <button
+              className="checkout-back-btn"
+              onClick={() => navigate(`/orders/${id}/invoice`)}
+              aria-label="Go back"
+            >←</button>
+            <div>
+              <div className="checkout-order-tag">Order {orderNumber}</div>
+              {tableLabel && <div className="checkout-table-tag">{tableLabel}</div>}
+            </div>
           </div>
 
-          {err && (
-            <div style={{ color: '#ef4444', backgroundColor: '#fee2e2', padding: '10px 14px', borderRadius: 8, marginTop: 12, fontSize: 13 }}>
-              {err}
+          {/* Amount Due */}
+          <div className="checkout-amount-section">
+            <div className="checkout-amount-lbl">Amount Due</div>
+            <div className="checkout-amount-val">
+              ₹{amountDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+
+          <hr className="checkout-divider" />
+
+          {/* Payment Method */}
+          <div className="checkout-section">
+            <div className="checkout-section-title">Payment Method</div>
+            <div className="checkout-methods-grid">
+              {PAYMENT_METHODS.map((m) => (
+                <button
+                  key={m.id}
+                  className={`checkout-method-btn ${paymentMethod === m.id ? 'active' : ''}`}
+                  onClick={() => setPaymentMethod(m.id)}
+                  id={`pay-method-${m.id}`}
+                  disabled={completing}
+                >
+                  <span className="checkout-method-icon">{m.icon}</span>
+                  <span className="checkout-method-label">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <hr className="checkout-divider" />
+
+          {/* Summary */}
+          {invoice && (
+            <div className="checkout-section">
+              <div className="checkout-section-title">Summary</div>
+              <div className="checkout-summary-rows">
+                <div className="checkout-summary-row">
+                  <span>Subtotal</span>
+                  <span>₹{Number(invoice.subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="checkout-summary-row">
+                  <span>Tax (5% GST)</span>
+                  <span>₹{Number(invoice.tax_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="checkout-summary-row checkout-summary-row--total">
+                  <span>Total</span>
+                  <span>₹{Number(invoice.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Amount Due */}
-          <div className="amount-due-section">
-            <span className="amount-lbl">AMOUNT DUE</span>
-            <h1 className="amount-val">₹{totalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</h1>
-          </div>
-
-          {/* Payment Methods Grid */}
-          <div className="payment-methods-wrapper">
-            <h3 className="section-title">Select Payment Method</h3>
-            <div className="payment-methods-grid">
-              <button
-                type="button"
-                className={`payment-grid-item ${paymentMethod === 'Cash' ? 'selected' : ''}`}
-                onClick={() => setPaymentMethod('Cash')}
-              >
-                <span className="payment-method-icon">💵</span>
-                <span className="payment-method-lbl">Cash</span>
-              </button>
-              <button
-                type="button"
-                className={`payment-grid-item ${paymentMethod === 'Card' ? 'selected' : ''}`}
-                onClick={() => setPaymentMethod('Card')}
-              >
-                <span className="payment-method-icon">💳</span>
-                <span className="payment-method-lbl">Card</span>
-              </button>
-              <button
-                type="button"
-                className={`payment-grid-item ${paymentMethod === 'UPI' ? 'selected' : ''}`}
-                onClick={() => setPaymentMethod('UPI')}
-              >
-                <span className="payment-method-icon">📱</span>
-                <span className="payment-method-lbl">UPI</span>
-              </button>
-              <button
-                type="button"
-                className={`payment-grid-item ${paymentMethod === 'Other' ? 'selected' : ''}`}
-                onClick={() => setPaymentMethod('Other')}
-              >
-                <span className="payment-method-icon">⚙️</span>
-                <span className="payment-method-lbl">Other</span>
-              </button>
+          {error && (
+            <div className="checkout-error">
+              {error}
             </div>
-          </div>
+          )}
 
-          {/* Payment Status Segmented Control */}
-          <div className="payment-status-wrapper">
-            <h3 className="section-title">Payment Status</h3>
-            <div className="segmented-control">
-              <button
-                type="button"
-                className={`segment-btn ${paymentStatus === 'Pending' ? 'active' : ''}`}
-                onClick={() => setPaymentStatus('Pending')}
-              >
-                Pending
-              </button>
-              <button
-                type="button"
-                className={`segment-btn ${paymentStatus === 'Paid' ? 'active font-semibold' : ''}`}
-                onClick={() => setPaymentStatus('Paid')}
-              >
-                Paid
-              </button>
-            </div>
-          </div>
-
-          {/* Bottom Actions */}
-          <div className="checkout-bottom-actions">
-            <button
-              type="button"
-              className="btn-primary py-3 w-full checkout-complete-btn"
-              style={{ backgroundColor: '#2d1810', borderColor: '#2d1810' }}
-              onClick={handleCompleteOrder}
-              disabled={submitting}
-            >
-              {submitting ? 'Completing Order…' : 'Complete Order 🧾'}
-            </button>
-            <button type="button" className="btn-ghost checkout-cancel-btn" onClick={() => navigate(`/orders/${order.id}/invoice`)}>
-              Cancel
-            </button>
-          </div>
+          {/* Complete button */}
+          <button
+            className="btn-primary checkout-complete-btn"
+            onClick={handleCompleteOrder}
+            disabled={completing}
+            id="complete-order-btn"
+          >
+            {completing ? 'Processing…' : 'Complete Order'}
+          </button>
         </div>
       </div>
     </AdminLayout>
   )
 }
-

@@ -28,6 +28,8 @@ export default function LoginPage() {
 
   const handleAdminLogin = (e) => {
     e.preventDefault()
+    // Clear any leftover waiter session
+    try { localStorage.removeItem('artisan_waiter') } catch {}
     setCurrentRole('admin')
     setCurrentWaiter(null)
     navigate('/dashboard')

@@ -1,93 +1,123 @@
+/**
+ * InvoicePreviewPage — /orders/:id/invoice
+ *
+ * Loads the real Invoice from Django API.
+ * Shows: invoice number, table, date/time, items, totals.
+ * Actions: Send via WhatsApp, Print, go to Payment.
+ */
 import { useState, useEffect } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
-import { orderApi } from '../api'
+import { invoiceApi } from '../api'
 import './InvoicePreviewPage.css'
 
 export default function InvoicePreviewPage() {
-  const { id } = useParams()
+  const { id }   = useParams()   // order ID
   const navigate = useNavigate()
-  const location = useLocation()
 
-  const [order, setOrder] = useState(location.state?.order || null)
-  const [loading, setLoading] = useState(!order)
-  const [err, setErr] = useState(null)
+  const [invoice,  setInvoice]  = useState(null)
+  const [loading,  setLoading]  = useState(true)
+  const [error,    setError]    = useState('')
 
-  const passedPhone = location.state?.phone || ''
-
+  // ── Load invoice from API ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!id) return
-    let isMounted = true
-    orderApi.get(id)
-      .then((data) => {
-        if (isMounted && data) {
-          setOrder(data)
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError('')
+      try {
+        const data = await invoiceApi.getByOrder(id)
+        if (!cancelled) setInvoice(data)
+      } catch (err) {
+        if (!cancelled) {
+          const msg = err.message || ''
+          if (msg.includes('404') || msg.toLowerCase().includes('no invoice')) {
+            setError('No invoice found. Please generate the bill first.')
+          } else {
+            setError('Unable to load invoice. Please try again.')
+          }
         }
-      })
-      .catch((e) => {
-        console.error('Invoice fetch error:', e)
-        if (isMounted) setErr('Unable to load invoice details.')
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false)
-      })
-    return () => { isMounted = false }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [id])
 
+  // ── WhatsApp click-to-chat ─────────────────────────────────────────────────
+  const handleSendWhatsApp = () => {
+    if (!invoice) return
+    const phone   = invoice.whatsapp_number ? `91${invoice.whatsapp_number}` : ''
+    const invNum  = invoice.invoice_number
+    const table   = invoice.table_label || `Order #${id}`
+    const sub     = Number(invoice.subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+    const tax     = Number(invoice.tax_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+    const total   = Number(invoice.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+    const receipt = invoice.receipt_url || ''
+
+    const msg = encodeURIComponent(
+      `🍵 *Artisan Brew*\n\n` +
+      `Invoice: ${invNum}\n` +
+      `Table: ${table}\n\n` +
+      `Subtotal: ₹${sub}\n` +
+      `Tax (GST): ₹${tax}\n` +
+      `*Total: ₹${total}*\n\n` +
+      (receipt ? `Digital Bill: ${receipt}\n\n` : '') +
+      `Thank you for visiting! ☕`
+    )
+
+    const url = phone
+      ? `https://wa.me/${phone}?text=${msg}`
+      : `https://wa.me/?text=${msg}`
+
+    window.open(url, '_blank', 'noopener,noreferrer')
+    // Navigate to success after opening WhatsApp
+    navigate(`/orders/${id}/success`, {
+      state: {
+        invoice_number:  invNum,
+        transaction_ref: invoice.id ? `AB-${String(invoice.id).padStart(5, '0')}` : '',
+        whatsapp_number: invoice.whatsapp_number,
+        whatsapp_opened: true,
+      }
+    })
+  }
+
+  const handleGoToPayment = () => navigate(`/orders/${id}/checkout`)
+  const handlePrint       = () => window.print()
+
+  // ── Render states ──────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <AdminLayout searchPlaceholder="Search invoice details...">
-        <div style={{ textAlign: 'center', padding: '100px 20px', color: '#6b7280' }}>
-          <div style={{ fontSize: 24, marginBottom: 12 }}>🧾</div>
-          <div>Loading invoice details from PostgreSQL database…</div>
+      <AdminLayout>
+        <div style={{ textAlign: 'center', padding: 80, color: 'var(--color-text-muted)' }}>
+          Loading invoice…
         </div>
       </AdminLayout>
     )
   }
 
-  if (err || !order) {
+  if (error || !invoice) {
     return (
-      <AdminLayout searchPlaceholder="Search invoice details...">
-        <div style={{ textAlign: 'center', padding: '80px 20px', color: '#ef4444' }}>
-          <div style={{ fontSize: 28, marginBottom: 12 }}>⚠️</div>
-          <h2 style={{ fontSize: 20, color: '#1f2937', marginBottom: 8 }}>Invoice Not Found</h2>
-          <p style={{ color: '#6b7280', marginBottom: 20 }}>{err || `Invoice for order #${id} could not be loaded.`}</p>
-          <button className="btn-primary" onClick={() => navigate('/orders')}>Back to Orders</button>
+      <AdminLayout>
+        <div style={{ textAlign: 'center', padding: 80, color: 'var(--color-text-muted)' }}>
+          <p>{error || 'Invoice not found.'}</p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', marginTop: 16 }}>
+            <button className="btn-outline" onClick={() => navigate(`/orders/${id}`)}>
+              ← Back to Order
+            </button>
+          </div>
         </div>
       </AdminLayout>
     )
   }
 
-  const items = order.items || []
-  const subtotal = Number(order.subtotal || 0)
-  const tax = Number(order.tax_amount || 0)
-  const total = Number(order.total || 0)
-  const phone = passedPhone || order.whatsapp_number || ''
-  const invoiceNo = order.invoice_number || `INV-${String(order.id).zfill ? String(order.id).zfill(5) : order.id}`
-  const tableName = order.table_label || (order.table ? `Table ${order.table}` : 'Takeaway')
-
-  const dateObj = order.created_at ? new Date(order.created_at) : new Date()
-  const dateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
-  const timeStr = dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-
-  const isPaid = order.payment_status === 'paid' || order.status === 'completed'
-
-  const handleSendWhatsApp = () => {
-    const cleanPhone = phone.replace(/\D/g, '')
-    const receiptLink = `${window.location.origin}/orders/${order.id}/invoice`
-    const msgText = `☕ *Artisan Brew Digital Receipt*\n\nInvoice: *${invoiceNo}*\nTable: *${tableName}*\nDate: ${dateStr} ${timeStr}\n\n*Order Summary:*\n${items.map(it => `• ${it.quantity}x ${it.product_name} - ₹${Number(it.subtotal).toFixed(2)}`).join('\n')}\n\n*Subtotal:* ₹${subtotal.toFixed(2)}\n*GST (5%):* ₹${tax.toFixed(2)}\n*Total:* ₹${total.toFixed(2)}\n\n*Digital Bill:* ${receiptLink}\n\nThank you for visiting Artisan Brew!`
-
-    if (cleanPhone) {
-      window.open(`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(msgText)}`, '_blank')
-    }
-
-    // Navigate to Checkout / Payment or Success page
-    navigate(`/orders/${order.id}/checkout`, { state: { phone, order, total, subtotal, tax } })
-  }
-
-  const handlePrint = () => {
-    window.print()
-  }
+  const items    = invoice.items || []
+  const subtotal = Number(invoice.subtotal)
+  const tax      = Number(invoice.tax_amount)
+  const total    = Number(invoice.total)
+  const isPaid   = invoice.status === 'paid'
+  const dateInfo = invoice.created_at_str || {}
 
   return (
     <AdminLayout
@@ -96,10 +126,11 @@ export default function InvoicePreviewPage() {
       pageIcon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
     >
       <div className="invoice-preview-container">
-        {/* Navigation header */}
+
+        {/* Nav header */}
         <div className="invoice-nav-header">
-          <button className="back-btn-link" onClick={() => navigate(`/orders/${order.id}`)}>
-            ← Back to Order #{order.order_number || order.id}
+          <button className="back-btn-link" onClick={() => navigate(`/orders/${id}`)}>
+            ← Back to Order
           </button>
           <div className="invoice-actions-top">
             <button className="btn-outline btn-sm" onClick={handlePrint}>Print</button>
@@ -108,40 +139,42 @@ export default function InvoicePreviewPage() {
 
         {/* Invoice Card */}
         <div className="invoice-card-container">
-          {/* Logo & Header Info */}
+
+          {/* Header: brand + meta */}
           <div className="invoice-card-header">
             <div className="invoice-header-left">
               <div className="invoice-logo-wrap">
-                <img src="/logo.png" alt="Artisan Brew Logo" className="invoice-logo" />
+                <img src="/logo.png" alt="Artisan Brew" className="invoice-logo"
+                  onError={(e) => { e.target.style.display='none' }} />
               </div>
               <div>
                 <h2 className="invoice-brand-title">Artisan Brew</h2>
-                <p className="invoice-brand-subtitle">Management Suite</p>
-                <p className="invoice-brand-address">123 Espresso Lane, Coffee District</p>
+                <p className="invoice-brand-subtitle">Cafe Management Suite</p>
+                <p className="invoice-brand-address">128 Brew Street, Suite 400</p>
                 <p className="invoice-brand-contact">contact@artisanbrew.com</p>
               </div>
             </div>
-            
+
             <div className="invoice-header-right">
               <span className={`payment-status-pill ${isPaid ? 'paid' : 'unpaid'}`}>
-                {isPaid ? 'PAID' : 'UNPAID'}
+                {isPaid ? 'Paid' : 'Unpaid'}
               </span>
               <div className="invoice-meta-list">
                 <div className="invoice-meta-row">
                   <span className="meta-lbl">INVOICE:</span>
-                  <span className="meta-val">{invoiceNo}</span>
+                  <span className="meta-val">{invoice.invoice_number}</span>
                 </div>
                 <div className="invoice-meta-row">
                   <span className="meta-lbl">TABLE:</span>
-                  <span className="meta-val">{tableName}</span>
+                  <span className="meta-val">{invoice.table_label || `Order #${id}`}</span>
                 </div>
                 <div className="invoice-meta-row">
                   <span className="meta-lbl">DATE:</span>
-                  <span className="meta-val">{dateStr}</span>
+                  <span className="meta-val">{dateInfo.date || '—'}</span>
                 </div>
                 <div className="invoice-meta-row">
                   <span className="meta-lbl">TIME:</span>
-                  <span className="meta-val">{timeStr}</span>
+                  <span className="meta-val">{dateInfo.time || '—'}</span>
                 </div>
               </div>
             </div>
@@ -149,7 +182,7 @@ export default function InvoicePreviewPage() {
 
           <hr className="invoice-hr" />
 
-          {/* Items Table */}
+          {/* Items table */}
           <div className="invoice-table-wrap">
             <table className="invoice-items-table">
               <thead>
@@ -161,14 +194,23 @@ export default function InvoicePreviewPage() {
                 </tr>
               </thead>
               <tbody>
+                {items.length === 0 && (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', color: '#aaa', padding: 20 }}>
+                    No items
+                  </td></tr>
+                )}
                 {items.map((item, idx) => (
-                  <tr key={idx}>
+                  <tr key={item.id || idx}>
                     <td>
                       <div className="invoice-item-name">{item.product_name}</div>
                     </td>
                     <td className="text-center">{item.quantity}</td>
-                    <td className="text-right">₹{Number(item.unit_price).toLocaleString('en-IN')}</td>
-                    <td className="text-right">₹{Number(item.subtotal).toLocaleString('en-IN')}</td>
+                    <td className="text-right">
+                      ₹{Number(item.unit_price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="text-right">
+                      ₹{Number(item.subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -177,14 +219,14 @@ export default function InvoicePreviewPage() {
 
           <hr className="invoice-hr" />
 
-          {/* Footer Details: Payment Info + Totals */}
+          {/* Footer: payment details + totals */}
           <div className="invoice-card-footer">
             <div className="invoice-footer-left">
               <h3 className="invoice-section-heading">Payment Details</h3>
               <div className="payment-detail-box">
                 <div className="payment-box-row">
                   <span className="payment-box-lbl">Method:</span>
-                  <span className="payment-box-val">{order.payment_method ? order.payment_method.toUpperCase() : 'Pending'}</span>
+                  <span className="payment-box-val">Pending</span>
                 </div>
                 <div className="payment-box-row">
                   <span className="payment-box-lbl">Status:</span>
@@ -192,6 +234,12 @@ export default function InvoicePreviewPage() {
                     {isPaid ? 'Paid' : 'Unpaid'}
                   </span>
                 </div>
+                {invoice.whatsapp_number && (
+                  <div className="payment-box-row">
+                    <span className="payment-box-lbl">WhatsApp:</span>
+                    <span className="payment-box-val">+91 {invoice.whatsapp_number}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -199,39 +247,52 @@ export default function InvoicePreviewPage() {
               <div className="totals-table">
                 <div className="totals-row">
                   <span>Subtotal</span>
-                  <span>₹{subtotal.toLocaleString('en-IN')}</span>
+                  <span>₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="totals-row">
-                  <span>Tax (GST 5%)</span>
-                  <span>₹{tax.toLocaleString('en-IN')}</span>
+                  <span>GST (5%)</span>
+                  <span>₹{tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="totals-row total-grand">
                   <span>TOTAL</span>
-                  <span>₹{total.toLocaleString('en-IN')}</span>
+                  <span>₹{total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Invoice Actions */}
+        {/* Actions footer */}
         <div className="invoice-actions-footer">
+          {invoice.whatsapp_number ? (
+            <button
+              className="btn-primary py-3 px-6"
+              onClick={handleSendWhatsApp}
+              id="send-whatsapp-btn"
+            >
+              📱 Send via WhatsApp
+            </button>
+          ) : (
+            <button
+              className="btn-outline py-3 px-6"
+              onClick={() => navigate(`/orders/${id}`)}
+            >
+              ← Edit Order
+            </button>
+          )}
           <button
-            className="btn-primary py-3 px-6 px-lg-8"
-            style={{ backgroundColor: '#2d1810', borderColor: '#2d1810' }}
-            onClick={handleSendWhatsApp}
+            className="btn-primary py-3 px-6"
+            onClick={handleGoToPayment}
+            id="go-to-payment-btn"
+            style={{ background: 'var(--color-espresso)' }}
           >
-            📱 Send via WhatsApp
-          </button>
-          <button className="btn-outline py-3 px-6" onClick={() => navigate(`/orders/${order.id}/checkout`, { state: { phone, order } })}>
-            Proceed to Payment 💳
+            Proceed to Payment →
           </button>
           <button className="btn-outline py-3 px-6" onClick={handlePrint}>
-            Print Bill / PDF
+            🖨 Print Bill
           </button>
         </div>
       </div>
     </AdminLayout>
   )
 }
-

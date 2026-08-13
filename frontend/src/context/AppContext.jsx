@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
-import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, requestApi } from '../api'
-
+import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi } from '../api'
 
 const AppContext = createContext(null)
 
@@ -19,10 +18,30 @@ export function AppProvider({ children }) {
   const [apiError, setApiError] = useState(null)
   const pollRef = useRef(null)
 
-  // ── Waiter / Role Context State ──────────────────────────────────────────
-  const [currentRole,    setCurrentRole]    = useState('admin')
-  const [currentWaiter,  setCurrentWaiter]  = useState(null)
+  // ── Waiter / Role Context State — persisted to localStorage so refresh keeps session
+  const [currentRole, setCurrentRoleRaw] = useState(() => {
+    try { return localStorage.getItem('artisan_role') || 'admin' } catch { return 'admin' }
+  })
+  const [currentWaiter, setCurrentWaiterRaw] = useState(() => {
+    try {
+      const s = localStorage.getItem('artisan_waiter')
+      return s ? JSON.parse(s) : null
+    } catch { return null }
+  })
   const [waiterRequests, setWaiterRequests] = useState([])
+
+  // Wrapped setters that persist to localStorage
+  const setCurrentRole = (role) => {
+    try { localStorage.setItem('artisan_role', role) } catch {}
+    setCurrentRoleRaw(role)
+  }
+  const setCurrentWaiter = (waiter) => {
+    try {
+      if (waiter) localStorage.setItem('artisan_waiter', JSON.stringify(waiter))
+      else localStorage.removeItem('artisan_waiter')
+    } catch {}
+    setCurrentWaiterRaw(waiter)
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Fetch helpers
@@ -116,17 +135,7 @@ export function AppProvider({ children }) {
     }
   }, [])
 
-  const fetchWaiterRequests = useCallback(async () => {
-    try {
-      const data = await requestApi.list()
-      const list = Array.isArray(data) ? data : (data.results ?? [])
-      setWaiterRequests(list.map(normaliseRequest))
-    } catch (err) {
-      console.warn('fetchWaiterRequests error:', err)
-    }
-  }, [])
-
-  // Load on mount + start notification and requests polling
+  // Load on mount + start notification polling
   useEffect(() => {
     fetchCategories()
     fetchProducts()
@@ -134,31 +143,16 @@ export function AppProvider({ children }) {
     fetchQRCodes()
     fetchOrders()
     fetchNotifications()
-    fetchWaiterRequests()
 
-    // Poll unread notifications and waiter requests every 10 seconds for real-time responsiveness
+    // Poll unread count every 30 seconds
     pollRef.current = setInterval(() => {
       fetchNotifications()
-      fetchWaiterRequests()
-      fetchTables()
-      fetchOrders()
-    }, 10000)
+    }, 30000)
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
-  }, [fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications, fetchWaiterRequests])
-
-  function normaliseRequest(r) {
-    return {
-      ...r,
-      tableId: r.table_id || (r.table_name ? (r.table_name.startsWith('T-') ? r.table_name : `T-${r.table_name}`) : ''),
-      type: r.request_type || r.type || 'Call Waiter',
-      time: r.time || (r.created_at ? new Date(r.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''),
-      status: r.status || 'new',
-    }
-  }
-
+  }, [fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications])
 
   // ─────────────────────────────────────────────────────────────────────────
   // Field normalisers (API → UI shape)
@@ -419,17 +413,19 @@ export function AppProvider({ children }) {
     const created = await orderApi.create(data)
     const normalised = normaliseOrder(created)
     setOrders((prev) => [normalised, ...prev])
+    // Refresh tables so the occupied status appears immediately in the floor plan
     await fetchTables()
+    // Refresh notifications so new-order notification appears
     await fetchNotifications()
     return normalised
   }
+
 
   const updateOrderStatus = async (id, newStatus) => {
     try {
       const updated = await orderApi.setStatus(id, { status: newStatus.toLowerCase() })
       const normalised = normaliseOrder(updated)
       setOrders((prev) => prev.map((o) => (o.id === id ? normalised : o)))
-      await fetchTables()
       await fetchNotifications()
       return normalised
     } catch (err) {
@@ -439,6 +435,29 @@ export function AppProvider({ children }) {
   }
 
   const getOrder = (id) => orders.find((o) => o.id === id || String(o.id) === String(id))
+
+  /**
+   * completeOrder — POST /orders/{id}/complete_order/
+   * Atomically marks order completed, marks invoice paid, creates payment,
+   * and releases the table (backend sets Table.status='available').
+   * Then immediately re-fetches tables + orders + notifications so the
+   * floor plan card updates without requiring a page refresh.
+   */
+  const completeOrder = async (orderId, data) => {
+    const result = await orderApi.completeOrder(orderId, data)
+    // Update order in local state immediately
+    const normalisedOrder = normaliseOrder(result.order || {})
+    if (normalisedOrder.id) {
+      setOrders((prev) => prev.map((o) => (o.id === normalisedOrder.id ? normalisedOrder : o)))
+    }
+    // Re-fetch tables so occupied→available is reflected immediately on floor plan
+    await fetchTables()
+    // Re-fetch orders so list page reflects COMPLETED status
+    await fetchOrders()
+    // Re-fetch notifications
+    await fetchNotifications()
+    return result
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Notification actions
@@ -466,36 +485,14 @@ export function AppProvider({ children }) {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Waiter request helpers (API-backed)
+  // Waiter request helpers
   // ─────────────────────────────────────────────────────────────────────────
-
-  const createWaiterRequest = async (data) => {
-    const created = await requestApi.create(data)
-    await fetchWaiterRequests()
-    await fetchNotifications()
-    return created
+  const updateRequestStatus = (id, status) => {
+    setWaiterRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)))
   }
-
-  const updateRequestStatus = async (id, status) => {
-    try {
-      const updated = await requestApi.setStatus(id, { status })
-      setWaiterRequests((prev) => prev.map((r) => (r.id === id ? normaliseRequest(updated) : r)))
-      await fetchNotifications()
-    } catch (err) {
-      console.error('updateRequestStatus error:', err)
-    }
+  const dismissRequest = (id) => {
+    setWaiterRequests((prev) => prev.filter((r) => r.id !== id))
   }
-
-  const dismissRequest = async (id) => {
-    try {
-      await requestApi.patch(id, { status: 'dismissed' })
-      setWaiterRequests((prev) => prev.filter((r) => r.id !== id))
-      await fetchNotifications()
-    } catch (err) {
-      console.error('dismissRequest error:', err)
-    }
-  }
-
 
   return (
     <AppContext.Provider
@@ -513,11 +510,8 @@ export function AppProvider({ children }) {
         currentRole,       setCurrentRole,
         currentWaiter,     setCurrentWaiter,
         waiterRequests,    setWaiterRequests,
-        createWaiterRequest,
         updateRequestStatus,
         dismissRequest,
-        fetchWaiterRequests,
-
         // product actions
         addProduct,
         updateProduct,
@@ -545,6 +539,7 @@ export function AppProvider({ children }) {
         // order actions
         createOrder,
         updateOrderStatus,
+        completeOrder,
         getOrder,
         fetchOrders,
         // notification actions
@@ -563,112 +558,3 @@ export function useApp() {
   if (!ctx) throw new Error('useApp must be used within AppProvider')
   return ctx
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Normalisation helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-function normaliseProduct(p) {
-  if (!p) return null
-  return {
-    ...p,
-    id: p.id,
-    name: p.name || '',
-    price: Number(p.price || 0),
-    tax: Number(p.tax || 0),
-    category: p.category || null,
-    categoryName: p.category_name || '',
-    categoryLabel: p.category_label || p.category_name || '',
-    image: p.image || p.image_url || null,
-    available: p.available ?? true,
-    soldOut: p.sold_out ?? false,
-    availableOnPOS: p.available_on_pos ?? true,
-    availableOnQR: p.available_on_qr ?? true,
-    popular: p.popular ?? false,
-    featured: p.featured ?? false,
-    dietaryTags: p.dietary_tags || [],
-  }
-}
-
-function normaliseTable(t) {
-  if (!t) return null
-  return {
-    ...t,
-    id: t.id,
-    name: t.name || `T-${t.id}`,
-    label: t.name || `Table ${t.id}`,
-    seats: t.seats || 4,
-    status: t.status || 'available',
-    active: t.active ?? true,
-    currentOrderId: t.current_order_id || null,
-    currentOrderRef: t.current_order_ref || '',
-    amount: t.amount ? Number(t.amount) : null,
-  }
-}
-
-function normaliseOrder(o) {
-  if (!o) return null
-  return {
-    ...o,
-    id: o.id,
-    orderId: o.order_number || `ORD-${o.id}`,
-    orderNumber: o.order_number || `ORD-${o.id}`,
-    table: o.table_label || (o.table ? `Table ${o.table}` : 'Takeaway'),
-    tableId: o.table,
-    tableLabel: o.table_label || (o.table ? `Table ${o.table}` : 'Takeaway'),
-    waiter: o.waiter_name || 'Staff',
-    waiterName: o.waiter_name || 'Staff',
-    customer: o.customer_name || 'Dine-in Guest',
-    customerName: o.customer_name || 'Dine-in Guest',
-    itemsSummary: o.items_summary || '',
-    notes: o.notes || '',
-    amount: Number(o.total || 0),
-    subtotal: Number(o.subtotal || 0),
-    tax: Number(o.tax_amount || 0),
-    total: Number(o.total || 0),
-    status: (o.status || 'pending').toUpperCase(),
-    time: o.created_at
-      ? new Date(o.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-      : '',
-    items: (o.items || []).map((item) => ({
-      id: item.id,
-      productId: item.product,
-      name: item.product_name || 'Item',
-      unitPrice: Number(item.unit_price || 0),
-      qty: item.quantity,
-      total: Number(item.subtotal || 0),
-      image: item.product_image || null,
-    })),
-  }
-}
-
-function normaliseQR(q) {
-  if (!q) return null
-  return {
-    ...q,
-    id: q.id,
-    qrId: q.qr_id || '',
-    menuUrl: q.menu_url || '',
-    imageUrl: q.image_url || q.image || null,
-    status: q.status || 'active',
-  }
-}
-
-function normaliseRequest(r) {
-  if (!r) return null
-  return {
-    ...r,
-    id: r.id,
-    tableId: r.table ? `T-${r.table}` : 'T-1',
-    table_name: r.table_name || (r.table ? `Table ${r.table}` : ''),
-    type: r.request_type || 'Call Waiter',
-    message: r.message || '',
-    status: r.status || 'new',
-    assignedWaiter: r.assigned_waiter || '',
-    amount: r.amount ? Number(r.amount) : null,
-    time: r.created_at
-      ? new Date(r.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-      : 'Just now',
-  }
-}
-

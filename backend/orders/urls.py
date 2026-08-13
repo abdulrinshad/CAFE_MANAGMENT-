@@ -4,11 +4,15 @@ URL routing for the orders app.
 All endpoints under /api/v1/:
 
 Orders:
-  GET/POST        /orders/
-  GET/PATCH/DELETE /orders/{id}/
-  PATCH            /orders/{id}/set_status/
-  POST             /orders/{id}/add_item/
-  DELETE           /orders/{id}/remove_item/{item_id}/
+  GET/POST           /orders/
+  GET/PATCH/DELETE   /orders/{id}/
+  PATCH              /orders/{id}/set_status/
+  POST               /orders/{id}/add_item/
+  DELETE             /orders/{id}/remove_item/{item_id}/
+  PATCH              /orders/{id}/update_item/{item_id}/
+  POST               /orders/{id}/generate_bill/
+  POST               /orders/{id}/complete_order/
+  GET                /orders/{id}/invoice/
 
 Dashboard:
   GET  /dashboard/stats/
@@ -20,6 +24,9 @@ Reports:
   GET  /reports/summary/
   GET  /reports/revenue-chart/
   GET  /reports/top-categories/
+
+Public:
+  GET  /receipt/{token}/   (no auth)
 """
 
 from django.urls import path, include
@@ -33,14 +40,19 @@ from .views import (
     ReportsSummaryView,
     ReportsRevenueChartView,
     ReportsTopCategoriesView,
+    InvoiceByOrderView,
+    PublicReceiptView,
 )
 
 router = DefaultRouter()
 router.register(r'orders', OrderViewSet, basename='order')
 
 urlpatterns = [
-    # Orders CRUD
+    # Orders CRUD + actions
     path('', include(router.urls)),
+
+    # Invoice for a specific order
+    path('orders/<int:order_id>/invoice/', InvoiceByOrderView.as_view(), name='order-invoice'),
 
     # Dashboard endpoints
     path('dashboard/stats/',         DashboardStatsView.as_view(),        name='dashboard-stats'),
@@ -52,4 +64,7 @@ urlpatterns = [
     path('reports/summary/',         ReportsSummaryView.as_view(),        name='reports-summary'),
     path('reports/revenue-chart/',   ReportsRevenueChartView.as_view(),   name='reports-revenue-chart'),
     path('reports/top-categories/',  ReportsTopCategoriesView.as_view(),  name='reports-top-categories'),
+
+    # Public receipt (no auth)
+    path('receipt/<uuid:token>/',    PublicReceiptView.as_view(),         name='public-receipt'),
 ]

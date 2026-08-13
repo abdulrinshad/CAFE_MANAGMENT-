@@ -1,11 +1,15 @@
 """
-Orders models: Order and OrderItem.
+Orders models: Order, OrderItem, Invoice, Payment.
 
 Order → OrderItem → Product → Category → Table
+Order → Invoice → Payment
 
 Revenue is calculated only from COMPLETED orders.
 CANCELLED orders are excluded from all financial calculations.
 """
+
+import uuid
+from decimal import Decimal
 
 from django.db import models
 from django.utils import timezone
@@ -39,16 +43,11 @@ class Order(models.Model):
     )
 
     # Identifiers
-    customer_name   = models.CharField(max_length=120, blank=True, default='')
-    whatsapp_number = models.CharField(max_length=20, blank=True, default='')
-    waiter_name     = models.CharField(max_length=120, blank=True, default='')
-    notes           = models.TextField(blank=True, default='')
-
-    # Invoice & Payment Details
-    invoice_number   = models.CharField(max_length=30, blank=True, default='')
-    transaction_ref  = models.CharField(max_length=50, blank=True, default='')
-    payment_method   = models.CharField(max_length=20, default='pending')
-    payment_status   = models.CharField(max_length=20, default='unpaid')
+    customer_name    = models.CharField(max_length=120, blank=True, default='')
+    waiter_name      = models.CharField(max_length=120, blank=True, default='')
+    notes            = models.TextField(blank=True, default='')
+    whatsapp_number  = models.CharField(max_length=15, blank=True, default='',
+                                        help_text='Customer WhatsApp number (10 digits)')
 
     # Status
     status        = models.CharField(
@@ -70,7 +69,6 @@ class Order(models.Model):
     completed_at  = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-
         verbose_name        = 'Order'
         verbose_name_plural = 'Orders'
         ordering            = ['-created_at']
@@ -89,14 +87,12 @@ class Order(models.Model):
         if self.status == self.STATUS_COMPLETED and not self.completed_at:
             self.completed_at = timezone.now()
 
-        # Recalculate total from items (if items already exist)
         super().save(*args, **kwargs)
 
     def recalculate_totals(self):
         """Recompute subtotal, tax, total from order items and save."""
-        from decimal import Decimal
         subtotal = sum(item.subtotal for item in self.items.all())
-        tax      = subtotal * Decimal('0.05')  # 5% GST — adjust as needed
+        tax      = subtotal * Decimal('0.05')  # 5% GST
         self.subtotal   = subtotal
         self.tax_amount = tax.quantize(Decimal('0.01'))
         self.total      = (subtotal + tax).quantize(Decimal('0.01'))
@@ -157,24 +153,114 @@ class OrderItem(models.Model):
 
 
 class Invoice(models.Model):
-    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='invoice')
-    invoice_number = models.CharField(max_length=30, unique=True)
-    whatsapp_number = models.CharField(max_length=20, blank=True, default='')
-    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    """One invoice per order, generated when waiter clicks 'Generate Bill'."""
+
+    STATUS_UNPAID    = 'unpaid'
+    STATUS_PAID      = 'paid'
+    STATUS_CANCELLED = 'cancelled'
+
+    STATUS_CHOICES = [
+        (STATUS_UNPAID,    'Unpaid'),
+        (STATUS_PAID,      'Paid'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    order          = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='invoice')
+    invoice_number = models.CharField(max_length=20, unique=True, blank=True,
+                                      help_text='e.g. INV-10452')
+    token          = models.UUIDField(default=uuid.uuid4, unique=True, editable=False,
+                                      help_text='Secure token for public receipt URL')
+
+    # Customer contact (copied from order at bill generation time)
+    whatsapp_number = models.CharField(max_length=15, blank=True, default='')
+
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_UNPAID)
+
+    # Financial snapshot (from order at time of invoice creation)
+    subtotal   = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    payment_method = models.CharField(max_length=20, default='pending')
-    payment_status = models.CharField(max_length=20, default='unpaid')
-    transaction_ref = models.CharField(max_length=50, blank=True, default='')
+    total      = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    paid_at    = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        verbose_name = 'Invoice'
+        verbose_name        = 'Invoice'
         verbose_name_plural = 'Invoices'
-        ordering = ['-created_at']
+        ordering            = ['-created_at']
 
     def __str__(self):
-        return f'{self.invoice_number} - {self.order.order_number} (Rs.{self.total})'
+        return f'{self.invoice_number} — {self.get_status_display()}'
+
+    def save(self, *args, **kwargs):
+        if not self.invoice_number:
+            last = Invoice.objects.order_by('-id').first()
+            next_id = (last.id + 1) if last and last.id else 10001
+            self.invoice_number = f'INV-{next_id}'
+        super().save(*args, **kwargs)
+
+    @property
+    def receipt_url_path(self):
+        """Public path for the digital receipt (no auth required)."""
+        return f'/receipt/{self.token}'
 
 
+class Payment(models.Model):
+    """Payment record linked to an Order and Invoice."""
+
+    METHOD_CASH  = 'cash'
+    METHOD_CARD  = 'card'
+    METHOD_UPI   = 'upi'
+    METHOD_OTHER = 'other'
+
+    METHOD_CHOICES = [
+        (METHOD_CASH,  'Cash'),
+        (METHOD_CARD,  'Card'),
+        (METHOD_UPI,   'UPI'),
+        (METHOD_OTHER, 'Other'),
+    ]
+
+    STATUS_PENDING = 'pending'
+    STATUS_PAID    = 'paid'
+    STATUS_FAILED  = 'failed'
+    STATUS_REFUNDED = 'refunded'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING,  'Pending'),
+        (STATUS_PAID,     'Paid'),
+        (STATUS_FAILED,   'Failed'),
+        (STATUS_REFUNDED, 'Refunded'),
+    ]
+
+    order   = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='payment')
+    invoice = models.OneToOneField(Invoice, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='payment')
+
+    method = models.CharField(max_length=20, choices=METHOD_CHOICES, default=METHOD_CASH)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    # Reference (set on completion)
+    transaction_ref = models.CharField(max_length=40, blank=True, default='')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    paid_at    = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name        = 'Payment'
+        verbose_name_plural = 'Payments'
+        ordering            = ['-created_at']
+
+    def __str__(self):
+        return f'Payment for {self.order.order_number} — {self.get_status_display()}'
+
+    def save(self, *args, **kwargs):
+        if not self.transaction_ref:
+            import random, string
+            self.transaction_ref = 'AB-' + ''.join(
+                random.choices(string.digits, k=5)
+            )
+        super().save(*args, **kwargs)
