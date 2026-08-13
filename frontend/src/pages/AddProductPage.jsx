@@ -12,7 +12,7 @@ export default function AddProductPage() {
 
   const [form, setForm] = useState({
     name: '',
-    category: '',
+    categoryId: '',
     displayOrder: 0,
     description: '',
     price: '',
@@ -20,13 +20,14 @@ export default function AddProductPage() {
     available: true,
     popular: false,
     dietaryTags: [],
-    image: null,
+    imageFile: null,
     imagePreview: null,
     availableOnPOS: true,
     availableOnQR: true,
   })
-  const [errors, setErrors] = useState({})
-  const [saving, setSaving] = useState(false)
+  const [errors,  setErrors]  = useState({})
+  const [saving,  setSaving]  = useState(false)
+  const [apiErr,  setApiErr]  = useState(null)
 
   const set = (field, value) => {
     setForm((f) => ({ ...f, [field]: value }))
@@ -45,45 +46,51 @@ export default function AddProductPage() {
   const handleImage = (e) => {
     const file = e.target.files[0]
     if (!file) return
-    const url = URL.createObjectURL(file)
-    set('imagePreview', url)
+    set('imageFile', file)
+    set('imagePreview', URL.createObjectURL(file))
   }
 
   const validate = () => {
     const e = {}
-    if (!form.name.trim()) e.name = 'Product name is required'
-    if (!form.category) e.category = 'Please select a category'
+    if (!form.name.trim())                                    e.name     = 'Product name is required'
+    if (!form.categoryId)                                     e.category = 'Please select a category'
     if (!form.price || isNaN(form.price) || Number(form.price) <= 0) e.price = 'Enter a valid price'
     setErrors(e)
     return Object.keys(e).length === 0
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validate()) return
     setSaving(true)
-    setTimeout(() => {
-      addProduct({
-        name: form.name,
-        category: form.category,
-        categoryLabel: form.category.toUpperCase(),
-        displayOrder: Number(form.displayOrder) || 0,
-        description: form.description,
-        price: Number(form.price),
-        tax: Number(form.tax) || 0,
-        available: form.available,
-        popular: form.popular,
-        dietaryTags: form.dietaryTags,
-        image: form.imagePreview || '/espresso.png',
-        availableOnPOS: form.availableOnPOS,
-        availableOnQR: form.availableOnQR,
-        soldOut: false,
-      })
-      setSaving(false)
-      navigate('/menu')
-    }, 500)
-  }
+    setApiErr(null)
+    try {
+      // Build FormData so we can include the image file
+      const fd = new FormData()
+      fd.append('name',             form.name.trim())
+      fd.append('category',         form.categoryId)
+      fd.append('price',            Number(form.price))
+      fd.append('tax',              Number(form.tax) || 0)
+      fd.append('description',      form.description)
+      fd.append('available',        form.available)
+      fd.append('popular',          form.popular)
+      fd.append('display_order',    Number(form.displayOrder) || 0)
+      fd.append('dietary_tags',     JSON.stringify(form.dietaryTags))
+      fd.append('available_on_pos', form.availableOnPOS)
+      fd.append('available_on_qr',  form.availableOnQR)
+      fd.append('sold_out',         false)
+      if (form.imageFile) {
+        fd.append('image', form.imageFile)
+      }
 
-  const catNames = categories.map((c) => c.name)
+      await addProduct(fd)
+      navigate('/menu')
+    } catch (err) {
+      console.error('Create product error:', err)
+      setApiErr(err.message || 'Failed to create product. Is the Django server running?')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <AdminLayout searchPlaceholder="Search products, or...">
@@ -101,6 +108,13 @@ export default function AddProductPage() {
             </button>
           </div>
         </div>
+
+        {/* API error banner */}
+        {apiErr && (
+          <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '12px 16px', marginBottom: 20, color: '#991b1b', fontSize: 14 }}>
+            ⚠️ {apiErr}
+          </div>
+        )}
 
         {/* Two-column layout */}
         <div className="add-product-page__body">
@@ -133,11 +147,13 @@ export default function AddProductPage() {
                   <select
                     id="prod-cat"
                     className={`form-select${errors.category ? ' form-input--error' : ''}`}
-                    value={form.category}
-                    onChange={(e) => set('category', e.target.value)}
+                    value={form.categoryId}
+                    onChange={(e) => set('categoryId', e.target.value)}
                   >
                     <option value="">Select a category</option>
-                    {catNames.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
                   </select>
                   {errors.category && <span className="form-error">{errors.category}</span>}
                 </div>
@@ -217,9 +233,7 @@ export default function AddProductPage() {
                   <img src={form.imagePreview} alt="Preview" className="upload-area__preview" />
                 ) : (
                   <>
-                    <div className="upload-area__icon">
-                      <UploadIcon />
-                    </div>
+                    <div className="upload-area__icon"><UploadIcon /></div>
                     <p className="upload-area__label">Click to upload image</p>
                     <p className="upload-area__hint">SVG, PNG, JPG or GIF (max. 5MB)</p>
                     <p className="upload-area__hint">Recommended 1:1 aspect ratio</p>
@@ -239,11 +253,7 @@ export default function AddProductPage() {
                   <div className="toggle-row__label">Available</div>
                   <div className="toggle-row__sub">Show this product on the menu</div>
                 </div>
-                <ToggleSwitch
-                  active={form.available}
-                  onToggle={() => set('available', !form.available)}
-                  id="toggle-available"
-                />
+                <ToggleSwitch active={form.available} onToggle={() => set('available', !form.available)} id="toggle-available" />
               </div>
 
               <div className="toggle-row">
@@ -251,11 +261,23 @@ export default function AddProductPage() {
                   <div className="toggle-row__label">Popular / Featured</div>
                   <div className="toggle-row__sub">Highlight product on the top menu</div>
                 </div>
-                <ToggleSwitch
-                  active={form.popular}
-                  onToggle={() => set('popular', !form.popular)}
-                  id="toggle-popular"
-                />
+                <ToggleSwitch active={form.popular} onToggle={() => set('popular', !form.popular)} id="toggle-popular" />
+              </div>
+
+              <div className="toggle-row">
+                <div>
+                  <div className="toggle-row__label">Available on POS</div>
+                  <div className="toggle-row__sub">Visible on staff POS terminal</div>
+                </div>
+                <ToggleSwitch active={form.availableOnPOS} onToggle={() => set('availableOnPOS', !form.availableOnPOS)} id="toggle-pos" />
+              </div>
+
+              <div className="toggle-row">
+                <div>
+                  <div className="toggle-row__label">Available on QR Menu</div>
+                  <div className="toggle-row__sub">Customers can view digitally</div>
+                </div>
+                <ToggleSwitch active={form.availableOnQR} onToggle={() => set('availableOnQR', !form.availableOnQR)} id="toggle-qr" />
               </div>
 
               <div className="form-group" style={{ marginTop: 12 }}>
@@ -299,9 +321,7 @@ function ToggleSwitch({ active, onToggle, id }) {
 function UploadIcon() {
   return (
     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2"/>
-      <circle cx="8.5" cy="8.5" r="1.5"/>
-      <polyline points="21 15 16 10 5 21"/>
+      <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
     </svg>
   )
 }

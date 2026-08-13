@@ -10,42 +10,71 @@ const FILTER_TABS = ['All Tables', 'Available', 'Occupied', 'Needs Attention']
 
 export default function TablesPage() {
   const navigate = useNavigate()
-  const { tables, addTable, updateTable, currentRole, orders } = useApp()
+  const {
+    tables, addTable, updateTable, deleteTable, setTableStatus, setTableActive,
+    currentRole, orders, loading, apiError, fetchTables,
+  } = useApp()
 
-  const [activeFilter, setActiveFilter] = useState('All Tables')
-  const [addTableOpen, setAddTableOpen] = useState(false)
-  const [newTable, setNewTable] = useState({ id: '', seats: 4 })
-  const [paymentTable, setPaymentTable] = useState(null)
+  const [activeFilter,   setActiveFilter]   = useState('All Tables')
+  const [addTableOpen,   setAddTableOpen]   = useState(false)
+  const [newTable,       setNewTable]       = useState({ id: '', seats: 4 })
+  const [addSaving,      setAddSaving]      = useState(false)
+  const [addErr,         setAddErr]         = useState(null)
+  const [paymentTable,   setPaymentTable]   = useState(null)
+  const [deleteTarget,   setDeleteTarget]   = useState(null)
 
   const countFor = (filter) => {
-    if (filter === 'All Tables') return tables.length
-    if (filter === 'Available') return tables.filter((t) => t.status === 'available').length
-    if (filter === 'Occupied') return tables.filter((t) => t.status === 'occupied').length
-    if (filter === 'Needs Attention') return tables.filter((t) => t.status === 'needs_attention').length
+    if (filter === 'All Tables')     return tables.length
+    if (filter === 'Available')      return tables.filter((t) => t.status === 'available').length
+    if (filter === 'Occupied')       return tables.filter((t) => t.status === 'occupied').length
+    if (filter === 'Needs Attention')return tables.filter((t) => t.status === 'needs_attention' || t.status === 'bill_requested').length
     return 0
   }
 
   const filtered = tables.filter((t) => {
-    if (activeFilter === 'All Tables') return true
-    if (activeFilter === 'Available') return t.status === 'available'
-    if (activeFilter === 'Occupied') return t.status === 'occupied'
-    if (activeFilter === 'Needs Attention') return t.status === 'needs_attention'
+    if (activeFilter === 'All Tables')      return true
+    if (activeFilter === 'Available')       return t.status === 'available'
+    if (activeFilter === 'Occupied')        return t.status === 'occupied'
+    if (activeFilter === 'Needs Attention') return t.status === 'needs_attention' || t.status === 'bill_requested'
     return true
   })
 
-  const handleAddTable = () => {
+  const handleAddTable = async () => {
     if (!newTable.id.trim()) return
-    addTable({ id: newTable.id.trim(), label: newTable.id.trim(), seats: Number(newTable.seats) || 4 })
-    setNewTable({ id: '', seats: 4 })
-    setAddTableOpen(false)
+    setAddSaving(true)
+    setAddErr(null)
+    try {
+      await addTable({ id: newTable.id.trim(), seats: Number(newTable.seats) || 4 })
+      setNewTable({ id: '', seats: 4 })
+      setAddTableOpen(false)
+    } catch (err) {
+      setAddErr(err.message || 'Failed to create table.')
+    } finally {
+      setAddSaving(false)
+    }
   }
 
-  const handleProcessPayment = () => {
+  const handleProcessPayment = async () => {
     if (!paymentTable) return
-    updateTable(paymentTable.id, { status: 'available', currentOrderId: null, amount: null, items: [], seatedMinutes: null, waitingMinutes: null })
-    setPaymentTable(null)
+    try {
+      await setTableStatus(paymentTable.id, 'available')
+      setPaymentTable(null)
+    } catch (err) {
+      console.error('Process payment error:', err)
+    }
   }
 
+  const handleDeleteTable = async () => {
+    if (!deleteTarget) return
+    try {
+      await deleteTable(deleteTarget.id)
+      setDeleteTarget(null)
+    } catch (err) {
+      console.error('Delete table error:', err)
+    }
+  }
+
+  // ── Waiter view ──────────────────────────────────────────────────────────
   if (currentRole === 'waiter') {
     return (
       <AdminLayout
@@ -54,132 +83,89 @@ export default function TablesPage() {
         pageIcon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="7" width="18" height="3" rx="1"/><line x1="8" y1="10" x2="8" y2="20"/><line x1="16" y1="10" x2="16" y2="20"/><line x1="5" y1="20" x2="19" y2="20"/></svg>}
       >
         <div className="floor-plan-page">
-          {/* Legend and Subtitle Row */}
           <div className="floor-plan__header-row">
             <div className="floor-plan__subtitle-wrap">
               <h2>Main Dining Room</h2>
               <p>Manage tables, guests, and instant table actions.</p>
             </div>
-            
-            {/* Status Legend */}
             <div className="floor-plan__legend">
-              <div className="legend-item">
-                <span className="legend-dot legend-dot--available" />
-                <span>Available</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot legend-dot--occupied" />
-                <span>Occupied</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-dot legend-dot--action" />
-                <span>Action Needed</span>
-              </div>
+              <div className="legend-item"><span className="legend-dot legend-dot--available" /><span>Available</span></div>
+              <div className="legend-item"><span className="legend-dot legend-dot--occupied" /><span>Occupied</span></div>
+              <div className="legend-item"><span className="legend-dot legend-dot--action" /><span>Action Needed</span></div>
             </div>
           </div>
 
-          {/* Table Cards Grid */}
-          <div className="floor-plan__grid">
-            {tables.map((table) => {
-              const isAvailable = table.status === 'available'
-              const isOccupied = table.status === 'occupied'
-              const isNeedsAttn = table.status === 'needs_attention'
-              
-              // Find the active order for this table
-              const activeOrd = orders ? orders.find(o => o.table === table.label && o.status !== 'COMPLETED') : null
-              const orderId = activeOrd ? activeOrd.id : 'ORD-1041' // Default fallback to a known order
+          {loading.tables && tables.length === 0 ? (
+            <div style={{ color: '#9ca3af', textAlign: 'center', padding: '40px 0' }}>Loading tables…</div>
+          ) : tables.length === 0 ? (
+            <div style={{ color: '#9ca3af', textAlign: 'center', padding: '40px 0' }}>No tables found. Ask admin to add tables.</div>
+          ) : (
+            <div className="floor-plan__grid">
+              {tables.map((table) => {
+                const isAvailable  = table.status === 'available'
+                const isOccupied   = table.status === 'occupied'
+                const isNeedsAttn  = table.status === 'needs_attention' || table.status === 'bill_requested'
+                const activeOrd    = orders ? orders.find(o => o.table === table.label && o.status !== 'COMPLETED') : null
+                const orderId      = activeOrd ? activeOrd.id : null
 
-              // Map some guest counts & activities for visual reference
-              let guestCount = '2 Guests'
-              let activity = 'Coffee · 12m'
-              if (table.id === 'T-02') {
-                guestCount = '2 Guests'
-                activity = 'Dining · 15m'
-              } else if (table.id === 'T-04') {
-                guestCount = '4 Guests'
-                activity = 'Bill Requested'
-              }
-
-              return (
-                <div 
-                  key={table.id} 
-                  className={`waiter-table-card ${table.status}`}
-                >
-                  <div className="waiter-table-card__top">
-                    <span className="waiter-table-card__id">{table.label}</span>
-                    <span className={`waiter-table-status-pill ${table.status}`}>
-                      {table.status.replace('_', ' ')}
-                    </span>
-                  </div>
-
-                  <div className="waiter-table-card__body">
-                    {isAvailable && (
-                      <div className="waiter-table-card__available-info">
-                        <span className="table-seats-lbl">{table.seats} Seats</span>
-                        <div className="waiter-table-card__icon-wrap">🛋️</div>
-                      </div>
-                    )}
-                    {isOccupied && (
-                      <div className="waiter-table-card__occupied-info">
-                        <span className="table-guests-lbl">{guestCount}</span>
-                        <span className="table-activity-lbl">{activity}</span>
-                      </div>
-                    )}
-                    {isNeedsAttn && (
-                      <div className="waiter-table-card__attn-info">
-                        <span className="table-guests-lbl">{guestCount}</span>
-                        <span className="table-amount-lbl">₹{(table.amount || 105.00 * 80).toLocaleString()}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="waiter-table-card__footer">
-                    {isAvailable && (
-                      <button 
-                        className="btn-primary btn-sm w-full"
-                        onClick={() => navigate(`/orders/new?table=${table.id}`)}
-                      >
-                        Start Order
-                      </button>
-                    )}
-                    {isOccupied && (
-                      <div className="waiter-table-card__actions">
-                        <button 
-                          className="btn-outline btn-sm"
-                          onClick={() => navigate(`/orders/${orderId}/active`)}
-                        >
-                          Add Item
+                return (
+                  <div key={table.id} className={`waiter-table-card ${table.status}`}>
+                    <div className="waiter-table-card__top">
+                      <span className="waiter-table-card__id">{table.label}</span>
+                      <span className={`waiter-table-status-pill ${table.status}`}>
+                        {table.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div className="waiter-table-card__body">
+                      {isAvailable && (
+                        <div className="waiter-table-card__available-info">
+                          <span className="table-seats-lbl">{table.seats} Seats</span>
+                          <div className="waiter-table-card__icon-wrap">🛋️</div>
+                        </div>
+                      )}
+                      {isOccupied && (
+                        <div className="waiter-table-card__occupied-info">
+                          <span className="table-guests-lbl">Occupied</span>
+                        </div>
+                      )}
+                      {isNeedsAttn && (
+                        <div className="waiter-table-card__attn-info">
+                          <span className="table-guests-lbl">Bill Requested</span>
+                          {table.amount && <span className="table-amount-lbl">₹{parseFloat(table.amount).toLocaleString()}</span>}
+                        </div>
+                      )}
+                    </div>
+                    <div className="waiter-table-card__footer">
+                      {isAvailable && (
+                        <button className="btn-primary btn-sm w-full" onClick={() => navigate(`/orders/new?table=${table.id}`)}>
+                          Start Order
                         </button>
-                        <button 
-                          className="btn-primary btn-sm"
-                          onClick={() => navigate(`/orders/${orderId}/active`)}
-                        >
-                          View Order
+                      )}
+                      {isOccupied && (
+                        <div className="waiter-table-card__actions">
+                          <button className="btn-outline btn-sm" onClick={() => orderId && navigate(`/orders/${orderId}/active`)}>Add Item</button>
+                          <button className="btn-primary btn-sm" onClick={() => orderId && navigate(`/orders/${orderId}/active`)}>View Order</button>
+                        </div>
+                      )}
+                      {isNeedsAttn && (
+                        <button className="btn-primary btn-sm w-full btn-danger-bg" onClick={() => setPaymentTable(table)}>
+                          Process Payment
                         </button>
-                      </div>
-                    )}
-                    {isNeedsAttn && (
-                      <button 
-                        className="btn-primary btn-sm w-full btn-danger-bg"
-                        onClick={() => navigate(`/orders/${orderId}/active`)}
-                      >
-                        Process Payment
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
-        {/* Process Payment Confirm */}
         <ConfirmModal
           open={!!paymentTable}
           onClose={() => setPaymentTable(null)}
           onConfirm={handleProcessPayment}
           title="Process Payment"
-          message={paymentTable ? `Mark payment for ${paymentTable.label} (${paymentTable.currentOrderId || 'Current Order'}) as completed and free the table?` : ''}
+          message={paymentTable ? `Mark payment for ${paymentTable.label} as completed and free the table?` : ''}
           confirmLabel="Process Payment"
           cancelLabel="Cancel"
         />
@@ -187,6 +173,7 @@ export default function TablesPage() {
     )
   }
 
+  // ── Admin view ───────────────────────────────────────────────────────────
   return (
     <AdminLayout searchPlaceholder="Search tables...">
       <div className="tables-page">
@@ -197,6 +184,13 @@ export default function TablesPage() {
             <PlusIcon /> Add Table
           </button>
         </div>
+
+        {/* API error banner */}
+        {apiError && (
+          <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '12px 16px', marginBottom: 20, color: '#991b1b', fontSize: 14 }}>
+            ⚠️ Cannot reach Django API: {apiError}. Make sure the backend server is running.
+          </div>
+        )}
 
         {/* Filters */}
         <div className="tables-filter-bar">
@@ -212,45 +206,61 @@ export default function TablesPage() {
           ))}
         </div>
 
-        {/* Cards grid */}
-        <div className="tables-grid">
-          {filtered.map((table) => (
-            <TableCard
-              key={table.id}
-              table={table}
-              onProcessPayment={() => setPaymentTable(table)}
-              onAddItem={() => navigate('/menu/add')}
-              onView={() => navigate(`/orders`)}
-              onQR={() => navigate(`/qr-codes/qr-${table.id.replace('-', '')}`)}
-            />
-          ))}
-          {filtered.length === 0 && (
-            <div className="tables-empty">No tables match this filter.</div>
-          )}
-        </div>
+        {/* Loading / Empty / Grid */}
+        {loading.tables && tables.length === 0 ? (
+          <div className="tables-empty">Loading tables…</div>
+        ) : filtered.length === 0 ? (
+          <div className="tables-empty">
+            {tables.length === 0
+              ? "No tables yet. Click '+ Add Table' to create your first table."
+              : 'No tables match this filter.'}
+          </div>
+        ) : (
+          <div className="tables-grid">
+            {filtered.map((table) => (
+              <TableCard
+                key={table.id}
+                table={table}
+                onProcessPayment={() => setPaymentTable(table)}
+                onAddItem={() => navigate('/menu/add')}
+                onView={() => navigate('/orders')}
+                onQR={() => table.qrCodeId && navigate(`/qr-codes/${table.qrCodeId}`)}
+                onDelete={() => setDeleteTarget(table)}
+                onToggleActive={() => setTableActive(table.id, !table.active)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Add Table Modal */}
       <Modal
         open={addTableOpen}
-        onClose={() => setAddTableOpen(false)}
+        onClose={() => { setAddTableOpen(false); setAddErr(null) }}
         title="Add Table"
         subtitle="Add a new table to your floor plan"
         size="sm"
         footer={
           <>
-            <button className="btn-outline" onClick={() => setAddTableOpen(false)}>Cancel</button>
-            <button className="btn-primary" onClick={handleAddTable} id="confirm-add-table">Add Table</button>
+            <button className="btn-outline" onClick={() => { setAddTableOpen(false); setAddErr(null) }}>Cancel</button>
+            <button className="btn-primary" onClick={handleAddTable} id="confirm-add-table" disabled={addSaving}>
+              {addSaving ? 'Adding…' : 'Add Table'}
+            </button>
           </>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {addErr && (
+            <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, padding: '8px 12px', color: '#991b1b', fontSize: 13 }}>
+              {addErr}
+            </div>
+          )}
           <div className="form-group">
-            <label className="form-label" htmlFor="new-table-id">Table ID</label>
+            <label className="form-label" htmlFor="new-table-id">Table ID / Name</label>
             <input
               id="new-table-id"
               className="form-input"
-              placeholder="e.g. T-06"
+              placeholder="e.g. T-06 or Rooftop-1"
               value={newTable.id}
               onChange={(e) => setNewTable((t) => ({ ...t, id: e.target.value }))}
             />
@@ -276,59 +286,68 @@ export default function TablesPage() {
         onClose={() => setPaymentTable(null)}
         onConfirm={handleProcessPayment}
         title="Process Payment"
-        message={paymentTable ? `Mark payment for ${paymentTable.label} (${paymentTable.currentOrderId}) as completed and free the table?` : ''}
+        message={paymentTable ? `Mark payment for ${paymentTable.label} as completed and free the table?` : ''}
         confirmLabel="Process Payment"
         cancelLabel="Cancel"
+      />
+
+      {/* Delete Confirm */}
+      <ConfirmModal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteTable}
+        title="Delete Table?"
+        message={deleteTarget ? `Delete "${deleteTarget.label}"? This will also remove its QR code. This cannot be undone.` : ''}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        danger
       />
     </AdminLayout>
   )
 }
 
-/* ── Table Card ── */
-function TableCard({ table, onProcessPayment, onAddItem, onView, onQR }) {
-  const isAvailable     = table.status === 'available'
-  const isOccupied      = table.status === 'occupied'
-  const isNeedsAttn     = table.status === 'needs_attention'
+/* ── Table Card (admin view) ── */
+function TableCard({ table, onProcessPayment, onAddItem, onView, onQR, onDelete, onToggleActive }) {
+  const isAvailable  = table.status === 'available'
+  const isOccupied   = table.status === 'occupied'
+  const isNeedsAttn  = table.status === 'needs_attention' || table.status === 'bill_requested'
 
   return (
     <div className={[
       'table-card',
       isOccupied  ? 'table-card--occupied'   : '',
       isNeedsAttn ? 'table-card--needs-attn' : '',
+      !table.active ? 'table-card--inactive' : '',
     ].filter(Boolean).join(' ')}>
       {/* Top */}
       <div className="table-card__top">
-        <div className="table-card__id">{table.label}</div>
+        <div className="table-card__id">{table.label || table.name}</div>
         <div className="table-card__top-right">
           {isAvailable && <span className="table-card__seats">{table.seats} Seats</span>}
-          {(isOccupied || isNeedsAttn) && (
+          {(isOccupied || isNeedsAttn) && table.amount != null && (
             <div className="table-card__amount-info">
-              <span className="table-card__amount">${table.amount?.toFixed(2)}</span>
-              <span className="table-card__order-id">{table.currentOrderId}</span>
+              <span className="table-card__amount">₹{parseFloat(table.amount).toFixed(2)}</span>
+              {table.currentOrderId && <span className="table-card__order-id">{table.currentOrderId}</span>}
             </div>
           )}
         </div>
       </div>
 
       {/* Status badge */}
-      {isOccupied   && <span className="table-badge table-badge--occupied">Order in Progress</span>}
-      {isNeedsAttn  && <span className="table-badge table-badge--attn">Bill Requested</span>}
+      {isOccupied  && <span className="table-badge table-badge--occupied">Order in Progress</span>}
+      {isNeedsAttn && <span className="table-badge table-badge--attn">Bill Requested</span>}
+      {!table.active && <span className="table-badge" style={{ background: '#374151', color: '#9ca3af' }}>Inactive</span>}
 
       {/* Content */}
       <div className="table-card__content">
         {isAvailable && (
-          <div className="table-card__chair-icon">
-            <ChairIcon />
-          </div>
+          <div className="table-card__chair-icon"><ChairIcon /></div>
         )}
-        {(isOccupied || isNeedsAttn) && table.items.length > 0 && (
+        {(isOccupied || isNeedsAttn) && table.items && table.items.length > 0 && (
           <div className="table-card__items-list">
             {table.items.map((item, i) => (
               <div key={i} className="table-card__item">{item}</div>
             ))}
-            {table.waitingMinutes && (
-              <div className="table-card__wait">~ {table.waitingMinutes} mins waiting</div>
-            )}
           </div>
         )}
       </div>
@@ -337,19 +356,18 @@ function TableCard({ table, onProcessPayment, onAddItem, onView, onQR }) {
       <div className="table-card__footer">
         {isAvailable && (
           <>
-            <span className="table-card__active-badge"><GreenDotIcon /> Active</span>
+            <span className="table-card__active-badge"><GreenDotIcon /> {table.active ? 'Active' : 'Inactive'}</span>
             <div className="table-card__icon-btns">
-              <button className="table-icon-btn" title="View" onClick={onView} id={`view-${table.id}`}><EyeIcon /></button>
+              <button className="table-icon-btn" title="View Orders" onClick={onView} id={`view-${table.id}`}><EyeIcon /></button>
               <button className="table-icon-btn" title="QR Code" onClick={onQR} id={`qr-${table.id}`}><QRIcon /></button>
-              <button className="table-icon-btn" title="Assign" id={`assign-${table.id}`}><AssignIcon /></button>
+              <button className="table-icon-btn" title={table.active ? 'Deactivate' : 'Activate'} onClick={onToggleActive} id={`active-${table.id}`}><AssignIcon /></button>
+              <button className="table-icon-btn" title="Delete" onClick={onDelete} id={`delete-${table.id}`} style={{ color: '#ef4444' }}><DeleteIcon /></button>
             </div>
           </>
         )}
         {isOccupied && (
           <>
-            <span className="table-card__seated">
-              <ClockIcon /> {table.seatedMinutes}m seated
-            </span>
+            <span className="table-card__seated"><ClockIcon /> Occupied</span>
             <div className="table-card__action-btns">
               <button className="btn-outline btn-sm" onClick={onAddItem} id={`add-item-${table.id}`}>Add Item</button>
               <button className="btn-primary btn-sm" onClick={onView} id={`view-order-${table.id}`}>View</button>
@@ -358,9 +376,7 @@ function TableCard({ table, onProcessPayment, onAddItem, onView, onQR }) {
         )}
         {isNeedsAttn && (
           <>
-            <span className="table-card__waiting-red">
-              <ClockRedIcon /> {table.waitingMinutes}m waiting
-            </span>
+            <span className="table-card__waiting-red"><ClockRedIcon /> Waiting</span>
             <button className="btn-primary btn-sm" onClick={onProcessPayment} id={`pay-${table.id}`}>
               Process Payment
             </button>
@@ -378,9 +394,7 @@ function PlusIcon() {
 function ChairIcon() {
   return (
     <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.15 }}>
-      <path d="M3 7h18v10H3z" rx="1"/>
-      <path d="M7 17v4M17 17v4"/>
-      <path d="M5 7V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/>
+      <path d="M3 7h18v10H3z" rx="1"/><path d="M7 17v4M17 17v4"/><path d="M5 7V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/>
     </svg>
   )
 }
@@ -394,7 +408,10 @@ function QRIcon() {
   return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><line x1="14" y1="14" x2="14" y2="14.01"/></svg>
 }
 function AssignIcon() {
-  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="12" y1="14" x2="12" y2="21"/><line x1="18" y1="17" x2="6" y2="17"/></svg>
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+}
+function DeleteIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
 }
 function ClockIcon() {
   return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
