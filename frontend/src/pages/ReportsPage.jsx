@@ -1,114 +1,38 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import AdminLayout from '../layouts/AdminLayout'
+import { reportsApi } from '../api'
 import './ReportsPage.css'
 
-/* ── Mock Analytics Data ── */
-const ANALYTICS = {
-  daily: {
-    totalOrders: 148,
-    completed: 141,
-    pending: 5,
-    cancelled: 2,
-    avgOrderValue: 3.20,
-    avgOrderChange: '+0.40',
-    revenue: 2650,
-    totalChange: '+8% today',
-    completedChange: '+10% today',
-    pendingChange: '→ Normal volume',
-    cancelledChange: '↘ -1% today',
-    chartLabel: 'Today (hourly)',
-    chartData: [
-      { label: '8am',  value: 180 },
-      { label: '9am',  value: 320 },
-      { label: '10am', value: 470 },
-      { label: '11am', value: 390 },
-      { label: '12pm', value: 610 },
-      { label: '2pm',  value: 290 },
-      { label: '4pm',  value: 240 },
-      { label: '6pm',  value: 150 },
-    ],
-    categories: [
-      { name: 'Espresso Bar', pct: 48 },
-      { name: 'Pastries',     pct: 28 },
-      { name: 'Pour Over',    pct: 14 },
-      { name: 'Retail Beans', pct: 10 },
-    ],
-  },
-  weekly: {
-    totalOrders: 1248,
-    completed: 1180,
-    pending: 42,
-    cancelled: 26,
-    avgOrderValue: 24.50,
-    avgOrderChange: '+$1.20',
-    revenue: 18450,
-    totalChange: '+12% this week',
-    completedChange: '+15% this week',
-    pendingChange: '→ Normal volume',
-    cancelledChange: '↘ -2% this week',
-    chartLabel: 'Weekly sales performance across all channels.',
-    chartData: [
-      { label: 'Mon', value: 2200 },
-      { label: 'Tue', value: 3100 },
-      { label: 'Wed', value: 2800 },
-      { label: 'Thu', value: 4100 },
-      { label: 'Fri', value: 1900 },
-      { label: 'Sat', value: 3200 },
-      { label: 'Sun', value: 3150 },
-    ],
-    categories: [
-      { name: 'Espresso Bar', pct: 45 },
-      { name: 'Pastries',     pct: 30 },
-      { name: 'Pour Over',    pct: 15 },
-      { name: 'Retail Beans', pct: 10 },
-    ],
-  },
-  monthly: {
-    totalOrders: 5320,
-    completed: 5100,
-    pending: 140,
-    cancelled: 80,
-    avgOrderValue: 26.80,
-    avgOrderChange: '+$2.10',
-    revenue: 79200,
-    totalChange: '+9% this month',
-    completedChange: '+11% this month',
-    pendingChange: '→ Normal volume',
-    cancelledChange: '↘ -1% this month',
-    chartLabel: 'Monthly sales performance across all channels.',
-    chartData: [
-      { label: 'Wk 1', value: 18000 },
-      { label: 'Wk 2', value: 22000 },
-      { label: 'Wk 3', value: 19500 },
-      { label: 'Wk 4', value: 19700 },
-    ],
-    categories: [
-      { name: 'Espresso Bar', pct: 44 },
-      { name: 'Pastries',     pct: 31 },
-      { name: 'Pour Over',    pct: 16 },
-      { name: 'Retail Beans', pct: 9 },
-    ],
-  },
+/* ── Helpers ── */
+function fmtNum(n) {
+  return n >= 1000 ? Number(n).toLocaleString('en-IN') : n
 }
-
-function formatNum(n) {
-  return n >= 1000 ? n.toLocaleString() : n
-}
-function formatCurrency(n) {
-  return n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n}`
+function fmtCurrency(n) {
+  const num = Number(n)
+  if (num >= 100000) return `₹${(num / 100000).toFixed(1)}L`
+  if (num >= 1000)   return `₹${(num / 1000).toFixed(1)}k`
+  return `₹${num.toFixed(0)}`
 }
 
 /* ── Revenue Bar Chart ── */
 function RevenueChart({ data }) {
-  const max = Math.max(...data.map((d) => d.value))
+  if (!data || data.length === 0) {
+    return (
+      <div className="rev-chart" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 13 }}>
+        No revenue data for this period.
+      </div>
+    )
+  }
+  const max = Math.max(...data.map((d) => Number(d.value)), 1)
   return (
     <div className="rev-chart">
-      {data.map((item) => (
-        <div key={item.label} className="rev-chart__col">
+      {data.map((item, i) => (
+        <div key={item.label || i} className="rev-chart__col">
           <div className="rev-chart__bar-wrap">
             <div
               className="rev-chart__bar"
-              style={{ height: `${Math.round((item.value / max) * 100)}%` }}
+              style={{ height: `${Math.max(Math.round((Number(item.value) / max) * 100), Number(item.value) > 0 ? 2 : 0)}%` }}
+              title={`₹${Number(item.value).toLocaleString('en-IN')}`}
             />
           </div>
           <span className="rev-chart__label">{item.label}</span>
@@ -120,7 +44,6 @@ function RevenueChart({ data }) {
 
 /* ── Category Bar ── */
 function CategoryBar({ name, pct }) {
-  const barWidths = { 45: 'var(--w45)', 48: 'var(--w48)', 44: 'var(--w44)' }
   return (
     <div className="cat-bar">
       <div className="cat-bar__top">
@@ -128,10 +51,7 @@ function CategoryBar({ name, pct }) {
         <span className="cat-bar__pct">{pct}%</span>
       </div>
       <div className="cat-bar__track">
-        <div
-          className="cat-bar__fill"
-          style={{ width: `${pct}%` }}
-        />
+        <div className="cat-bar__fill" style={{ width: `${pct}%` }} />
       </div>
     </div>
   )
@@ -165,12 +85,77 @@ function CustomDateModal({ open, onClose, onApply }) {
   )
 }
 
+/* ── Stat Card ── */
+function StatCard({ label, value, change, changeDir, icon, dark }) {
+  return (
+    <div className={`stat-card${dark ? ' stat-card--dark' : ''}`}>
+      <div className="stat-card__top">
+        <span className="stat-card__label">{label}</span>
+        <span className="stat-card__icon">{icon}</span>
+      </div>
+      <div className="stat-card__value">{value}</div>
+      {change != null && (
+        <div className={`stat-card__change stat-card__change--${changeDir || 'neutral'}`}>
+          {changeDir === 'up'   && <span className="change-arrow">↗</span>}
+          {changeDir === 'down' && <span className="change-arrow">↘</span>}
+          {change}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Main Page ── */
 export default function ReportsPage() {
-  const [period, setPeriod]  = useState('weekly')
-  const [custom, setCustom]  = useState(false)
+  const [period,      setPeriod]      = useState('weekly')
+  const [customOpen,  setCustomOpen]  = useState(false)
   const [customRange, setCustomRange] = useState(null)
 
-  const data = ANALYTICS[period] || ANALYTICS.weekly
+  // API data
+  const [summary,    setSummary]    = useState(null)
+  const [chartData,  setChartData]  = useState([])
+  const [categories, setCategories] = useState([])
+  const [loading,    setLoading]    = useState(true)
+
+  const loadReports = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = customRange
+        ? { period: 'custom', date_from: customRange.from, date_to: customRange.to }
+        : { period }
+
+      const [summaryData, chartRes, catRes] = await Promise.all([
+        reportsApi.summary(params),
+        reportsApi.revenueChart(params),
+        reportsApi.topCategories(params),
+      ])
+
+      setSummary(summaryData)
+      setChartData(chartRes.data || [])
+      setCategories(Array.isArray(catRes) ? catRes : (catRes.results ?? []))
+    } catch (err) {
+      console.error('Reports load error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [period, customRange])
+
+  useEffect(() => {
+    loadReports()
+  }, [loadReports])
+
+  // Build change labels from API data
+  const revenueChangePct = summary?.revenue_change_pct
+  const revenueChangeLabel = revenueChangePct != null
+    ? `${revenueChangePct >= 0 ? '+' : ''}${revenueChangePct}% vs prev period`
+    : null
+  const revenueChangeDir = revenueChangePct == null ? 'neutral' : revenueChangePct >= 0 ? 'up' : 'down'
+
+  const periodLabel = customRange
+    ? `${customRange.from} – ${customRange.to}`
+    : period === 'daily' ? 'Today (hourly)'
+    : period === 'weekly' ? 'This week (daily)'
+    : 'This month (weekly)'
 
   return (
     <AdminLayout
@@ -189,7 +174,7 @@ export default function ReportsPage() {
           ))}
           <button
             className={`period-tab period-tab--custom${customRange ? ' period-tab--active' : ''}`}
-            onClick={() => setCustom(true)}
+            onClick={() => setCustomOpen(true)}
             id="period-custom"
           >
             <CalendarIcon /> Custom
@@ -198,99 +183,92 @@ export default function ReportsPage() {
       }
     >
       <div className="reports-page">
-        {/* Stat Cards */}
-        <div className="reports-stat-row">
-          <StatCard
-            label="TOTAL ORDERS"
-            value={formatNum(data.totalOrders)}
-            change={data.totalChange}
-            changeDir="up"
-            icon={<OrdersIcon />}
-          />
-          <StatCard
-            label="COMPLETED"
-            value={formatNum(data.completed)}
-            change={data.completedChange}
-            changeDir="up"
-            icon={<CheckIcon />}
-          />
-          <StatCard
-            label="PENDING"
-            value={formatNum(data.pending)}
-            change={data.pendingChange}
-            changeDir="neutral"
-            icon={<ClockIcon />}
-          />
-          <StatCard
-            label="CANCELLED"
-            value={formatNum(data.cancelled)}
-            change={data.cancelledChange}
-            changeDir="down"
-            icon={<XIcon />}
-          />
-          <StatCard
-            label="AVG ORDER VALUE"
-            value={`$${data.avgOrderValue.toFixed(2)}`}
-            change={`${data.avgOrderChange} this week`}
-            changeDir="up"
-            icon={<MoneyIcon />}
-            dark
-          />
-        </div>
+        {loading ? (
+          <div style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 0', fontSize: 14 }}>
+            Loading reports…
+          </div>
+        ) : (
+          <>
+            {/* Stat Cards */}
+            <div className="reports-stat-row">
+              <StatCard
+                label="TOTAL ORDERS"
+                value={fmtNum(summary?.total_orders ?? 0)}
+                change={null}
+                icon={<OrdersIcon />}
+              />
+              <StatCard
+                label="COMPLETED"
+                value={fmtNum(summary?.completed ?? 0)}
+                change={null}
+                icon={<CheckIcon />}
+              />
+              <StatCard
+                label="PENDING"
+                value={fmtNum(summary?.pending ?? 0)}
+                change={null}
+                changeDir="neutral"
+                icon={<ClockIcon />}
+              />
+              <StatCard
+                label="CANCELLED"
+                value={fmtNum(summary?.cancelled ?? 0)}
+                change={null}
+                changeDir="down"
+                icon={<XIcon />}
+              />
+              <StatCard
+                label="AVG ORDER VALUE"
+                value={`₹${Number(summary?.avg_order_value ?? 0).toFixed(2)}`}
+                change={revenueChangeLabel}
+                changeDir={revenueChangeDir}
+                icon={<MoneyIcon />}
+                dark
+              />
+            </div>
 
-        {/* Revenue + Categories */}
-        <div className="reports-bottom-row">
-          {/* Revenue Overview */}
-          <div className="reports-revenue-card">
-            <div className="reports-revenue-card__header">
-              <div>
-                <h2 className="reports-revenue-card__title">Revenue Overview</h2>
-                <p className="reports-revenue-card__sub">{data.chartLabel}</p>
+            {/* Revenue + Categories */}
+            <div className="reports-bottom-row">
+              {/* Revenue Overview */}
+              <div className="reports-revenue-card">
+                <div className="reports-revenue-card__header">
+                  <div>
+                    <h2 className="reports-revenue-card__title">Revenue Overview</h2>
+                    <p className="reports-revenue-card__sub">{periodLabel}</p>
+                  </div>
+                  <span className="reports-revenue-card__total">
+                    {fmtCurrency(summary?.revenue ?? 0)}
+                  </span>
+                </div>
+                <RevenueChart data={chartData} />
               </div>
-              <span className="reports-revenue-card__total">{formatCurrency(data.revenue)}</span>
-            </div>
-            <RevenueChart data={data.chartData} />
-          </div>
 
-          {/* Top Categories */}
-          <div className="reports-categories-card">
-            <h2 className="reports-categories-card__title">Top Categories</h2>
-            <div className="reports-categories-card__bars">
-              {data.categories.map((cat) => (
-                <CategoryBar key={cat.name} name={cat.name} pct={cat.pct} />
-              ))}
+              {/* Top Categories */}
+              <div className="reports-categories-card">
+                <h2 className="reports-categories-card__title">Top Categories</h2>
+                <div className="reports-categories-card__bars">
+                  {categories.length === 0 ? (
+                    <div style={{ color: '#6b7280', fontSize: 13 }}>
+                      No category data yet. Complete some orders to see analytics.
+                    </div>
+                  ) : (
+                    categories.map((cat) => (
+                      <CategoryBar key={cat.name} name={cat.name} pct={cat.pct} />
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
 
       <CustomDateModal
-        open={custom}
-        onClose={() => setCustom(false)}
-        onApply={(from, to) => {
-          setCustomRange({ from, to })
-          setPeriod('weekly')
-        }}
+        open={customOpen}
+        onClose={() => setCustomOpen(false)}
+        onApply={(from, to) => setCustomRange({ from, to })}
       />
     </AdminLayout>
-  )
-}
-
-/* ── Stat Card ── */
-function StatCard({ label, value, change, changeDir, icon, dark }) {
-  return (
-    <div className={`stat-card${dark ? ' stat-card--dark' : ''}`}>
-      <div className="stat-card__top">
-        <span className="stat-card__label">{label}</span>
-        <span className="stat-card__icon">{icon}</span>
-      </div>
-      <div className="stat-card__value">{value}</div>
-      <div className={`stat-card__change stat-card__change--${changeDir}`}>
-        {changeDir === 'up'   && <span className="change-arrow">↗</span>}
-        {changeDir === 'down' && <span className="change-arrow">↘</span>}
-        {change}
-      </div>
-    </div>
   )
 }
 

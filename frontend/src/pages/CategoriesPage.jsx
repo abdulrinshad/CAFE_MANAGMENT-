@@ -86,20 +86,24 @@ function CategoryCard({ cat, onToggle, onEdit, isDragging, isDragOver, onDragSta
 
 /* ── Categories Page ── */
 export default function CategoriesPage() {
-  const { categories, toggleCategory, reorderCategories, addCategory, updateCategory } = useApp()
+  const { categories, toggleCategory, reorderCategories, addCategory, updateCategory, loading, apiError } = useApp()
 
   const [dragId,   setDragId]   = useState(null)
   const [overId,   setOverId]   = useState(null)
   const dragNode = useRef(null)
 
   // Add modal
-  const [addOpen, setAddOpen] = useState(false)
-  const [addForm, setAddForm] = useState({ name: '', icon: 'coffee', itemCount: 0 })
+  const [addOpen,  setAddOpen]  = useState(false)
+  const [addForm,  setAddForm]  = useState({ name: '', icon: 'coffee', itemCount: 0 })
+  const [addErr,   setAddErr]   = useState(null)
+  const [addSaving,setAddSaving]= useState(false)
 
   // Edit modal
   const [editOpen, setEditOpen] = useState(false)
   const [editCat,  setEditCat]  = useState(null)
   const [editForm, setEditForm] = useState({})
+  const [editErr,  setEditErr]  = useState(null)
+  const [editSaving,setEditSaving]=useState(false)
 
   /* ── Drag handlers ── */
   const handleDragStart = (e, id) => {
@@ -125,25 +129,43 @@ export default function CategoriesPage() {
   /* ── Add handlers ── */
   const handleOpenAdd = () => {
     setAddForm({ name: '', icon: 'coffee', itemCount: 0 })
+    setAddErr(null)
     setAddOpen(true)
   }
-  const handleAddSave = () => {
+  const handleAddSave = async () => {
     if (!addForm.name.trim()) return
-    addCategory({ ...addForm, active: true, order: categories.length + 1 })
-    setAddOpen(false)
+    setAddSaving(true)
+    setAddErr(null)
+    try {
+      await addCategory({ ...addForm, active: true, order: categories.length + 1 })
+      setAddOpen(false)
+    } catch (err) {
+      setAddErr(err.message || 'Failed to create category.')
+    } finally {
+      setAddSaving(false)
+    }
   }
 
   /* ── Edit handlers ── */
   const handleOpenEdit = (cat) => {
     setEditCat(cat)
-    setEditForm({ name: cat.name, icon: cat.icon, itemCount: cat.itemCount })
+    setEditForm({ name: cat.name, icon: cat.icon, itemCount: cat.itemCount ?? 0 })
+    setEditErr(null)
     setEditOpen(true)
   }
-  const handleEditSave = () => {
+  const handleEditSave = async () => {
     if (!editCat || !editForm.name.trim()) return
-    updateCategory(editCat.id, editForm)
-    setEditOpen(false)
-    setEditCat(null)
+    setEditSaving(true)
+    setEditErr(null)
+    try {
+      await updateCategory(editCat.id, editForm)
+      setEditOpen(false)
+      setEditCat(null)
+    } catch (err) {
+      setEditErr(err.message || 'Failed to save changes.')
+    } finally {
+      setEditSaving(false)
+    }
   }
 
   const ICON_OPTIONS = [
@@ -173,23 +195,36 @@ export default function CategoriesPage() {
           <GripIcon /> Drag cards to reorder display order
         </p>
 
+        {/* API error banner */}
+        {apiError && (
+          <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '12px 16px', marginBottom: 20, color: '#991b1b', fontSize: 14 }}>
+            ⚠️ Cannot reach Django API: {apiError}
+          </div>
+        )}
+
         {/* Grid */}
-        <div className="categories-grid">
-          {categories.map((cat) => (
-            <CategoryCard
-              key={cat.id}
-              cat={cat}
-              onToggle={toggleCategory}
-              onEdit={handleOpenEdit}
-              isDragging={dragId === cat.id}
-              isDragOver={overId === cat.id}
-              onDragStart={(e) => handleDragStart(e, cat.id)}
-              onDragEnter={(e) => handleDragEnter(e, cat.id)}
-              onDragEnd={handleDragEnd}
-              onDrop={(e) => handleDrop(e, cat.id)}
-            />
-          ))}
-        </div>
+        {loading.categories && categories.length === 0 ? (
+          <div style={{ color: '#6b7280', padding: '40px 0', textAlign: 'center' }}>Loading categories…</div>
+        ) : categories.length === 0 ? (
+          <div style={{ color: '#6b7280', padding: '40px 0', textAlign: 'center' }}>No categories yet. Click ‘+ Add Category’ to create one.</div>
+        ) : (
+          <div className="categories-grid">
+            {categories.map((cat) => (
+              <CategoryCard
+                key={cat.id}
+                cat={cat}
+                onToggle={toggleCategory}
+                onEdit={handleOpenEdit}
+                isDragging={dragId === cat.id}
+                isDragOver={overId === cat.id}
+                onDragStart={(e) => handleDragStart(e, cat.id)}
+                onDragEnter={(e) => handleDragEnter(e, cat.id)}
+                onDragEnd={handleDragEnd}
+                onDrop={(e) => handleDrop(e, cat.id)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Add Category Modal */}
@@ -202,11 +237,14 @@ export default function CategoriesPage() {
         footer={
           <>
             <button className="btn-outline" onClick={() => setAddOpen(false)}>Cancel</button>
-            <button className="btn-primary" onClick={handleAddSave} id="save-add-category">Create Category</button>
+            <button className="btn-primary" onClick={handleAddSave} id="save-add-category" disabled={addSaving}>
+              {addSaving ? 'Creating…' : 'Create Category'}
+            </button>
           </>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {addErr && <div style={{ color: '#991b1b', background: '#fee2e2', padding: '8px 12px', borderRadius: 6, fontSize: 13 }}>{addErr}</div>}
           <div className="form-group">
             <label className="form-label" htmlFor="add-cat-name">Category Name <span>*</span></label>
             <input
@@ -228,17 +266,6 @@ export default function CategoriesPage() {
               {ICON_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="add-cat-count">Item Count</label>
-            <input
-              id="add-cat-count"
-              className="form-input"
-              type="number"
-              min={0}
-              value={addForm.itemCount}
-              onChange={(e) => setAddForm((f) => ({ ...f, itemCount: Number(e.target.value) }))}
-            />
-          </div>
         </div>
       </Modal>
 
@@ -251,11 +278,14 @@ export default function CategoriesPage() {
         footer={
           <>
             <button className="btn-outline" onClick={() => { setEditOpen(false); setEditCat(null) }}>Cancel</button>
-            <button className="btn-primary" onClick={handleEditSave} id="save-edit-category">Save Changes</button>
+            <button className="btn-primary" onClick={handleEditSave} id="save-edit-category" disabled={editSaving}>
+              {editSaving ? 'Saving…' : 'Save Changes'}
+            </button>
           </>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {editErr && <div style={{ color: '#991b1b', background: '#fee2e2', padding: '8px 12px', borderRadius: 6, fontSize: 13 }}>{editErr}</div>}
           <div className="form-group">
             <label className="form-label" htmlFor="edit-cat-name">Category Name</label>
             <input
@@ -275,17 +305,6 @@ export default function CategoriesPage() {
             >
               {ICON_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="edit-cat-count">Item Count</label>
-            <input
-              id="edit-cat-count"
-              className="form-input"
-              type="number"
-              min={0}
-              value={editForm.itemCount ?? 0}
-              onChange={(e) => setEditForm((f) => ({ ...f, itemCount: Number(e.target.value) }))}
-            />
           </div>
         </div>
       </Modal>

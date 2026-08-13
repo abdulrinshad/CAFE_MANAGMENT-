@@ -1,0 +1,148 @@
+"""
+Orders models: Order and OrderItem.
+
+Order → OrderItem → Product → Category → Table
+
+Revenue is calculated only from COMPLETED orders.
+CANCELLED orders are excluded from all financial calculations.
+"""
+
+from django.db import models
+from django.utils import timezone
+from django.core.validators import MinValueValidator
+
+
+class Order(models.Model):
+    STATUS_PENDING   = 'pending'
+    STATUS_PREPARING = 'preparing'
+    STATUS_READY     = 'ready'
+    STATUS_COMPLETED = 'completed'
+    STATUS_CANCELLED = 'cancelled'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING,   'Pending'),
+        (STATUS_PREPARING, 'Preparing'),
+        (STATUS_READY,     'Ready'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    # Human-readable unique order number, e.g. ORD-0001
+    order_number  = models.CharField(max_length=20, unique=True, blank=True)
+
+    # Links
+    table = models.ForeignKey(
+        'menu.Table',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='orders',
+    )
+
+    # Identifiers
+    customer_name = models.CharField(max_length=120, blank=True, default='')
+    waiter_name   = models.CharField(max_length=120, blank=True, default='')
+    notes         = models.TextField(blank=True, default='')
+
+    # Status
+    status        = models.CharField(
+        max_length=20, choices=STATUS_CHOICES,
+        default=STATUS_PENDING, db_index=True,
+    )
+
+    # Financials (stored as snapshots; computed from items on save)
+    subtotal   = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                     validators=[MinValueValidator(0)])
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                     validators=[MinValueValidator(0)])
+    total      = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                     validators=[MinValueValidator(0)])
+
+    # Timestamps
+    created_at    = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at    = models.DateTimeField(auto_now=True)
+    completed_at  = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name        = 'Order'
+        verbose_name_plural = 'Orders'
+        ordering            = ['-created_at']
+
+    def __str__(self):
+        return f'{self.order_number} ({self.get_status_display()})'
+
+    def save(self, *args, **kwargs):
+        # Auto-generate order number on first save
+        if not self.order_number:
+            last = Order.objects.order_by('-id').first()
+            next_id = (last.id + 1) if last and last.id else 1
+            self.order_number = f'ORD-{next_id:04d}'
+
+        # Set completed_at when status transitions to completed
+        if self.status == self.STATUS_COMPLETED and not self.completed_at:
+            self.completed_at = timezone.now()
+
+        # Recalculate total from items (if items already exist)
+        super().save(*args, **kwargs)
+
+    def recalculate_totals(self):
+        """Recompute subtotal, tax, total from order items and save."""
+        from decimal import Decimal
+        subtotal = sum(item.subtotal for item in self.items.all())
+        tax      = subtotal * Decimal('0.05')  # 5% GST — adjust as needed
+        self.subtotal   = subtotal
+        self.tax_amount = tax.quantize(Decimal('0.01'))
+        self.total      = (subtotal + tax).quantize(Decimal('0.01'))
+        Order.objects.filter(pk=self.pk).update(
+            subtotal=self.subtotal,
+            tax_amount=self.tax_amount,
+            total=self.total,
+        )
+
+    @property
+    def item_count(self):
+        return self.items.aggregate(n=models.Sum('quantity'))['n'] or 0
+
+    @property
+    def items_summary(self):
+        parts = [f'{item.quantity}× {item.product_name}' for item in self.items.all()[:3]]
+        rest  = self.items.count() - 3
+        if rest > 0:
+            parts.append(f'+{rest} more')
+        return ', '.join(parts)
+
+    @property
+    def table_label(self):
+        return self.table.name if self.table else (self.customer_name or 'Takeaway')
+
+
+class OrderItem(models.Model):
+    order   = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(
+        'menu.Product',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='order_items',
+    )
+    # Snapshots — preserved even if product is later edited/deleted
+    product_name = models.CharField(max_length=200)
+    unit_price   = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity     = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+    subtotal     = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        verbose_name        = 'Order Item'
+        verbose_name_plural = 'Order Items'
+
+    def __str__(self):
+        return f'{self.quantity}× {self.product_name} @ ₹{self.unit_price}'
+
+    def save(self, *args, **kwargs):
+        # Snapshot product name + price from the product FK if not set
+        if self.product and not self.product_name:
+            self.product_name = self.product.name
+        if self.product and not self.unit_price:
+            self.unit_price = self.product.price
+        self.subtotal = self.unit_price * self.quantity
+        super().save(*args, **kwargs)
+        # Keep order totals in sync
+        self.order.recalculate_totals()

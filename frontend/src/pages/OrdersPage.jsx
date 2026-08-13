@@ -1,54 +1,94 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
-import { useApp } from '../context/AppContext'
+import { orderApi } from '../api'
 import './OrdersPage.css'
 
 const STATUS_TABS = ['All', 'New', 'Accepted', 'Preparing', 'Ready', 'Completed']
 
 const STATUS_META = {
-  NEW:       { label: 'NEW',       cls: 'badge--new',       dot: 'dot--new'   },
-  ACCEPTED:  { label: 'ACCEPTED',  cls: 'badge--accepted',  dot: 'dot--accepted' },
-  PREPARING: { label: 'PREP',      cls: 'badge--prep',      dot: 'dot--prep'  },
-  READY:     { label: 'READY',     cls: 'badge--ready',     dot: 'dot--ready' },
-  COMPLETED: { label: 'DONE',      cls: 'badge--done',      dot: 'dot--done'  },
+  PENDING:   { label: 'NEW',    cls: 'badge--new',     dot: 'dot--new'   },
+  ACCEPTED:  { label: 'ACCEPT', cls: 'badge--accepted', dot: 'dot--accepted' },
+  PREPARING: { label: 'PREP',   cls: 'badge--prep',    dot: 'dot--prep'  },
+  READY:     { label: 'READY',  cls: 'badge--ready',   dot: 'dot--ready' },
+  COMPLETED: { label: 'DONE',   cls: 'badge--done',    dot: 'dot--done'  },
+  CANCELLED: { label: 'CANCEL', cls: '',               dot: ''           },
+}
+
+// Map display tab → API status value
+const TAB_TO_STATUS = {
+  New:       'pending',
+  Accepted:  'accepted',
+  Preparing: 'preparing',
+  Ready:     'ready',
+  Completed: 'completed',
 }
 
 const PAGE_SIZE = 10
 
 export default function OrdersPage() {
   const navigate = useNavigate()
-  const { orders } = useApp()
 
-  const [search, setSearch]     = useState('')
-  const [activeTab, setActiveTab] = useState('All')
-  const [page, setPage]         = useState(1)
+  const [orders,     setOrders]     = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [search,     setSearch]     = useState('')
+  const [activeTab,  setActiveTab]  = useState('All')
+  const [page,       setPage]       = useState(1)
+  const [total,      setTotal]      = useState(0)
 
-  const filtered = orders.filter((o) => {
-    const matchSearch =
-      o.orderId.toLowerCase().includes(search.toLowerCase()) ||
-      o.table.toLowerCase().includes(search.toLowerCase()) ||
-      o.itemsSummary.toLowerCase().includes(search.toLowerCase())
-    const matchTab =
-      activeTab === 'All' ||
-      o.status.toLowerCase() === activeTab.toLowerCase() ||
-      (activeTab === 'Preparing' && o.status === 'PREPARING') ||
-      (activeTab === 'New'       && o.status === 'NEW')       ||
-      (activeTab === 'Accepted'  && o.status === 'ACCEPTED')  ||
-      (activeTab === 'Ready'     && o.status === 'READY')     ||
-      (activeTab === 'Completed' && o.status === 'COMPLETED')
-    return matchSearch && matchTab
-  })
+  const fetchOrders = useCallback(async () => {
+    setLoading(true)
+    try {
+      const params = {
+        ordering: '-created_at',
+        page_size: 200, // fetch all and paginate client-side for tab counts
+      }
+      if (activeTab !== 'All' && TAB_TO_STATUS[activeTab]) {
+        params.status = TAB_TO_STATUS[activeTab]
+      }
+      if (search.trim()) {
+        params.search = search.trim()
+      }
+      const data = await orderApi.list(params)
+      const list = Array.isArray(data) ? data : (data.results ?? [])
+      setOrders(list.map(normalise))
+      setTotal(Array.isArray(data) ? data.length : (data.count ?? 0))
+    } catch (err) {
+      console.error('OrdersPage fetch error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [activeTab, search])
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  useEffect(() => {
+    setPage(1)
+    fetchOrders()
+  }, [fetchOrders])
+
+  function normalise(o) {
+    return {
+      ...o,
+      orderId:      o.order_number,
+      table:        o.table_label ?? '',
+      waiter:       o.waiter_name ?? '',
+      itemsSummary: o.items_summary ?? '',
+      amount:       parseFloat(o.total ?? 0),
+      time: o.created_at
+        ? new Date(o.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        : '',
+      status: (o.status ?? 'pending').toUpperCase(),
+    }
+  }
+
+  // Client-side tab counts (from already-fetched data)
+  const allOrders   = orders
+  const paged       = allOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const totalPages  = Math.max(1, Math.ceil(allOrders.length / PAGE_SIZE))
 
   const countFor = (tab) => {
-    if (tab === 'All') return orders.length
-    return orders.filter(
-      (o) => o.status.toLowerCase() === tab.toLowerCase() ||
-             (tab === 'Preparing' && o.status === 'PREPARING')
-    ).length
+    if (tab === 'All') return allOrders.length
+    const s = TAB_TO_STATUS[tab]?.toUpperCase()
+    return allOrders.filter(o => o.status === s).length
   }
 
   return (
@@ -61,10 +101,10 @@ export default function OrdersPage() {
             <p className="orders-page__sub">Manage and track all ongoing and past orders.</p>
           </div>
           <div className="orders-page__actions">
-            <button className="btn-outline btn-export" id="btn-export">
+            <button className="btn-outline btn-export" id="btn-export" disabled>
               <DownloadIcon /> Export
             </button>
-            <button className="btn-primary" id="btn-manual-order" onClick={() => navigate('/menu/add')}>
+            <button className="btn-primary" id="btn-manual-order" onClick={() => navigate('/orders/new')}>
               + Manual Order
             </button>
           </div>
@@ -76,7 +116,7 @@ export default function OrdersPage() {
             <SearchIcon />
             <input
               className="orders-search"
-              placeholder="Search ID, item..."
+              placeholder="Search ID, table, item..."
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1) }}
               id="orders-search"
@@ -90,8 +130,7 @@ export default function OrdersPage() {
                 onClick={() => { setActiveTab(tab); setPage(1) }}
                 id={`tab-${tab.toLowerCase()}`}
               >
-                {tab} {tab !== 'All' && `(${countFor(tab)})`}
-                {tab === 'All' && `(${orders.length})`}
+                {tab} ({countFor(tab)})
               </button>
             ))}
             <button className="btn-ghost orders-filter-btn" id="btn-more-filters">
@@ -105,9 +144,7 @@ export default function OrdersPage() {
           <table className="orders-table">
             <thead>
               <tr>
-                <th>
-                  <span className="orders-th-sort">ORDER ID <SortIcon /></span>
-                </th>
+                <th><span className="orders-th-sort">ORDER ID <SortIcon /></span></th>
                 <th>TABLE</th>
                 <th>WAITER</th>
                 <th>ITEMS SUMMARY</th>
@@ -118,47 +155,48 @@ export default function OrdersPage() {
               </tr>
             </thead>
             <tbody>
-              {paged.map((order) => {
-                const meta = STATUS_META[order.status] || STATUS_META.COMPLETED
-                const isDone = order.status === 'COMPLETED'
-                return (
-                  <tr
-                    key={order.id}
-                    className={`orders-row${isDone ? ' orders-row--done' : ''}`}
-                    onClick={() => navigate(`/orders/${order.id}`)}
-                    style={{ cursor: 'pointer' }}
-                    id={`order-row-${order.id}`}
-                  >
-                    <td className="orders-cell orders-cell--id">{order.orderId}</td>
-                    <td className="orders-cell">{order.table}</td>
-                    <td className="orders-cell">{order.waiter}</td>
-                    <td className="orders-cell orders-cell--summary">{order.itemsSummary}</td>
-                    <td className="orders-cell orders-cell--amount">₹{order.amount}</td>
-                    <td className="orders-cell">
-                      <span className={`order-badge ${meta.cls}`}>
-                        {meta.label !== 'DONE' && <span className={`order-dot ${meta.dot}`} />}
-                        {meta.label === 'READY' && <span className="order-check">✓</span>}
-                        {meta.label}
-                      </span>
-                    </td>
-                    <td className="orders-cell orders-cell--time">{order.time}</td>
-                    <td className="orders-cell orders-cell--action">
-                      <button
-                        className="orders-action-btn"
-                        onClick={(e) => { e.stopPropagation(); navigate(`/orders/${order.id}`) }}
-                        id={`view-order-${order.id}`}
-                        aria-label="View order"
-                      >
-                        <ChevronRightIcon />
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-              {paged.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="orders-empty">No orders match your filters.</td>
-                </tr>
+              {loading ? (
+                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32, color: '#6b7280' }}>Loading orders…</td></tr>
+              ) : paged.length === 0 ? (
+                <tr><td colSpan={8} className="orders-empty">No orders found.</td></tr>
+              ) : (
+                paged.map((order) => {
+                  const meta    = STATUS_META[order.status] || STATUS_META.PENDING
+                  const isDone  = order.status === 'COMPLETED'
+                  return (
+                    <tr
+                      key={order.id}
+                      className={`orders-row${isDone ? ' orders-row--done' : ''}`}
+                      onClick={() => navigate(`/orders/${order.id}`)}
+                      style={{ cursor: 'pointer' }}
+                      id={`order-row-${order.id}`}
+                    >
+                      <td className="orders-cell orders-cell--id">{order.orderId}</td>
+                      <td className="orders-cell">{order.table}</td>
+                      <td className="orders-cell">{order.waiter}</td>
+                      <td className="orders-cell orders-cell--summary">{order.itemsSummary}</td>
+                      <td className="orders-cell orders-cell--amount">₹{Number(order.amount).toLocaleString('en-IN')}</td>
+                      <td className="orders-cell">
+                        <span className={`order-badge ${meta.cls}`}>
+                          {meta.label !== 'DONE' && <span className={`order-dot ${meta.dot}`} />}
+                          {meta.label === 'READY' && <span className="order-check">✓</span>}
+                          {meta.label}
+                        </span>
+                      </td>
+                      <td className="orders-cell orders-cell--time">{order.time}</td>
+                      <td className="orders-cell orders-cell--action">
+                        <button
+                          className="orders-action-btn"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/orders/${order.id}`) }}
+                          id={`view-order-${order.id}`}
+                          aria-label="View order"
+                        >
+                          <ChevronRightIcon />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
@@ -167,14 +205,11 @@ export default function OrdersPage() {
         {/* Pagination */}
         <div className="orders-pagination">
           <span className="orders-pagination__info">
-            Showing {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} orders
+            Showing {allOrders.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–
+            {Math.min(page * PAGE_SIZE, allOrders.length)} of {allOrders.length} orders
           </span>
           <div className="orders-pagination__controls">
-            <button
-              className="page-btn"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-            >
+            <button className="page-btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
               <ChevronLeftIcon />
             </button>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
@@ -186,11 +221,7 @@ export default function OrdersPage() {
                 {n}
               </button>
             ))}
-            <button
-              className="page-btn"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-            >
+            <button className="page-btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
               <ChevronRightIcon />
             </button>
           </div>
@@ -202,48 +233,20 @@ export default function OrdersPage() {
 
 /* ── Icons ── */
 function DownloadIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-      <polyline points="7 10 12 15 17 10"/>
-      <line x1="12" y1="15" x2="12" y2="3"/>
-    </svg>
-  )
+  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 }
 function SearchIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-    </svg>
-  )
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
 }
 function FilterIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="4" y1="6" x2="20" y2="6"/>
-      <line x1="8" y1="12" x2="16" y2="12"/>
-      <line x1="12" y1="18" x2="12" y2="18"/>
-    </svg>
-  )
+  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
 }
 function SortIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6 9 12 15 18 9"/>
-    </svg>
-  )
+  return <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
 }
 function ChevronRightIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="9 18 15 12 9 6"/>
-    </svg>
-  )
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
 }
 function ChevronLeftIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="15 18 9 12 15 6"/>
-    </svg>
-  )
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
 }

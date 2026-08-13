@@ -1,7 +1,8 @@
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
-import { recentOrders, bestSellers, salesChartData } from '../data/mockData'
+import { dashboardApi } from '../api'
 import './DashboardPage.css'
 
 /* ── Stat Card ── */
@@ -15,35 +16,45 @@ function StatCard({ label, value, sub }) {
   )
 }
 
-/* ── Sales Chart ── */
+/* ── Sales Chart (uses real API data) ── */
 function SalesChart({ data }) {
-  const max = Math.max(...data.map((d) => d.value))
-  const yLabels = [25000, 15000, 5000, 0]
+  if (!data || data.length === 0) {
+    return (
+      <div className="chart" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontSize: 13 }}>
+        No sales data yet for this period.
+      </div>
+    )
+  }
+  const values = data.map((d) => d.value)
+  const max    = Math.max(...values, 1)
+  // Round up max to a nice number for Y axis
+  const yMax   = Math.ceil(max / 1000) * 1000 || 5000
+  const yLabels = [yMax, Math.round(yMax * 0.6), Math.round(yMax * 0.2), 0]
 
   return (
     <div className="chart">
       <div className="chart__y-axis">
         {yLabels.map((v) => (
           <span key={v} className="chart__y-label">
-            {v === 0 ? '0' : `₹${v / 1000}k`}
+            {v === 0 ? '0' : `₹${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`}
           </span>
         ))}
       </div>
       <div className="chart__bars-wrap">
         <div className="chart__grid">
           {yLabels.slice(0, -1).map((v) => (
-            <div key={v} className="chart__grid-line" style={{ bottom: `${(v / 28000) * 100}%` }} />
+            <div key={v} className="chart__grid-line" style={{ bottom: `${(v / yMax) * 100}%` }} />
           ))}
         </div>
         <div className="chart__bars">
-          {data.map((d) => (
-            <div key={d.day} className="chart__bar-col">
+          {data.map((d, i) => (
+            <div key={d.label || i} className="chart__bar-col">
               <div
-                className={`chart__bar${d.day === 'Thu' ? ' chart__bar--active' : ''}`}
-                style={{ height: `${(d.value / 28000) * 100}%` }}
-                title={`₹${d.value.toLocaleString()}`}
+                className="chart__bar"
+                style={{ height: `${Math.max((d.value / yMax) * 100, d.value > 0 ? 2 : 0)}%` }}
+                title={`₹${Number(d.value).toLocaleString('en-IN')}`}
               />
-              <span className="chart__bar-label">{d.day}</span>
+              <span className="chart__bar-label">{d.label}</span>
             </div>
           ))}
         </div>
@@ -54,54 +65,86 @@ function SalesChart({ data }) {
 
 /* ── Status Badge ── */
 function StatusBadge({ status }) {
-  const cls = {
-    PREPARING: 'badge--preparing',
-    PENDING:   'badge--pending',
-    COMPLETED: 'badge--completed',
-  }[status] || ''
-  const short = { PREPARING: 'PREPAR...', PENDING: 'PENDING', COMPLETED: 'COMPL...' }[status] || status
-  return <span className={`badge ${cls}`}>{short}</span>
+  const map = {
+    PREPARING: { cls: 'badge--preparing', label: 'PREPAR...' },
+    PENDING:   { cls: 'badge--pending',   label: 'PENDING' },
+    COMPLETED: { cls: 'badge--completed', label: 'COMPL...' },
+    READY:     { cls: 'badge--completed', label: 'READY' },
+    CANCELLED: { cls: '',                 label: 'CANCEL' },
+  }
+  const { cls, label } = map[status] || { cls: '', label: status }
+  return <span className={`badge ${cls}`}>{label}</span>
 }
 
 /* ── Dashboard Page ── */
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const { currentRole, currentWaiter, waiterRequests, tables, orders, updateRequestStatus, dismissRequest } = useApp()
+  const { currentRole, currentWaiter, waiterRequests, tables, orders,
+          updateRequestStatus, dismissRequest } = useApp()
 
-  // Waiter Stats calculation
+  // Dashboard API state
+  const [stats,        setStats]        = useState(null)
+  const [recentOrders, setRecentOrders] = useState([])
+  const [bestSellers,  setBestSellers]  = useState([])
+  const [chartData,    setChartData]    = useState([])
+  const [loading,      setLoading]      = useState(true)
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      const [statsRes, recentsRes, bestRes, chartRes] = await Promise.all([
+        dashboardApi.stats(),
+        dashboardApi.recentOrders(8),
+        dashboardApi.bestSellers(5, 'daily'),
+        dashboardApi.salesChart('weekly'),
+      ])
+      setStats(statsRes)
+      setRecentOrders(recentsRes)
+      setBestSellers(bestRes)
+      setChartData(chartRes.data || [])
+    } catch (err) {
+      console.error('Dashboard load error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadDashboard()
+    // Auto-refresh dashboard every 60 seconds
+    const timer = setInterval(loadDashboard, 60000)
+    return () => clearInterval(timer)
+  }, [loadDashboard])
+
+  // Waiter-specific stats (from local context)
   const occupiedTablesCount = tables ? tables.filter(t => t.status === 'occupied').length : 0
   const activeRequestsCount = waiterRequests ? waiterRequests.filter(r => r.status === 'new').length : 0
-  const activeOrdersCount = orders ? orders.filter(o => o.status === 'PREPARING' || o.status === 'NEW').length : 0
-  const pendingBillsCount = tables ? tables.filter(t => t.status === 'needs_attention').length : 0
+  const activeOrdersCount   = orders ? orders.filter(o => o.status === 'PREPARING' || o.status === 'PENDING').length : 0
+  const pendingBillsCount   = tables ? tables.filter(t => t.status === 'needs_attention' || t.status === 'bill_requested').length : 0
 
+  // ── Waiter view ────────────────────────────────────────────────────────────
   if (currentRole === 'waiter') {
     return (
-      <AdminLayout 
+      <AdminLayout
         searchPlaceholder="Search active tables, orders..."
         pageTitle="Dashboard"
         pageIcon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>}
       >
         <div className="dashboard">
-          {/* Greeting */}
           <div className="dashboard__greeting">
             <h1 className="dashboard__greeting-title">Good morning, {currentWaiter?.name || 'Waiter'}</h1>
-            <p className="dashboard__greeting-sub">Current Shift Performance &middot; {currentWaiter?.station || 'Station'}</p>
+            <p className="dashboard__greeting-sub">Current Shift Performance · {currentWaiter?.station || 'Station'}</p>
           </div>
-
-          {/* Quick CTA to create order */}
           <div className="dashboard__waiter-cta">
             <div className="waiter-cta__card">
               <div className="waiter-cta__info">
                 <h3>Serve a Table</h3>
                 <p>Start a new order, add items, or process payment requests.</p>
               </div>
-              <button className="btn-primary" onClick={() => navigate('/tables')}>
+              <button className="btn-primary" onClick={() => navigate('/orders/new')}>
                 Create New Order
               </button>
             </div>
           </div>
-
-          {/* Stats Row */}
           <div className="dashboard__stats-grid">
             <div className="waiter-stat-card">
               <span className="waiter-stat-card__icon text-orange">🪑</span>
@@ -132,8 +175,6 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-
-          {/* Recent Requests Section */}
           <div className="recent-requests-section">
             <div className="recent-orders__header">
               <h2 className="recent-orders__title">Recent Table Requests</h2>
@@ -141,13 +182,12 @@ export default function DashboardPage() {
                 View All <span>→</span>
               </button>
             </div>
-
             <div className="waiter-requests-list">
               {waiterRequests && waiterRequests.length > 0 ? (
                 waiterRequests.slice(0, 3).map((req) => (
                   <div key={req.id} className={`waiter-request-card ${req.status}`}>
                     <div className="waiter-request-card__header">
-                      <span className="request-table-badge">Table {req.tableId.replace('T-', '')}</span>
+                      <span className="request-table-badge">Table {req.tableId?.replace('T-', '')}</span>
                       <span className="request-time">{req.time}</span>
                     </div>
                     <div className="waiter-request-card__body">
@@ -158,21 +198,11 @@ export default function DashboardPage() {
                     <div className="waiter-request-card__actions">
                       {req.status === 'new' ? (
                         <>
-                          <button 
-                            className="btn-outline btn-sm"
-                            onClick={() => dismissRequest(req.id)}
-                          >
-                            Dismiss
-                          </button>
-                          <button 
-                            className="btn-primary btn-sm"
-                            onClick={() => updateRequestStatus(req.id, 'in_progress')}
-                          >
-                            Accept
-                          </button>
+                          <button className="btn-outline btn-sm" onClick={() => dismissRequest(req.id)}>Dismiss</button>
+                          <button className="btn-primary btn-sm" onClick={() => updateRequestStatus(req.id, 'in_progress')}>Accept</button>
                         </>
                       ) : (
-                        <button 
+                        <button
                           className="btn-primary btn-sm btn-success-bg"
                           onClick={() => updateRequestStatus(req.id, 'completed')}
                           disabled={req.status === 'completed'}
@@ -193,6 +223,13 @@ export default function DashboardPage() {
     )
   }
 
+  // ── Admin view ─────────────────────────────────────────────────────────────
+
+  const salesChange = stats?.sales_change_pct
+  const salesBadge  = salesChange != null
+    ? `${salesChange >= 0 ? '+' : ''}${salesChange}%`
+    : '—'
+
   return (
     <AdminLayout searchPlaceholder="Search orders, items...">
       <div className="dashboard">
@@ -206,24 +243,28 @@ export default function DashboardPage() {
         <div className="dashboard__stats">
           {/* Today's Sales */}
           <div className="stat-sales">
-            <div className="stat-sales__label">TODAY'S SALES</div>
+            <div className="stat-sales__label">TODAY&apos;S SALES</div>
             <div className="stat-sales__row">
-              <span className="stat-sales__value">₹18,450</span>
-              <span className="stat-sales__badge">+ 12%</span>
+              <span className="stat-sales__value">
+                {loading ? '—' : `₹${Number(stats?.today_sales ?? 0).toLocaleString('en-IN')}`}
+              </span>
+              {salesChange != null && (
+                <span className={`stat-sales__badge${salesChange < 0 ? ' stat-sales__badge--down' : ''}`}>
+                  {salesBadge}
+                </span>
+              )}
             </div>
             <div className="stat-sales__sub">Compared to yesterday</div>
-            <div className="stat-sales__icon">
-              <TrendIcon />
-            </div>
+            <div className="stat-sales__icon"><TrendIcon /></div>
           </div>
 
           {/* Order Stats */}
           <div className="stat-orders">
             <div className="stat-orders__grid">
-              <StatCard label="Today's Orders" value="48" />
-              <StatCard label="Pending" value="5" />
-              <StatCard label="Preparing" value="3" />
-              <StatCard label="Completed" value="40" />
+              <StatCard label="Today's Orders" value={loading ? '—' : stats?.today_orders ?? 0} />
+              <StatCard label="Pending"         value={loading ? '—' : stats?.pending ?? 0} />
+              <StatCard label="Preparing"       value={loading ? '—' : stats?.preparing ?? 0} />
+              <StatCard label="Completed"       value={loading ? '—' : stats?.completed ?? 0} />
             </div>
           </div>
 
@@ -231,9 +272,9 @@ export default function DashboardPage() {
           <div className="stat-tables">
             <div className="stat-tables__dot" />
             <div className="stat-tables__label">ACTIVE TABLES</div>
-            <div className="stat-tables__value">8</div>
-            <div className="stat-tables__sub">Out of 15 total tables</div>
-            <div className="stat-tables__watermark">5</div>
+            <div className="stat-tables__value">{loading ? '—' : stats?.active_tables ?? 0}</div>
+            <div className="stat-tables__sub">Out of {stats?.total_tables ?? 0} total tables</div>
+            <div className="stat-tables__watermark">{stats?.active_tables ?? 0}</div>
           </div>
         </div>
 
@@ -245,7 +286,7 @@ export default function DashboardPage() {
               <h2 className="chart-card__title">Sales Overview</h2>
               <span className="chart-card__period">This Week</span>
             </div>
-            <SalesChart data={salesChartData} />
+            <SalesChart data={chartData} />
           </div>
 
           {/* Right Column */}
@@ -256,7 +297,7 @@ export default function DashboardPage() {
               <button
                 className="qa-btn qa-btn--dark"
                 id="qa-new-order"
-                onClick={() => {}}
+                onClick={() => navigate('/orders/new')}
               >
                 <span className="qa-btn__icon"><PlusCircleIcon /></span>
                 New Order
@@ -274,7 +315,7 @@ export default function DashboardPage() {
               <button
                 className="qa-btn qa-btn--outline"
                 id="qa-view-reports"
-                onClick={() => {}}
+                onClick={() => navigate('/reports')}
               >
                 <span className="qa-btn__icon"><ReportIcon /></span>
                 View Reports
@@ -287,18 +328,37 @@ export default function DashboardPage() {
               <h2 className="best-sellers__title">
                 <span className="best-sellers__star">☆</span> Best Sellers
               </h2>
-              {bestSellers.map((item) => (
-                <div key={item.id} className="best-seller-item">
-                  <div className="best-seller-item__img">
-                    <img src={item.image} alt={item.name} />
-                  </div>
-                  <div className="best-seller-item__info">
-                    <div className="best-seller-item__name">{item.name}</div>
-                    <div className="best-seller-item__sold">{item.soldToday} sold today</div>
-                  </div>
-                  <div className="best-seller-item__price">₹{item.price}</div>
+              {loading ? (
+                <div style={{ color: '#9ca3af', fontSize: 13, padding: '8px 0' }}>Loading…</div>
+              ) : bestSellers.length === 0 ? (
+                <div style={{ color: '#9ca3af', fontSize: 13, padding: '8px 0' }}>
+                  No sales data yet. Complete some orders to see best sellers.
                 </div>
-              ))}
+              ) : (
+                bestSellers.map((item, i) => (
+                  <div
+                    key={item.product_id || i}
+                    className="best-seller-item"
+                    style={{ cursor: item.product_id ? 'pointer' : 'default' }}
+                    onClick={() => item.product_id && navigate(`/menu/edit/${item.product_id}`)}
+                  >
+                    <div className="best-seller-item__img">
+                      {item.image_url ? (
+                        <img src={item.image_url} alt={item.name} />
+                      ) : (
+                        <div style={{ width: '100%', height: '100%', background: '#1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>☕</div>
+                      )}
+                    </div>
+                    <div className="best-seller-item__info">
+                      <div className="best-seller-item__name">{item.name}</div>
+                      <div className="best-seller-item__sold">{item.qty_sold} sold today</div>
+                    </div>
+                    <div className="best-seller-item__price">
+                      ₹{item.price != null ? Number(item.price).toFixed(0) : '—'}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -307,7 +367,11 @@ export default function DashboardPage() {
         <div className="recent-orders">
           <div className="recent-orders__header">
             <h2 className="recent-orders__title">Recent Orders</h2>
-            <button className="recent-orders__view-all" id="btn-view-all-orders">
+            <button
+              className="recent-orders__view-all"
+              id="btn-view-all-orders"
+              onClick={() => navigate('/orders')}
+            >
               View All <span>→</span>
             </button>
           </div>
@@ -324,16 +388,26 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {recentOrders.map((order) => (
-                  <tr key={order.id}>
-                    <td className="order-id">{order.id}</td>
-                    <td>{order.customer}</td>
-                    <td>{order.table}</td>
-                    <td className="order-items">{order.items}</td>
-                    <td>₹{order.total}</td>
-                    <td><StatusBadge status={order.status} /></td>
-                  </tr>
-                ))}
+                {loading ? (
+                  <tr><td colSpan={6} style={{ color: '#6b7280', textAlign: 'center', padding: 24 }}>Loading orders…</td></tr>
+                ) : recentOrders.length === 0 ? (
+                  <tr><td colSpan={6} style={{ color: '#6b7280', textAlign: 'center', padding: 24 }}>No orders yet. Create your first order!</td></tr>
+                ) : (
+                  recentOrders.map((order) => (
+                    <tr
+                      key={order.id}
+                      onClick={() => navigate(`/orders/${order.id}`)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td className="order-id">{order.order_number}</td>
+                      <td>{order.customer}</td>
+                      <td>{order.table}</td>
+                      <td className="order-items">{order.items}</td>
+                      <td>₹{Number(order.total).toLocaleString('en-IN')}</td>
+                      <td><StatusBadge status={order.status} /></td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

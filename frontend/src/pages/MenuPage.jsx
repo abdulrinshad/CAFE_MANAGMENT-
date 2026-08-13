@@ -2,14 +2,22 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
+import { productApi } from '../api'
 import './MenuPage.css'
 
 /* ── Product Card ── */
-function ProductCard({ item, onToggle, onEdit }) {
+function ProductCard({ item, onToggle, onEdit, toggling }) {
+  // image: prefer image_url (Django media), fall back to image field
+  const imgSrc = item.image_url || item.image || null
+  const catLabel = item.category_label || item.categoryLabel || item.category_name || ''
+
   return (
     <div className={`product-card${!item.available ? ' product-card--inactive' : ''}`}>
       <div className="product-card__img-wrap">
-        <img src={item.image} alt={item.name} className="product-card__img" />
+        {imgSrc
+          ? <img src={imgSrc} alt={item.name} className="product-card__img" />
+          : <div className="product-card__img product-card__img--placeholder" style={{ background: '#1e2535', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', fontSize: 32 }}>☕</div>
+        }
         {item.popular && (
           <div className="product-card__popular-badge">
             <span>☆</span> Popular
@@ -21,7 +29,7 @@ function ProductCard({ item, onToggle, onEdit }) {
           <h3 className="product-card__name">{item.name}</h3>
           <span className="product-card__price">₹{item.price}</span>
         </div>
-        <div className="product-card__category">{item.categoryLabel}</div>
+        <div className="product-card__category">{catLabel}</div>
         <hr className="product-card__divider" />
         <div className="product-card__footer">
           <span className={`product-card__status${item.soldOut ? ' product-card__status--sold' : ''}`}>
@@ -42,6 +50,8 @@ function ProductCard({ item, onToggle, onEdit }) {
               title={item.available ? 'Deactivate' : 'Activate'}
               id={`toggle-product-${item.id}`}
               onClick={() => onToggle(item.id)}
+              disabled={toggling}
+              style={{ opacity: toggling ? 0.5 : 1 }}
             >
               {item.available ? <DeactivateIcon /> : <ActivateIcon />}
             </button>
@@ -55,17 +65,29 @@ function ProductCard({ item, onToggle, onEdit }) {
 /* ── Menu Page ── */
 export default function MenuPage() {
   const navigate = useNavigate()
-  const { products, updateProduct } = useApp()
+  const { products, categories, loading, apiError, fetchProducts } = useApp()
 
   const [search, setSearch]                 = useState('')
   const [filterCategory, setFilterCategory] = useState('all')
   const [filterAvail, setFilterAvail]       = useState('all')
   const [popularOnly, setPopularOnly]       = useState(false)
+  const [togglingId, setTogglingId]         = useState(null)
 
-  const handleToggle = (id) => {
+  const handleToggle = async (id) => {
     const p = products.find((x) => x.id === id)
-    if (!p) return
-    updateProduct(id, { available: !p.available, soldOut: p.available })
+    if (!p || togglingId === id) return
+    setTogglingId(id)
+    try {
+      await productApi.setAvailability(id, {
+        available: !p.available,
+        sold_out:  p.available,   // if was available → now sold out
+      })
+      await fetchProducts()       // re-sync from DB
+    } catch (err) {
+      console.error('Toggle availability error:', err)
+    } finally {
+      setTogglingId(null)
+    }
   }
 
   const handleEdit = (item) => {
@@ -75,7 +97,9 @@ export default function MenuPage() {
   /* ── Filter logic ── */
   const filtered = products.filter((it) => {
     const matchSearch  = it.name.toLowerCase().includes(search.toLowerCase())
-    const matchCat     = filterCategory === 'all' || it.category.toLowerCase() === filterCategory.toLowerCase()
+    // category is FK id from API; match by category_name
+    const catName = (it.category_name || '').toLowerCase()
+    const matchCat     = filterCategory === 'all' || catName === filterCategory.toLowerCase()
     const matchAvail   =
       filterAvail === 'all' ||
       (filterAvail === 'available' && it.available && !it.soldOut) ||
@@ -96,7 +120,7 @@ export default function MenuPage() {
 
           <div className="menu-page__controls">
             <div className="menu-page__filters">
-              {/* Category dropdown */}
+              {/* Category dropdown — populated from live DB */}
               <div className="filter-btn-wrap">
                 <span className="filter-btn__icon filter-btn__icon--left"><FilterIcon /></span>
                 <select
@@ -106,12 +130,9 @@ export default function MenuPage() {
                   id="filter-category"
                 >
                   <option value="all">Category</option>
-                  <option value="Coffee">Coffee</option>
-                  <option value="Tea">Tea</option>
-                  <option value="Pastry">Pastry</option>
-                  <option value="Pastries">Pastries</option>
-                  <option value="Desserts">Desserts</option>
-                  <option value="Cold Beverage">Cold Beverage</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
                 </select>
               </div>
 
@@ -153,8 +174,17 @@ export default function MenuPage() {
           </div>
         </div>
 
-        {/* Products Grid */}
-        {filtered.length > 0 ? (
+        {/* API error banner */}
+        {apiError && (
+          <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '12px 16px', marginBottom: 20, color: '#991b1b', fontSize: 14 }}>
+            ⚠️ Cannot reach Django API: {apiError}. Make sure the backend server is running.
+          </div>
+        )}
+
+        {/* Loading state */}
+        {loading.products && products.length === 0 ? (
+          <div className="menu-page__empty">Loading products…</div>
+        ) : filtered.length > 0 ? (
           <div className="products-grid">
             {filtered.map((item) => (
               <ProductCard
@@ -162,11 +192,16 @@ export default function MenuPage() {
                 item={item}
                 onToggle={handleToggle}
                 onEdit={handleEdit}
+                toggling={togglingId === item.id}
               />
             ))}
           </div>
         ) : (
-          <div className="menu-page__empty">No products match your filters.</div>
+          <div className="menu-page__empty">
+            {products.length === 0
+              ? 'No products yet. Click \'+ Add Product\' to create your first item.'
+              : 'No products match your filters.'}
+          </div>
         )}
       </div>
     </AdminLayout>

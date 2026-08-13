@@ -1,142 +1,449 @@
-import { createContext, useContext, useState } from 'react'
-import {
-  menuItems   as initProducts,
-  categories  as initCategories,
-  orders      as initOrders,
-  tables      as initTables,
-  qrCodes     as initQR,
-} from '../data/mockData'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi } from '../api'
 
 const AppContext = createContext(null)
 
 export function AppProvider({ children }) {
-  const [products,   setProducts]   = useState(initProducts)
-  const [categories, setCategories] = useState(initCategories)
-  const [orders,     setOrders]     = useState(initOrders)
-  const [tables,     setTables]     = useState(initTables)
-  const [qrCodes,    setQRCodes]    = useState(initQR)
+  // ── API-backed state ─────────────────────────────────────────────────────
+  const [products,       setProducts]      = useState([])
+  const [categories,     setCategories]    = useState([])
+  const [tables,         setTables]        = useState([])
+  const [qrCodes,        setQRCodes]       = useState([])
+  const [orders,         setOrders]        = useState([])
+  const [notifications,  setNotifications] = useState([])
+  const [unreadCount,    setUnreadCount]   = useState(0)
+  const [loading,        setLoading]       = useState({
+    products: false, categories: false, tables: false, qrCodes: false, orders: false,
+  })
+  const [apiError, setApiError] = useState(null)
+  const pollRef = useRef(null)
 
-  // ── Waiter / Role Context State ──
-  const [currentRole, setCurrentRole] = useState('admin') // 'admin' | 'waiter'
-  const [currentWaiter, setCurrentWaiter] = useState(null)
-  const [waiterRequests, setWaiterRequests] = useState([
-    { id: 'req-1', tableId: 'T-02', type: 'Water Refill', time: '5m ago', status: 'in_progress', message: 'More water needed', assignedWaiter: 'Priya' },
-    { id: 'req-2', tableId: 'T-04', type: 'Bill Requested', time: '2m ago', status: 'new', message: 'Ready to pay / Bill request', amount: 105.00 },
-    { id: 'req-3', tableId: 'T-01', type: 'Ready to Order', time: 'Just now', status: 'new', message: 'Customer has requested assistance' }
-  ])
+  // ── Waiter / Role Context State ──────────────────────────────────────────
+  const [currentRole,    setCurrentRole]    = useState('admin')
+  const [currentWaiter,  setCurrentWaiter]  = useState(null)
+  const [waiterRequests, setWaiterRequests] = useState([])
 
-  // ── Product CRUD ──────────────────────────────────────────────────
-  const addProduct = (data) => {
-    const newProduct = {
-      ...data,
-      id: Date.now(),
-      categoryLabel: (data.category || '').toUpperCase(),
-      soldOut: false,
-      displayOrder: products.length + 1,
+  // ─────────────────────────────────────────────────────────────────────────
+  // Fetch helpers
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const fetchCategories = useCallback(async () => {
+    setLoading((l) => ({ ...l, categories: true }))
+    try {
+      const data = await categoryApi.list({ ordering: 'display_order,name' })
+      setCategories(Array.isArray(data) ? data : (data.results ?? []))
+      setApiError(null)
+    } catch (err) {
+      console.error('fetchCategories error:', err)
+      setApiError(err.message)
+    } finally {
+      setLoading((l) => ({ ...l, categories: false }))
     }
-    setProducts((prev) => [...prev, newProduct])
-    return newProduct
+  }, [])
+
+  const fetchProducts = useCallback(async () => {
+    setLoading((l) => ({ ...l, products: true }))
+    try {
+      const data = await productApi.list({ ordering: 'display_order,name', page_size: 200 })
+      const list = Array.isArray(data) ? data : (data.results ?? [])
+      setProducts(list.map(normaliseProduct))
+      setApiError(null)
+    } catch (err) {
+      console.error('fetchProducts error:', err)
+      setApiError(err.message)
+    } finally {
+      setLoading((l) => ({ ...l, products: false }))
+    }
+  }, [])
+
+  const fetchTables = useCallback(async () => {
+    setLoading((l) => ({ ...l, tables: true }))
+    try {
+      const data = await tableApi.list({ ordering: 'name' })
+      const list = Array.isArray(data) ? data : (data.results ?? [])
+      setTables(list.map(normaliseTable))
+      setApiError(null)
+    } catch (err) {
+      console.error('fetchTables error:', err)
+      setApiError(err.message)
+    } finally {
+      setLoading((l) => ({ ...l, tables: false }))
+    }
+  }, [])
+
+  const fetchQRCodes = useCallback(async () => {
+    setLoading((l) => ({ ...l, qrCodes: true }))
+    try {
+      const data = await qrCodeApi.list({ ordering: 'table__name' })
+      const list = Array.isArray(data) ? data : (data.results ?? [])
+      setQRCodes(list.map(normaliseQR))
+      setApiError(null)
+    } catch (err) {
+      console.error('fetchQRCodes error:', err)
+      setApiError(err.message)
+    } finally {
+      setLoading((l) => ({ ...l, qrCodes: false }))
+    }
+  }, [])
+
+  const fetchOrders = useCallback(async (params = {}) => {
+    setLoading((l) => ({ ...l, orders: true }))
+    try {
+      const data = await orderApi.list({ ordering: '-created_at', page_size: 100, ...params })
+      const list = Array.isArray(data) ? data : (data.results ?? [])
+      setOrders(list.map(normaliseOrder))
+      setApiError(null)
+    } catch (err) {
+      console.error('fetchOrders error:', err)
+    } finally {
+      setLoading((l) => ({ ...l, orders: false }))
+    }
+  }, [])
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const [list, countData] = await Promise.all([
+        notificationApi.list(),
+        notificationApi.unreadCount(),
+      ])
+      const items = Array.isArray(list) ? list : (list.results ?? [])
+      setNotifications(items)
+      setUnreadCount(countData.count ?? 0)
+    } catch (err) {
+      // Silent — don't show error banner for notification polling failures
+      console.warn('fetchNotifications error:', err)
+    }
+  }, [])
+
+  // Load on mount + start notification polling
+  useEffect(() => {
+    fetchCategories()
+    fetchProducts()
+    fetchTables()
+    fetchQRCodes()
+    fetchOrders()
+    fetchNotifications()
+
+    // Poll unread count every 30 seconds
+    pollRef.current = setInterval(() => {
+      fetchNotifications()
+    }, 30000)
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications])
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Field normalisers (API → UI shape)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function normaliseProduct(p) {
+    return {
+      ...p,
+      categoryLabel:  p.category_label  ?? (p.category_name ? p.category_name.toUpperCase() : ''),
+      availableOnPOS: p.available_on_pos ?? true,
+      availableOnQR:  p.available_on_qr  ?? true,
+      dietaryTags:    p.dietary_tags     ?? [],
+      displayOrder:   p.display_order    ?? 0,
+      soldOut:        p.sold_out         ?? false,
+      image:          p.image_url || p.image || null,
+    }
   }
 
-  const updateProduct = (id, data) => {
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, ...data, categoryLabel: (data.category || p.category).toUpperCase() }
-          : p
-      )
-    )
+  function normaliseOrder(o) {
+    return {
+      ...o,
+      // UI-expected field aliases
+      orderId:      o.order_number,
+      table:        o.table_label ?? '',
+      waiter:       o.waiter_name ?? '',
+      itemsSummary: o.items_summary ?? '',
+      amount:       parseFloat(o.total ?? 0),
+      time:         o.created_at ? new Date(o.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '',
+      // Keep original status uppercase for status tab filtering
+      status:       (o.status ?? 'pending').toUpperCase(),
+    }
   }
 
-  const deleteProduct = (id) => {
+  function normaliseTable(t) {
+    return {
+      ...t,
+      // Keep both snake_case from API and camelCase aliases for UI compat
+      label:          t.name,
+      currentOrderId: t.current_order_ref || null,
+      items:          [],          // order items aren't stored here yet
+      seatedMinutes:  null,
+      waitingMinutes: null,
+      amount:         t.amount != null ? parseFloat(t.amount) : null,
+      // QR link convenience fields
+      qrCodeId:       t.qr_code_id   ?? null,
+      qrImageUrl:     t.qr_image_url ?? null,
+      qrStatus:       t.qr_status    ?? null,
+    }
+  }
+
+  function normaliseQR(q) {
+    return {
+      ...q,
+      // Map to UI field names used in QRCodesPage / QRPreviewPage
+      name:          q.table_name  ?? '',
+      qrId:          q.qr_id       ?? '',
+      image:         q.image_url   ?? null,
+      generatedDate: q.generated_at ? q.generated_at.split('T')[0] : '',
+      scanCount:     q.scan_count  ?? 0,
+      lastScanned:   q.last_scanned ?? null,
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Product CRUD
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const addProduct = async (data) => {
+    const payload  = buildProductPayload(data)
+    const created  = await productApi.create(payload)
+    const normalised = normaliseProduct(created)
+    setProducts((prev) => [...prev, normalised])
+    return normalised
+  }
+
+  const updateProduct = async (id, data) => {
+    const payload  = buildProductPayload(data)
+    const updated  = await productApi.patch(id, payload)
+    const normalised = normaliseProduct(updated)
+    setProducts((prev) => prev.map((p) => (p.id === id ? normalised : p)))
+    return normalised
+  }
+
+  const deleteProduct = async (id) => {
+    await productApi.delete(id)
     setProducts((prev) => prev.filter((p) => p.id !== id))
   }
 
-  const deactivateProduct = (id) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, available: false, soldOut: true } : p))
-    )
+  const deactivateProduct = async (id) => {
+    const updated = await productApi.setAvailability(id, { available: false, sold_out: true })
+    const normalised = normaliseProduct(updated)
+    setProducts((prev) => prev.map((p) => (p.id === id ? normalised : p)))
   }
 
-  // ── Category CRUD ─────────────────────────────────────────────────
-  const addCategory = (data) => {
-    const newCat = { ...data, id: Date.now(), itemCount: 0 }
-    setCategories((prev) => [...prev, newCat])
-    return newCat
+  // ─────────────────────────────────────────────────────────────────────────
+  // Category CRUD
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const addCategory = async (data) => {
+    const payload = {
+      name:          data.name,
+      icon:          data.icon || 'default',
+      display_order: data.order ?? data.display_order ?? categories.length + 1,
+      active:        data.active ?? true,
+    }
+    const created = await categoryApi.create(payload)
+    setCategories((prev) => [...prev, normaliseCategory(created)])
+    return created
   }
 
-  const updateCategory = (id, data) => {
-    setCategories((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...data } : c))
-    )
+  const updateCategory = async (id, data) => {
+    const existing = categories.find((c) => c.id === id)
+    const payload  = {
+      name:          data.name          ?? existing?.name,
+      icon:          data.icon          ?? existing?.icon ?? 'default',
+      display_order: data.display_order ?? existing?.display_order ?? 0,
+      active:        data.active        ?? existing?.active ?? true,
+    }
+    const updated  = await categoryApi.patch(id, payload)
+    const normalised = normaliseCategory(updated)
+    setCategories((prev) => prev.map((c) => (c.id === id ? normalised : c)))
+    return normalised
   }
 
-  const toggleCategory = (id) => {
-    setCategories((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, active: !c.active } : c))
-    )
+  const toggleCategory = async (id) => {
+    const cat = categories.find((c) => c.id === id)
+    if (!cat) return
+    const updated  = await categoryApi.patch(id, { active: !cat.active })
+    const normalised = normaliseCategory(updated)
+    setCategories((prev) => prev.map((c) => (c.id === id ? normalised : c)))
   }
 
-  const reorderCategories = (newList) => {
-    setCategories(newList.map((c, i) => ({ ...c, order: i + 1 })))
+  const reorderCategories = async (newList) => {
+    const reordered = newList.map((c, i) => ({ ...c, order: i + 1, display_order: i + 1 }))
+    setCategories(reordered) // optimistic
+    await Promise.all(reordered.map((c) => categoryApi.patch(c.id, { display_order: c.display_order })))
   }
 
-  // ── Order actions ─────────────────────────────────────────────────
-  const updateOrderStatus = (id, status) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status } : o))
-    )
+  function normaliseCategory(c) {
+    return {
+      ...c,
+      order:     c.display_order ?? c.order ?? 0,
+      itemCount: c.item_count    ?? 0,
+    }
   }
 
-  const getOrder = (id) => orders.find((o) => o.id === id)
+  function buildProductPayload(data) {
+    if (data instanceof FormData) return data
+    const payload = {}
+    if (data.name          !== undefined) payload.name              = data.name
+    if (data.category      !== undefined) payload.category          = data.category
+    if (data.categoryId    !== undefined) payload.category          = data.categoryId
+    if (data.price         !== undefined) payload.price             = Number(data.price)
+    if (data.tax           !== undefined) payload.tax               = Number(data.tax || 0)
+    if (data.description   !== undefined) payload.description       = data.description
+    if (data.available     !== undefined) payload.available         = data.available
+    if (data.sold_out      !== undefined) payload.sold_out          = data.sold_out
+    if (data.soldOut       !== undefined) payload.sold_out          = data.soldOut
+    if (data.popular       !== undefined) payload.popular           = data.popular
+    if (data.featured      !== undefined) payload.featured          = data.featured
+    if (data.dietaryTags   !== undefined) payload.dietary_tags      = data.dietaryTags
+    if (data.dietary_tags  !== undefined) payload.dietary_tags      = data.dietary_tags
+    if (data.displayOrder  !== undefined) payload.display_order     = data.displayOrder
+    if (data.display_order !== undefined) payload.display_order     = data.display_order
+    if (data.availableOnPOS !== undefined) payload.available_on_pos = data.availableOnPOS
+    if (data.availableOnQR  !== undefined) payload.available_on_qr  = data.availableOnQR
+    return payload
+  }
 
-  // ── Table actions ──────────────────────────────────────────────────
-  const addTable = (data) => {
-    const newTable = {
-      ...data,
+  // ─────────────────────────────────────────────────────────────────────────
+  // Table CRUD (API-backed)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const addTable = async (data) => {
+    const payload = {
+      name:   (data.id || data.name || '').trim(),
+      seats:  Number(data.seats) || 4,
       status: 'available',
-      currentOrderId: null,
-      amount: null,
-      items: [],
-      seatedMinutes: null,
-      waitingMinutes: null,
       active: true,
     }
-    setTables((prev) => [...prev, newTable])
-    return newTable
+    const created = await tableApi.create(payload)
+    const normalised = normaliseTable(created)
+    setTables((prev) => [...prev, normalised])
+    // Refresh QR codes so the new one shows up
+    await fetchQRCodes()
+    return normalised
   }
 
-  const updateTable = (id, data) => {
-    setTables((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, ...data } : t))
-    )
+  const updateTable = async (id, data) => {
+    // Allow optimistic status changes without hitting API (for UI-only updates)
+    if (data._localOnly) {
+      setTables((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)))
+      return
+    }
+    const payload = {}
+    if (data.status !== undefined)            payload.status             = data.status
+    if (data.active !== undefined)            payload.active             = data.active
+    if (data.seats  !== undefined)            payload.seats              = Number(data.seats)
+    if (data.name   !== undefined)            payload.name               = data.name
+    if (data.current_order_ref !== undefined) payload.current_order_ref  = data.current_order_ref
+    if (data.currentOrderId    !== undefined) payload.current_order_ref  = data.currentOrderId || ''
+    if (data.amount !== undefined)            payload.amount             = data.amount
+
+    const updated  = await tableApi.patch(id, payload)
+    const normalised = normaliseTable(updated)
+    setTables((prev) => prev.map((t) => (t.id === id ? normalised : t)))
+    return normalised
   }
 
-  // ── QR Code actions ────────────────────────────────────────────────
-  const getQR = (id) => qrCodes.find((q) => q.id === id)
-
-  const regenerateQR = (id) => {
-    setQRCodes((prev) =>
-      prev.map((q) =>
-        q.id === id
-          ? { ...q, generatedDate: new Date().toISOString().split('T')[0], scanCount: 0, lastScanned: 'Just now' }
-          : q
-      )
-    )
+  const deleteTable = async (id) => {
+    await tableApi.delete(id)
+    setTables((prev) => prev.filter((t) => t.id !== id))
+    // Refresh QR codes (its QR was cascade-deleted)
+    await fetchQRCodes()
   }
 
-  const updateQRStatus = (id, status) => {
-    setQRCodes((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, status } : q))
-    )
+  const setTableStatus = async (id, newStatus) => {
+    const updated  = await tableApi.setStatus(id, { status: newStatus })
+    const normalised = normaliseTable(updated)
+    setTables((prev) => prev.map((t) => (t.id === id ? normalised : t)))
+    return normalised
   }
 
+  const setTableActive = async (id, active) => {
+    const updated  = await tableApi.setActive(id, { active })
+    const normalised = normaliseTable(updated)
+    setTables((prev) => prev.map((t) => (t.id === id ? normalised : t)))
+    // Refresh QR codes — their status mirrors the table active state
+    await fetchQRCodes()
+    return normalised
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // QR Code actions (API-backed)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const getQR = (id) => qrCodes.find((q) => q.id === id || String(q.id) === String(id))
+
+  const regenerateQR = async (id) => {
+    const updated  = await qrCodeApi.regenerate(id)
+    const normalised = normaliseQR(updated)
+    setQRCodes((prev) => prev.map((q) => (q.id === id ? normalised : q)))
+    return normalised
+  }
+
+  const updateQRStatus = async (id, newStatus) => {
+    const updated  = await qrCodeApi.setStatus(id, { status: newStatus })
+    const normalised = normaliseQR(updated)
+    setQRCodes((prev) => prev.map((q) => (q.id === id ? normalised : q)))
+    return normalised
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Order CRUD (API-backed)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const createOrder = async (data) => {
+    const created = await orderApi.create(data)
+    const normalised = normaliseOrder(created)
+    setOrders((prev) => [normalised, ...prev])
+    // Refresh notifications so new-order notification appears
+    await fetchNotifications()
+    return normalised
+  }
+
+  const updateOrderStatus = async (id, newStatus) => {
+    try {
+      const updated = await orderApi.setStatus(id, { status: newStatus.toLowerCase() })
+      const normalised = normaliseOrder(updated)
+      setOrders((prev) => prev.map((o) => (o.id === id ? normalised : o)))
+      await fetchNotifications()
+      return normalised
+    } catch (err) {
+      // Fallback: optimistic local update
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o)))
+    }
+  }
+
+  const getOrder = (id) => orders.find((o) => o.id === id || String(o.id) === String(id))
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Notification actions
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const markNotificationRead = async (id) => {
+    try {
+      const updated = await notificationApi.markRead(id)
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)))
+      setUnreadCount((c) => Math.max(0, c - 1))
+      return updated
+    } catch (err) {
+      console.error('markNotificationRead error:', err)
+    }
+  }
+
+  const markAllNotificationsRead = async () => {
+    try {
+      await notificationApi.markAllRead()
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
+      setUnreadCount(0)
+    } catch (err) {
+      console.error('markAllNotificationsRead error:', err)
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Waiter request helpers
+  // ─────────────────────────────────────────────────────────────────────────
   const updateRequestStatus = (id, status) => {
-    setWaiterRequests((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status } : r))
-    )
+    setWaiterRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)))
   }
-
   const dismissRequest = (id) => {
     setWaiterRequests((prev) => prev.filter((r) => r.id !== id))
   }
@@ -147,15 +454,16 @@ export function AppProvider({ children }) {
         // data
         products,
         categories,
-        orders,
         tables,
         qrCodes,
-        currentRole,
-        setCurrentRole,
-        currentWaiter,
-        setCurrentWaiter,
-        waiterRequests,
-        setWaiterRequests,
+        orders,
+        notifications,
+        unreadCount,
+        loading,
+        apiError,
+        currentRole,       setCurrentRole,
+        currentWaiter,     setCurrentWaiter,
+        waiterRequests,    setWaiterRequests,
         updateRequestStatus,
         dismissRequest,
         // product actions
@@ -163,21 +471,34 @@ export function AppProvider({ children }) {
         updateProduct,
         deleteProduct,
         deactivateProduct,
+        fetchProducts,
         // category actions
         addCategory,
         updateCategory,
         toggleCategory,
         reorderCategories,
-        // order actions
-        updateOrderStatus,
-        getOrder,
+        fetchCategories,
         // table actions
         addTable,
         updateTable,
+        deleteTable,
+        setTableStatus,
+        setTableActive,
+        fetchTables,
         // qr actions
         getQR,
         regenerateQR,
         updateQRStatus,
+        fetchQRCodes,
+        // order actions
+        createOrder,
+        updateOrderStatus,
+        getOrder,
+        fetchOrders,
+        // notification actions
+        fetchNotifications,
+        markNotificationRead,
+        markAllNotificationsRead,
       }}
     >
       {children}

@@ -5,22 +5,25 @@ import ConfirmModal from '../components/ConfirmModal'
 import './EditProductPage.css'
 
 export default function EditProductPage() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const { products, updateProduct, deactivateProduct, categories } = useApp()
+  const { id }     = useParams()
+  const navigate   = useNavigate()
+  const { products, updateProduct, deactivateProduct, categories, loading } = useApp()
 
-  const product = products.find((p) => String(p.id) === id)
+  const productId = Number(id)
+  const product   = products.find((p) => p.id === productId)
 
-  const [form, setForm] = useState(null)
-  const [confirmDeactivate, setConfirmDeactivate] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [imagePreview, setImagePreview] = useState(null)
+  const [form,               setForm]               = useState(null)
+  const [imageFile,          setImageFile]          = useState(null)
+  const [imagePreview,       setImagePreview]       = useState(null)
+  const [confirmDeactivate,  setConfirmDeactivate]  = useState(false)
+  const [saving,             setSaving]             = useState(false)
+  const [apiErr,             setApiErr]             = useState(null)
 
   useEffect(() => {
     if (product) {
       setForm({
         name:           product.name,
-        category:       product.category,
+        categoryId:     product.category,        // FK integer id from API
         price:          product.price,
         tax:            product.tax ?? 0,
         description:    product.description || '',
@@ -31,6 +34,15 @@ export default function EditProductPage() {
       setImagePreview(product.image || null)
     }
   }, [product])
+
+  // Still loading categories/products
+  if (loading.products && products.length === 0) {
+    return (
+      <div className="edit-product-wrap">
+        <div className="edit-product-not-found"><p>Loading…</p></div>
+      </div>
+    )
+  }
 
   if (!product || !form) {
     return (
@@ -48,30 +60,47 @@ export default function EditProductPage() {
   const handleImage = (e) => {
     const file = e.target.files[0]
     if (!file) return
+    setImageFile(file)
     setImagePreview(URL.createObjectURL(file))
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true)
-    setTimeout(() => {
-      updateProduct(product.id, {
-        ...form,
-        price: Number(form.price),
-        tax:   Number(form.tax),
-        image: imagePreview,
-        categoryLabel: form.category.toUpperCase(),
-      })
-      setSaving(false)
+    setApiErr(null)
+    try {
+      // Use FormData so we can optionally attach an image
+      const fd = new FormData()
+      fd.append('name',             form.name.trim())
+      fd.append('category',         form.categoryId)
+      fd.append('price',            Number(form.price))
+      fd.append('tax',              Number(form.tax) || 0)
+      fd.append('description',      form.description)
+      fd.append('available',        form.available)
+      fd.append('available_on_pos', form.availableOnPOS)
+      fd.append('available_on_qr',  form.availableOnQR)
+      if (imageFile) {
+        fd.append('image', imageFile)
+      }
+
+      await updateProduct(product.id, fd)
       navigate('/menu')
-    }, 500)
+    } catch (err) {
+      console.error('Update product error:', err)
+      setApiErr(err.message || 'Failed to save changes.')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDeactivate = () => {
-    deactivateProduct(product.id)
-    navigate('/menu')
+  const handleDeactivate = async () => {
+    try {
+      await deactivateProduct(product.id)
+      navigate('/menu')
+    } catch (err) {
+      console.error('Deactivate error:', err)
+      setApiErr(err.message || 'Failed to deactivate product.')
+    }
   }
-
-  const catNames = categories.map((c) => c.name)
 
   return (
     <div className="edit-product-wrap">
@@ -93,6 +122,13 @@ export default function EditProductPage() {
           </button>
         </div>
       </div>
+
+      {/* API error banner */}
+      {apiErr && (
+        <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '12px 16px', margin: '0 0 20px', color: '#991b1b', fontSize: 14 }}>
+          ⚠️ {apiErr}
+        </div>
+      )}
 
       {/* Content */}
       <div className="edit-product-content">
@@ -116,16 +152,17 @@ export default function EditProductPage() {
               <select
                 id="ep-cat"
                 className="form-select"
-                value={form.category}
-                onChange={(e) => set('category', e.target.value)}
+                value={form.categoryId ?? ''}
+                onChange={(e) => set('categoryId', Number(e.target.value))}
               >
-                {catNames.map((c) => <option key={c} value={c}>{c}</option>)}
-                <option value="Hot Coffee">Hot Coffee</option>
-                <option value="Cold Beverage">Cold Beverage</option>
+                <option value="">Select a category</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
               </select>
             </div>
             <div className="form-group" style={{ width: 150 }}>
-              <label className="form-label" htmlFor="ep-price">Price ($)</label>
+              <label className="form-label" htmlFor="ep-price">Price (₹)</label>
               <input
                 id="ep-price"
                 className="form-input"
@@ -158,9 +195,7 @@ export default function EditProductPage() {
               </div>
             )}
             <label className="upload-area ep-upload" htmlFor="ep-image">
-              <div className="upload-area__icon">
-                <UploadCloudIcon />
-              </div>
+              <div className="upload-area__icon"><UploadCloudIcon /></div>
               <p className="upload-area__label">Click to upload new image</p>
               <p className="upload-area__hint">PNG, JPG or WEBP (Max 5MB)</p>
               <p className="upload-area__hint">Recommended size: 1080×1080px</p>
@@ -174,25 +209,24 @@ export default function EditProductPage() {
           <h2 className="ep-card__section-title">Status &amp; Options</h2>
           <div className="ep-toggle-row">
             <div>
+              <div className="ep-toggle-label">Available</div>
+              <div className="ep-toggle-sub">Product is visible on menus</div>
+            </div>
+            <ToggleSwitch active={form.available} onToggle={() => set('available', !form.available)} id="toggle-available" />
+          </div>
+          <div className="ep-toggle-row">
+            <div>
               <div className="ep-toggle-label">Available on POS</div>
               <div className="ep-toggle-sub">Product can be rung up by staff</div>
             </div>
-            <ToggleSwitch
-              active={form.availableOnPOS}
-              onToggle={() => set('availableOnPOS', !form.availableOnPOS)}
-              id="toggle-pos"
-            />
+            <ToggleSwitch active={form.availableOnPOS} onToggle={() => set('availableOnPOS', !form.availableOnPOS)} id="toggle-pos" />
           </div>
           <div className="ep-toggle-row">
             <div>
               <div className="ep-toggle-label">Available on QR Menu</div>
               <div className="ep-toggle-sub">Customers can view and order digitally</div>
             </div>
-            <ToggleSwitch
-              active={form.availableOnQR}
-              onToggle={() => set('availableOnQR', !form.availableOnQR)}
-              id="toggle-qr"
-            />
+            <ToggleSwitch active={form.availableOnQR} onToggle={() => set('availableOnQR', !form.availableOnQR)} id="toggle-qr" />
           </div>
         </div>
 
@@ -245,8 +279,7 @@ function ToggleSwitch({ active, onToggle, id }) {
 function ArrowLeftIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="19" y1="12" x2="5" y2="12"/>
-      <polyline points="12 19 5 12 12 5"/>
+      <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
     </svg>
   )
 }
@@ -254,8 +287,7 @@ function ArrowLeftIcon() {
 function UploadCloudIcon() {
   return (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="16 16 12 12 8 16"/>
-      <line x1="12" y1="12" x2="12" y2="21"/>
+      <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
       <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
     </svg>
   )
