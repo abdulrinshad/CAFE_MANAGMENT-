@@ -6,30 +6,78 @@ import './NewOrderPOSPage.css'
 
 const CATEGORIES = ['All', 'Coffee', 'Tea', 'Pastries', 'Desserts', 'Cold Beverages', 'Snacks']
 
+/**
+ * Safely extract a category name string from whatever shape the API returns.
+ * product.category may be: a string, an integer FK id, a nested object, null, or undefined.
+ * We prefer category_name (string label stored by AppContext normaliser) first.
+ */
+const getCategoryName = (product) => {
+  // AppContext normaliser exposes `category_name` as a plain string
+  if (product.category_name && typeof product.category_name === 'string') {
+    return product.category_name.trim()
+  }
+  // category_label is UPPERCASED version — normalise it
+  if (product.category_label && typeof product.category_label === 'string') {
+    return product.category_label.trim()
+  }
+  const cat = product.category
+  if (cat == null) return ''
+  if (typeof cat === 'string') return cat.trim()
+  if (typeof cat === 'object') {
+    return (
+      cat.name ||
+      cat.category_name ||
+      cat.title ||
+      cat.label ||
+      ''
+    ).toString().trim()
+  }
+  return String(cat)
+}
+
+/** Map a product to a simple emoji icon based on category name. */
+const getCategoryIcon = (product) => {
+  const cat = getCategoryName(product).toLowerCase()
+  if (cat.includes('coffee') || cat.includes('espresso')) return '☕'
+  if (cat.includes('tea'))                                  return '🫖'
+  if (cat.includes('cold') || cat.includes('beverage'))    return '🧊'
+  if (cat.includes('dessert'))                              return '🍰'
+  if (cat.includes('snack'))                                return '🍿'
+  return '🥐'
+}
+
+
 export default function NewOrderPOSPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { products, setOrders, currentWaiter } = useApp()
+  const { products, tables, createOrder, currentWaiter } = useApp()
 
-  // Get selected table from URL, default to Table 08
-  const tableParam = searchParams.get('table')
-  const tableLabel = tableParam ? tableParam.replace('T-', 'Table ') : 'Table 08'
+  // Resolve table from URL param — prefer matching by id or name
+  const tableParam = searchParams.get('table')  // may be id (e.g. "9") or name (e.g. "T-01")
+  const matchedTable = tables?.find(
+    (t) => String(t.id) === String(tableParam) || t.name === tableParam
+  ) || null
+  const tableLabel = matchedTable
+    ? matchedTable.name
+    : tableParam
+    ? tableParam.replace('T-', 'Table ')
+    : 'Table 08'
 
   const [activeCategory, setActiveCategory] = useState('All')
   const [cart, setCart] = useState([])
   const [orderNotes, setOrderNotes] = useState('')
 
-  // Filter products by category
+  // Filter products by active category — safe against any category shape
   const filteredProducts = products ? products.filter((p) => {
     if (activeCategory === 'All') return true
-    
-    // Normalize categories to match the sidebar pills
-    const productCat = p.category.toLowerCase()
-    const activeCat = activeCategory.toLowerCase()
-    
-    if (activeCat === 'pastries') return productCat === 'pastry'
-    if (activeCat === 'cold beverages') return productCat === 'cold beverage'
-    return productCat === activeCat
+    const productCat = getCategoryName(p).toLowerCase()
+    const activeCat  = activeCategory.toLowerCase()
+    // Alias plurals / short forms used in the sidebar
+    if (activeCat === 'pastries')       return productCat.includes('pastry') || productCat.includes('pastri')
+    if (activeCat === 'cold beverages') return productCat.includes('cold')   || productCat.includes('beverage')
+    if (activeCat === 'desserts')       return productCat.includes('dessert')
+    if (activeCat === 'snacks')         return productCat.includes('snack')
+    return productCat.includes(activeCat)
   }) : []
 
   const addToCart = (product) => {
@@ -45,12 +93,12 @@ export default function NewOrderPOSPage() {
       return [
         ...prev,
         {
-          id: product.id,
-          name: product.name,
-          qty: 1,
-          unitPrice: product.price,
-          total: product.price,
-          icon: product.category.toLowerCase() === 'coffee' ? 'coffee' : product.category.toLowerCase() === 'tea' ? 'tea' : 'pastry'
+          id:        product.id,
+          name:      product.name,
+          qty:       1,
+          unitPrice: Number(product.price),
+          total:     Number(product.price),
+          icon:      getCategoryIcon(product),
         }
       ]
     })
@@ -79,35 +127,32 @@ export default function NewOrderPOSPage() {
   const tax = Math.round(subtotal * 0.05)
   const total = subtotal + tax
 
-  const handleGenerateBill = () => {
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+
+  const handleGenerateBill = async () => {
     if (cart.length === 0) return
-
-    // Create a new order object and prepend to orders
-    const newOrderId = `ORD-${Date.now()}`
-    const newOrder = {
-      id: newOrderId,
-      orderId: `#ORD-${Math.floor(1000 + Math.random() * 9000)}`,
-      table: tableLabel.replace('Table ', 'T-'),
-      waiter: currentWaiter?.name || 'Alex',
-      itemsSummary: cart.map((i) => `${i.qty}x ${i.name}`).join(', '),
-      items: cart,
-      amount: total,
-      subtotal: subtotal,
-      tax: tax,
-      discount: 0,
-      status: 'NEW',
-      time: '1m',
-      paymentMethod: 'Cash',
-      paymentStatus: 'Pending',
-      notes: orderNotes
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      const orderPayload = {
+        table:         matchedTable?.id ?? null,
+        customer_name: '',
+        waiter_name:   currentWaiter?.name || '',
+        notes:         orderNotes,
+        items: cart.map((item) => ({
+          product:    item.id,
+          quantity:   item.qty,
+        })),
+      }
+      const created = await createOrder(orderPayload)
+      navigate(`/orders/${created.id}`)
+    } catch (err) {
+      console.error('createOrder failed:', err)
+      setSubmitError('Failed to save order. Please try again.')
+    } finally {
+      setSubmitting(false)
     }
-
-    if (setOrders) {
-      setOrders((prev) => [newOrder, ...prev])
-    }
-
-    // Route to Screen 1 (Active Order page)
-    navigate(`/orders/${newOrderId}/active`)
   }
 
   return (
@@ -143,7 +188,7 @@ export default function NewOrderPOSPage() {
                 {product.popular && <span className="popular-badge">POPULAR</span>}
                 <div className="pos-product-image-container">
                   <div className="product-image-placeholder">
-                    {product.category.toLowerCase() === 'coffee' ? '☕' : product.category.toLowerCase() === 'tea' ? '🫖' : '🥐'}
+                    {getCategoryIcon(product)}
                   </div>
                 </div>
                 <div className="pos-product-details">
@@ -239,10 +284,16 @@ export default function NewOrderPOSPage() {
 
           {/* Action Buttons */}
           <div className="pos-bottom-actions">
+            {submitError && (
+              <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 8, textAlign: 'center' }}>
+                {submitError}
+              </div>
+            )}
             <button
               type="button"
               className="btn-outline pos-action-btn"
               onClick={() => navigate('/tables')}
+              disabled={submitting}
             >
               Review Order
             </button>
@@ -250,9 +301,9 @@ export default function NewOrderPOSPage() {
               type="button"
               className="btn-primary pos-action-btn"
               onClick={handleGenerateBill}
-              disabled={cart.length === 0}
+              disabled={cart.length === 0 || submitting}
             >
-              Generate Bill
+              {submitting ? 'Saving…' : 'Generate Bill'}
             </button>
           </div>
         </div>

@@ -79,3 +79,34 @@
 .success-dashboard-btn:hover {
   background: var(--color-cream) !important;
 }
+
+/* Details grid — shows real tx ref, invoice, payment, time */
+.success-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 28px;
+}
+.success-detail-card {
+  background: var(--color-surface-alt, #f9f5f0);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  text-align: left;
+}
+.success-detail-lbl {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+.success-detail-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-espresso);
+  word-break: break-all;
+}
+

@@ -11,6 +11,7 @@ import TablesPage           from './pages/TablesPage'
 import RequestsPage         from './pages/RequestsPage'
 import ActiveOrderPage      from './pages/ActiveOrderPage'
 import NewOrderPOSPage      from './pages/NewOrderPOSPage'
+import AddItemsPage         from './pages/AddItemsPage'
 import InvoicePreviewPage   from './pages/InvoicePreviewPage'
 import CheckoutPage         from './pages/CheckoutPage'
 import SuccessPage          from './pages/SuccessPage'
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/orders"        element={<OrdersPage />} />
         <Route path="/orders/new"    element={<NewOrderPOSPage />} />
         <Route path="/orders/:id"    element={<OrderDetailPage />} />
+        <Route path="/orders/:id/add-items"  element={<AddItemsPage />} />
         <Route path="/orders/:id/active"   element={<ActiveOrderPage />} />
         <Route path="/orders/:id/invoice"  element={<InvoicePreviewPage />} />
         <Route path="/orders/:id/checkout" element={<CheckoutPage />} />

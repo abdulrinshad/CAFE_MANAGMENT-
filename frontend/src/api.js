@@ -211,7 +211,33 @@ export const orderApi = {
 
   /** DELETE /orders/{id}/remove_item/{itemId}/ */
   removeItem: (orderId, itemId) => request('DELETE', `/orders/${orderId}/remove_item/${itemId}/`),
+
+  /** PATCH /orders/{id}/update_item/{itemId}/  { quantity: N } */
+  updateItem: (orderId, itemId, data) =>
+    request('PATCH', `/orders/${orderId}/update_item/${itemId}/`, data),
+
+  /** POST /orders/{id}/generate_bill/  { whatsapp_number: '...' } */
+  generateBill: (orderId, data) =>
+    request('POST', `/orders/${orderId}/generate_bill/`, data),
+
+  /** POST /orders/{id}/complete_order/  { method: 'cash', status: 'paid' } */
+  completeOrder: (orderId, data) =>
+    request('POST', `/orders/${orderId}/complete_order/`, data),
+
+  /** GET /orders/{id}/invoice/ */
+  getInvoice: (orderId) => request('GET', `/orders/${orderId}/invoice/`),
 }
+
+// ── Invoice API ───────────────────────────────────────────────────────────────
+
+export const invoiceApi = {
+  /** GET /orders/{orderId}/invoice/ — get invoice by order */
+  getByOrder: (orderId) => request('GET', `/orders/${orderId}/invoice/`),
+
+  /** GET /receipt/{token}/ — public receipt by UUID token */
+  getByToken: (token) => request('GET', `/receipt/${token}/`),
+}
+
 
 // ── Dashboard API ─────────────────────────────────────────────────────────────
 

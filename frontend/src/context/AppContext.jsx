@@ -18,10 +18,30 @@ export function AppProvider({ children }) {
   const [apiError, setApiError] = useState(null)
   const pollRef = useRef(null)
 
-  // ── Waiter / Role Context State ──────────────────────────────────────────
-  const [currentRole,    setCurrentRole]    = useState('admin')
-  const [currentWaiter,  setCurrentWaiter]  = useState(null)
+  // ── Waiter / Role Context State — persisted to localStorage so refresh keeps session
+  const [currentRole, setCurrentRoleRaw] = useState(() => {
+    try { return localStorage.getItem('artisan_role') || 'admin' } catch { return 'admin' }
+  })
+  const [currentWaiter, setCurrentWaiterRaw] = useState(() => {
+    try {
+      const s = localStorage.getItem('artisan_waiter')
+      return s ? JSON.parse(s) : null
+    } catch { return null }
+  })
   const [waiterRequests, setWaiterRequests] = useState([])
+
+  // Wrapped setters that persist to localStorage
+  const setCurrentRole = (role) => {
+    try { localStorage.setItem('artisan_role', role) } catch {}
+    setCurrentRoleRaw(role)
+  }
+  const setCurrentWaiter = (waiter) => {
+    try {
+      if (waiter) localStorage.setItem('artisan_waiter', JSON.stringify(waiter))
+      else localStorage.removeItem('artisan_waiter')
+    } catch {}
+    setCurrentWaiterRaw(waiter)
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Fetch helpers
@@ -393,10 +413,13 @@ export function AppProvider({ children }) {
     const created = await orderApi.create(data)
     const normalised = normaliseOrder(created)
     setOrders((prev) => [normalised, ...prev])
+    // Refresh tables so the occupied status appears immediately in the floor plan
+    await fetchTables()
     // Refresh notifications so new-order notification appears
     await fetchNotifications()
     return normalised
   }
+
 
   const updateOrderStatus = async (id, newStatus) => {
     try {
@@ -412,6 +435,29 @@ export function AppProvider({ children }) {
   }
 
   const getOrder = (id) => orders.find((o) => o.id === id || String(o.id) === String(id))
+
+  /**
+   * completeOrder — POST /orders/{id}/complete_order/
+   * Atomically marks order completed, marks invoice paid, creates payment,
+   * and releases the table (backend sets Table.status='available').
+   * Then immediately re-fetches tables + orders + notifications so the
+   * floor plan card updates without requiring a page refresh.
+   */
+  const completeOrder = async (orderId, data) => {
+    const result = await orderApi.completeOrder(orderId, data)
+    // Update order in local state immediately
+    const normalisedOrder = normaliseOrder(result.order || {})
+    if (normalisedOrder.id) {
+      setOrders((prev) => prev.map((o) => (o.id === normalisedOrder.id ? normalisedOrder : o)))
+    }
+    // Re-fetch tables so occupied→available is reflected immediately on floor plan
+    await fetchTables()
+    // Re-fetch orders so list page reflects COMPLETED status
+    await fetchOrders()
+    // Re-fetch notifications
+    await fetchNotifications()
+    return result
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Notification actions
@@ -493,6 +539,7 @@ export function AppProvider({ children }) {
         // order actions
         createOrder,
         updateOrderStatus,
+        completeOrder,
         getOrder,
         fetchOrders,
         // notification actions

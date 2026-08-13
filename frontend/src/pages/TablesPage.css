@@ -395,3 +395,32 @@
   }
 }
 
+
+/* -- New floor plan card classes -- */
+.waiter-table-card__num {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--color-espresso);
+  line-height: 1;
+}
+.table-item-count {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+.table-order-ref {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.waiter-table-card__occupied-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.table-amount-lbl {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-espresso);
+}

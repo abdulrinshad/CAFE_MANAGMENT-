@@ -1,36 +1,200 @@
-import { useState } from 'react'
+/**
+ * OrderDetailPage — /orders/:id
+ *
+ * Waiter workflow:
+ *   New → [Mark Preparing] → [Mark Ready] → [Mark Completed] → [Generate Bill]
+ *
+ * Rules:
+ *  - Status advances one step at a time (enforced by backend too)
+ *  - Generate Bill is ONLY available once status = COMPLETED
+ *  - Qty +/− controls persist to backend
+ *  - Table stays OCCUPIED until bill/payment is done
+ */
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
-import { useApp } from '../context/AppContext'
+import { orderApi } from '../api'
 import './OrderDetailPage.css'
 
-const STATUS_STEPS = ['NEW', 'ACCEPTED', 'PREPARING', 'READY', 'COMPLETED']
-
-const STEP_LABELS = {
-  NEW:       'New',
-  ACCEPTED:  'Accepted',
+// ── Status config ──────────────────────────────────────────────────────────────
+const STATUS_STEPS  = ['PENDING', 'PREPARING', 'READY', 'COMPLETED']
+const STEP_LABELS   = {
+  PENDING:   'New',
   PREPARING: 'Preparing',
   READY:     'Ready',
   COMPLETED: 'Completed',
 }
 
-function stepIndex(status) {
-  return STATUS_STEPS.indexOf(status)
+// next step to advance to (from current)
+const NEXT_STATUS = {
+  PENDING:   { api: 'preparing', label: 'Mark Preparing' },
+  PREPARING: { api: 'ready',     label: 'Mark Ready'     },
+  READY:     { api: 'completed', label: 'Mark Completed'  },
+}
+
+function stepIndex(s) {
+  const i = STATUS_STEPS.indexOf((s || '').toUpperCase())
+  return i === -1 ? 0 : i
+}
+
+// ── Safe normalise ────────────────────────────────────────────────────────────
+function normaliseOrder(o) {
+  const items = (o.items || []).map((item) => ({
+    id:        item.id,
+    name:      item.product_name || item.name || 'Item',
+    qty:       item.quantity ?? item.qty ?? 1,
+    unitPrice: Number(item.unit_price ?? item.unitPrice ?? 0),
+    subtotal:  Number(item.subtotal ?? 0),
+  }))
+  const rawStatus = (o.status || 'pending').toUpperCase()
+  return {
+    ...o,
+    items,
+    status:   rawStatus,
+    orderId:  o.order_number || `#${o.id}`,
+    table:    o.table_label  || '',
+    waiter:   o.waiter_name  || '',
+    subtotal: Number(o.subtotal   ?? 0),
+    tax:      Number(o.tax_amount ?? 0),
+    total:    Number(o.total      ?? 0),
+  }
+}
+
+function validateWhatsApp(num) {
+  return /^\d{10}$/.test(num.replace(/\s/g, ''))
 }
 
 export default function OrderDetailPage() {
-  const { id } = useParams()
+  const { id }   = useParams()
   const navigate = useNavigate()
-  const { orders, updateOrderStatus } = useApp()
 
-  const order = orders.find((o) => o.id === id)
-  const [marking, setMarking] = useState(false)
+  const [order,       setOrder]       = useState(null)
+  const [loading,     setLoading]     = useState(true)
+  const [error,       setError]       = useState('')
+  const [advancing,   setAdvancing]   = useState(false)  // advancing status
+  const [advError,    setAdvError]    = useState('')
+  const [updating,    setUpdating]    = useState(null)    // item id being updated
 
-  if (!order) {
+  // ── Generate Bill modal ───────────────────────────────────────────────────
+  const [showBillModal, setShowBillModal] = useState(false)
+  const [whatsapp,      setWhatsapp]      = useState('')
+  const [waError,       setWaError]       = useState('')
+  const [billLoading,   setBillLoading]   = useState(false)
+  const [billError,     setBillError]     = useState('')
+
+  // ── Load ─────────────────────────────────────────────────────────────────
+  const loadOrder = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = await orderApi.get(id)
+      setOrder(normaliseOrder(data))
+    } catch {
+      setError('Order not found or could not be loaded.')
+    } finally {
+      setLoading(false)
+    }
+  }, [id])
+
+  useEffect(() => { loadOrder() }, [loadOrder])
+
+  // ── Advance status ────────────────────────────────────────────────────────
+  const handleAdvanceStatus = async () => {
+    if (!order) return
+    const next = NEXT_STATUS[order.status]
+    if (!next) return
+    setAdvancing(true)
+    setAdvError('')
+    try {
+      const updated = await orderApi.setStatus(id, { status: next.api })
+      setOrder(normaliseOrder(updated))
+    } catch (err) {
+      const msg = err.message || ''
+      // Try to extract Django's 'detail' message
+      try {
+        const obj = JSON.parse(msg)
+        setAdvError(obj.detail || 'Failed to update status.')
+      } catch {
+        setAdvError('Failed to update status. Please try again.')
+      }
+    } finally {
+      setAdvancing(false)
+    }
+  }
+
+  // ── Qty change ────────────────────────────────────────────────────────────
+  const handleQtyChange = async (item, delta) => {
+    const newQty = item.qty + delta
+    if (newQty < 1) return
+    // Optimistic
+    setOrder((prev) => ({
+      ...prev,
+      items: prev.items.map((it) =>
+        it.id === item.id
+          ? { ...it, qty: newQty, subtotal: it.unitPrice * newQty }
+          : it
+      ),
+    }))
+    setUpdating(item.id)
+    try {
+      const updated = await orderApi.updateItem(id, item.id, { quantity: newQty })
+      setOrder(normaliseOrder(updated))
+    } catch {
+      loadOrder()
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  // ── Remove item ───────────────────────────────────────────────────────────
+  const handleRemoveItem = async (item) => {
+    if (!window.confirm(`Remove "${item.name}" from this order?`)) return
+    setUpdating(item.id)
+    try {
+      const updated = await orderApi.removeItem(id, item.id)
+      if (updated) setOrder(normaliseOrder(updated))
+    } catch {
+      loadOrder()
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  // ── Generate Bill submit ──────────────────────────────────────────────────
+  const handleGenerateBill = async () => {
+    setWaError('')
+    const digits = whatsapp.replace(/\s/g, '')
+    if (!validateWhatsApp(digits)) {
+      setWaError('Please enter a valid 10-digit WhatsApp number.')
+      return
+    }
+    setBillLoading(true)
+    setBillError('')
+    try {
+      await orderApi.generateBill(id, { whatsapp_number: digits })
+      setShowBillModal(false)
+      navigate(`/orders/${id}/invoice`)
+    } catch (err) {
+      setBillError('Unable to generate bill. Please try again.')
+    } finally {
+      setBillLoading(false)
+    }
+  }
+
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const liveSubtotal = order ? order.items.reduce((s, it) => s + it.subtotal, 0) : 0
+  const liveTax      = Math.round(liveSubtotal * 0.05 * 100) / 100
+  const liveTotal    = liveSubtotal + liveTax
+
+  // ── Loading / error states ────────────────────────────────────────────────
+  if (loading) {
+    return <AdminLayout><div className="order-detail-loading">Loading order…</div></AdminLayout>
+  }
+  if (error || !order) {
     return (
       <AdminLayout>
-        <div style={{ textAlign: 'center', padding: '80px', color: 'var(--color-text-muted)' }}>
-          Order not found.{' '}
+        <div className="order-detail-error">
+          {error || 'Order not found.'}{' '}
           <button className="btn-outline" onClick={() => navigate('/orders')}>Back to Orders</button>
         </div>
       </AdminLayout>
@@ -38,62 +202,88 @@ export default function OrderDetailPage() {
   }
 
   const currentStep = stepIndex(order.status)
-
-  const handleMarkCompleted = () => {
-    setMarking(true)
-    setTimeout(() => {
-      updateOrderStatus(id, 'COMPLETED')
-      setMarking(false)
-    }, 400)
-  }
-
-  const handlePrint = () => {
-    window.print()
-  }
+  const nextStep    = NEXT_STATUS[order.status]           // null when COMPLETED / CANCELLED
+  const isCompleted = order.status === 'COMPLETED'
+  const isCancelled = order.status === 'CANCELLED'
+  const isEditable  = !isCompleted && !isCancelled
 
   return (
     <AdminLayout searchPlaceholder="Search orders...">
       <div className="order-detail">
-        {/* Header */}
+
+        {/* ── Header ── */}
         <div className="order-detail__header">
           <div className="order-detail__header-left">
-            <button className="order-detail__back" onClick={() => navigate('/orders')} aria-label="Back to orders">
+            <button className="order-detail__back" onClick={() => navigate('/orders')} aria-label="Back">
               <ArrowLeftIcon />
             </button>
             <div>
               <h1 className="order-detail__title">Order {order.orderId}</h1>
               <div className="order-detail__meta">
-                <span className="order-detail__meta-item">
-                  <TableIcon /> Table: {order.table}
-                </span>
-                <span className="order-detail__meta-sep">•</span>
-                <span className="order-detail__meta-item">
-                  <WaiterIcon /> Waiter: {order.waiter}
-                </span>
+                {order.table && (
+                  <span className="order-detail__meta-item"><TableIcon /> {order.table}</span>
+                )}
+                {order.waiter && (
+                  <>
+                    <span className="order-detail__meta-sep">•</span>
+                    <span className="order-detail__meta-item"><WaiterIcon /> {order.waiter}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
+
           <div className="order-detail__header-actions">
-            <button className="btn-outline" onClick={handlePrint} id="print-receipt">
+            <button className="btn-outline" onClick={() => window.print()} id="print-receipt">
               Print Receipt
             </button>
-            {order.status !== 'COMPLETED' && (
+
+            {/* Step-advance button (New→Preparing→Ready→Completed) */}
+            {nextStep && (
               <button
-                className="btn-primary"
-                onClick={handleMarkCompleted}
-                disabled={marking}
-                id="mark-completed"
+                className="btn-secondary"
+                onClick={handleAdvanceStatus}
+                disabled={advancing}
+                id="advance-status-btn"
+                style={{
+                  background: 'var(--color-latte, #8b6347)',
+                  color: '#fff',
+                  border: 'none',
+                }}
               >
-                {marking ? 'Updating…' : 'Mark Completed'}
+                {advancing ? 'Updating…' : nextStep.label}
               </button>
             )}
-            {order.status === 'COMPLETED' && (
-              <span className="order-detail__done-badge">✓ Completed</span>
+
+            {/* Generate Bill — ONLY after Completed */}
+            {isCompleted && (
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  setShowBillModal(true)
+                  setWhatsapp('')
+                  setWaError('')
+                  setBillError('')
+                }}
+                id="generate-bill-btn"
+              >
+                Generate Bill
+              </button>
             )}
           </div>
         </div>
 
-        {/* Status Stepper */}
+        {/* ── Status advance error ── */}
+        {advError && (
+          <div style={{
+            background: '#fee2e2', color: '#dc2626', borderRadius: 8,
+            padding: '10px 16px', fontSize: 13,
+          }}>
+            {advError}
+          </div>
+        )}
+
+        {/* ── Status Stepper ── */}
         <div className="order-detail__status-card">
           <h2 className="order-detail__section-title">Status</h2>
           <div className="status-stepper">
@@ -103,18 +293,16 @@ export default function OrderDetailPage() {
               const isFuture  = i > currentStep
               return (
                 <div key={step} className="status-stepper__item">
-                  {/* Connector before */}
                   {i > 0 && (
                     <div className={`status-stepper__line${isDone || isCurrent ? ' status-stepper__line--active' : ''}`} />
                   )}
-                  {/* Circle */}
                   <div className={[
                     'status-stepper__circle',
                     isDone    ? 'status-stepper__circle--done'    : '',
                     isCurrent ? 'status-stepper__circle--current' : '',
                     isFuture  ? 'status-stepper__circle--future'  : '',
                   ].filter(Boolean).join(' ')}>
-                    {isDone ? <CheckIcon /> : <StepIcon step={step} />}
+                    {isDone ? <CheckIcon /> : <StepDotIcon />}
                   </div>
                   <div className={[
                     'status-stepper__label',
@@ -127,131 +315,227 @@ export default function OrderDetailPage() {
               )
             })}
           </div>
+
+          {/* Inline next-step CTA below stepper */}
+          {nextStep && (
+            <div className="stepper-advance-wrap">
+              <button
+                className="btn-primary stepper-advance-btn"
+                onClick={handleAdvanceStatus}
+                disabled={advancing}
+              >
+                {advancing ? 'Updating…' : `→ ${nextStep.label}`}
+              </button>
+              <span className="stepper-advance-hint">
+                {order.status === 'PENDING' && 'Kitchen received? Mark as Preparing.'}
+                {order.status === 'PREPARING' && 'Food ready? Mark as Ready.'}
+                {order.status === 'READY' && 'Served to customer? Mark as Completed to enable billing.'}
+              </span>
+            </div>
+          )}
+          {isCompleted && (
+            <div className="stepper-complete-note">
+              ✓ Order served. You can now <strong>Generate Bill</strong>.
+            </div>
+          )}
         </div>
 
-        {/* Items + Payment */}
+        {/* ── Items + Summary ── */}
         <div className="order-detail__body">
-          {/* Items */}
+
           <div className="order-detail__items-card">
-            <h2 className="order-detail__section-title">Items</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 className="order-detail__section-title">Current Items</h2>
+              {isEditable && (
+                <button
+                  className="btn-outline btn-sm"
+                  onClick={() => navigate(`/orders/${id}/add-items`)}
+                  id="add-more-items-btn"
+                >
+                  + Add More Items
+                </button>
+              )}
+            </div>
             <hr className="order-detail__divider" />
-            {order.items.map((item, i) => (
-              <div key={i} className="order-item">
-                <div className="order-item__icon">
-                  <ItemIcon icon={item.icon} />
-                </div>
+
+            {order.items.length === 0 && (
+              <p className="order-detail__empty-items">No items yet.</p>
+            )}
+
+            {order.items.map((item) => (
+              <div key={item.id} className="order-item order-item--with-controls">
+                <div className="order-item__icon"><ItemDotIcon /></div>
                 <div className="order-item__info">
                   <div className="order-item__name">{item.name}</div>
-                  <div className="order-item__qty">{item.qty} × ₹{item.unitPrice}</div>
+                  <div className="order-item__unit-price">₹{Number(item.unitPrice).toLocaleString('en-IN')}</div>
                 </div>
-                <div className="order-item__total">₹{item.total}</div>
+
+                {isEditable ? (
+                  <div className="order-item__qty-controls">
+                    <button
+                      className="qty-ctrl-btn"
+                      onClick={() => handleQtyChange(item, -1)}
+                      disabled={updating === item.id || item.qty <= 1}
+                    >−</button>
+                    <span className="qty-ctrl-val">{updating === item.id ? '…' : item.qty}</span>
+                    <button
+                      className="qty-ctrl-btn"
+                      onClick={() => handleQtyChange(item, 1)}
+                      disabled={updating === item.id}
+                    >+</button>
+                  </div>
+                ) : (
+                  <div className="order-item__qty-readonly">×{item.qty}</div>
+                )}
+
+                <div className="order-item__total">
+                  ₹{Number(item.subtotal).toLocaleString('en-IN')}
+                </div>
+
+                {isEditable && (
+                  <button
+                    className="order-item__remove-btn"
+                    onClick={() => handleRemoveItem(item)}
+                    disabled={updating === item.id}
+                    aria-label={`Remove ${item.name}`}
+                  >×</button>
+                )}
               </div>
             ))}
           </div>
 
-          {/* Right column: Payment + Summary */}
+          {/* Right: Summary */}
           <div className="order-detail__right">
-            {/* Payment Details */}
-            <div className="order-detail__payment-card">
-              <h3 className="order-detail__card-title">Payment Details</h3>
-              <div className="payment-row">
-                <span>Method</span>
-                <span>{order.paymentMethod}</span>
-              </div>
-              <div className="payment-row">
-                <span>Status</span>
-                <span className={`payment-badge payment-badge--${order.paymentStatus === 'Paid' ? 'paid' : 'pending'}`}>
-                  {order.paymentStatus}
-                </span>
-              </div>
-            </div>
-
-            {/* Summary */}
             <div className="order-detail__summary-card">
-              <h3 className="order-detail__summary-title">Summary</h3>
+              <h3 className="order-detail__summary-title">Order Summary</h3>
               <div className="summary-row">
                 <span>Subtotal</span>
-                <span>₹{order.subtotal}</span>
+                <span>₹{liveSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="summary-row">
-                <span>Tax (GST)</span>
-                <span>₹{order.tax || 0}</span>
-              </div>
-              <div className="summary-row">
-                <span>Discount</span>
-                <span>-₹{order.discount || 0}</span>
+                <span>Tax (5% GST)</span>
+                <span>₹{liveTax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <hr className="order-detail__divider" />
               <div className="summary-row summary-row--total">
-                <span>TOTAL</span>
-                <span>₹{order.amount}</span>
+                <span>Total</span>
+                <span>₹{liveTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
             </div>
+
+            {order.notes && (
+              <div className="order-detail__payment-card" style={{ marginTop: 16 }}>
+                <h3 className="order-detail__card-title">Notes</h3>
+                <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 6 }}>
+                  {order.notes}
+                </p>
+              </div>
+            )}
+
+            {/* Generate Bill — bottom of right column, ONLY when completed */}
+            {isCompleted && (
+              <button
+                className="btn-primary"
+                style={{ width: '100%', marginTop: 16 }}
+                onClick={() => {
+                  setShowBillModal(true)
+                  setWhatsapp('')
+                  setWaError('')
+                  setBillError('')
+                }}
+              >
+                Generate Bill
+              </button>
+            )}
+
+            {/* Hint when not completed yet */}
+            {!isCompleted && !isCancelled && (
+              <div className="summary-not-ready-hint">
+                Complete all steps first to generate the bill.
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* ── Generate Bill Modal ── */}
+      {showBillModal && (
+        <div className="od-modal-backdrop" onClick={() => !billLoading && setShowBillModal(false)}>
+          <div className="od-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="od-modal__header">
+              <h2 className="od-modal__title">Customer Details</h2>
+              <button
+                className="od-modal__close"
+                onClick={() => !billLoading && setShowBillModal(false)}
+                disabled={billLoading}
+              >×</button>
+            </div>
+
+            <p className="od-modal__desc">
+              Enter the customer's WhatsApp number to send the digital receipt instantly.
+            </p>
+
+            <div className="od-modal__field">
+              <label className="od-modal__label" htmlFor="whatsapp-input">
+                WhatsApp Number
+              </label>
+              <div className="od-modal__phone-row">
+                <span className="od-modal__prefix">+91</span>
+                <input
+                  id="whatsapp-input"
+                  type="tel"
+                  className={`od-modal__input${waError ? ' od-modal__input--error' : ''}`}
+                  placeholder="98765 43210"
+                  value={whatsapp}
+                  maxLength={11}
+                  onChange={(e) => { setWhatsapp(e.target.value); setWaError('') }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleGenerateBill() }}
+                  disabled={billLoading}
+                  autoFocus
+                />
+              </div>
+              {waError && <p className="od-modal__field-error">{waError}</p>}
+              <p className="od-modal__hint">A link will also be generated.</p>
+            </div>
+
+            {billError && <p className="od-modal__api-error">{billError}</p>}
+
+            <div className="od-modal__actions">
+              <button className="btn-outline" onClick={() => setShowBillModal(false)} disabled={billLoading}>
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleGenerateBill}
+                disabled={billLoading}
+                id="confirm-generate-bill"
+              >
+                {billLoading ? 'Generating…' : 'Generate Bill'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   )
 }
 
 /* ── Icons ── */
 function ArrowLeftIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
-    </svg>
-  )
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
 }
 function TableIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="7" width="18" height="3" rx="1"/>
-      <line x1="8" y1="10" x2="8" y2="20"/><line x1="16" y1="10" x2="16" y2="20"/>
-    </svg>
-  )
+  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="7" width="18" height="3" rx="1"/><line x1="8" y1="10" x2="8" y2="20"/><line x1="16" y1="10" x2="16" y2="20"/></svg>
 }
 function WaiterIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-      <circle cx="12" cy="7" r="4"/>
-    </svg>
-  )
+  return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
 }
 function CheckIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12"/>
-    </svg>
-  )
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
 }
-function StepIcon({ step }) {
-  const icons = {
-    NEW:       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>,
-    ACCEPTED:  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
-    PREPARING: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/></svg>,
-    READY:     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
-    COMPLETED: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
-  }
-  return icons[step] || null
+function StepDotIcon() {
+  return <svg width="8" height="8" viewBox="0 0 8 8" fill="currentColor"><circle cx="4" cy="4" r="4"/></svg>
 }
-function ItemIcon({ icon }) {
-  if (icon === 'coffee') return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
-      <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
-    </svg>
-  )
-  if (icon === 'cold') return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7 3h10l-1.5 14.5a2 2 0 0 1-2 1.5h-3a2 2 0 0 1-2-1.5L7 3z"/>
-    </svg>
-  )
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="5" y="2" width="14" height="20" rx="2"/>
-      <line x1="9" y1="7" x2="15" y2="7"/>
-      <line x1="9" y1="12" x2="15" y2="12"/>
-    </svg>
-  )
+function ItemDotIcon() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="12" x2="15" y2="12"/></svg>
 }

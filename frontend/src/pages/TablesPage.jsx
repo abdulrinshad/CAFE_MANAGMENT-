@@ -76,6 +76,14 @@ export default function TablesPage() {
 
   // ── Waiter view ──────────────────────────────────────────────────────────
   if (currentRole === 'waiter') {
+    // Helper: minutes seated from order creation time
+    const seatedTime = (order) => {
+      if (!order?.created_at) return null
+      const mins = Math.floor((Date.now() - new Date(order.created_at)) / 60000)
+      if (mins < 60) return `${mins}m`
+      return `${Math.floor(mins / 60)}h ${mins % 60}m`
+    }
+
     return (
       <AdminLayout
         searchPlaceholder="Search dining floor..."
@@ -102,53 +110,113 @@ export default function TablesPage() {
           ) : (
             <div className="floor-plan__grid">
               {tables.map((table) => {
-                const isAvailable  = table.status === 'available'
-                const isOccupied   = table.status === 'occupied'
-                const isNeedsAttn  = table.status === 'needs_attention' || table.status === 'bill_requested'
-                const activeOrd    = orders ? orders.find(o => o.table === table.label && o.status !== 'COMPLETED') : null
-                const orderId      = activeOrd ? activeOrd.id : null
+                const isAvailable = table.status === 'available'
+                const isOccupied  = table.status === 'occupied'
+                const isBillReq   = table.status === 'bill_requested'
+                const isNeedsAttn = table.status === 'needs_attention' || isBillReq
+
+                // Find active order: prefer current_order_ref stored on table
+                const orderRef  = table.current_order_ref || table.currentOrderId
+                const activeOrd = orders
+                  ? orders.find((o) =>
+                      (orderRef && (o.order_number === orderRef || String(o.id) === String(orderRef))) ||
+                      (o.table === table.label && !['COMPLETED', 'CANCELLED'].includes(o.status))
+                    )
+                  : null
+                const orderId = activeOrd ? activeOrd.id : null
+
+                // Display amount: prefer live order total, fallback to table.amount
+                const displayAmount = activeOrd?.total ?? activeOrd?.amount ?? table.amount ?? null
+                const itemCount     = activeOrd?.item_count ?? activeOrd?.itemCount ?? null
 
                 return (
                   <div key={table.id} className={`waiter-table-card ${table.status}`}>
+                    {/* Top row: table number + dining pill */}
                     <div className="waiter-table-card__top">
-                      <span className="waiter-table-card__id">{table.label}</span>
-                      <span className={`waiter-table-status-pill ${table.status}`}>
-                        {table.status.replace('_', ' ')}
+                      <span className="waiter-table-card__num">
+                        {(table.label || '').replace(/\D/g, '') || table.label}
                       </span>
+                      {(isOccupied || isBillReq) && (
+                        <span className={`waiter-table-status-pill ${table.status}`}>
+                          {isBillReq
+                            ? '● Bill Requested'
+                            : `● Dining${seatedTime(activeOrd) ? ` • ${seatedTime(activeOrd)}` : ''}`}
+                        </span>
+                      )}
                     </div>
+
+                    {/* Body: amount / seats / status */}
                     <div className="waiter-table-card__body">
                       {isAvailable && (
                         <div className="waiter-table-card__available-info">
                           <span className="table-seats-lbl">{table.seats} Seats</span>
-                          <div className="waiter-table-card__icon-wrap">🛋️</div>
+                          <span className="waiter-table-status-pill available">● Available</span>
                         </div>
                       )}
-                      {isOccupied && (
+                      {(isOccupied || isBillReq) && (
                         <div className="waiter-table-card__occupied-info">
-                          <span className="table-guests-lbl">Occupied</span>
+                          {displayAmount != null && Number(displayAmount) > 0 && (
+                            <span className="table-amount-lbl">
+                              ₹{Number(displayAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </span>
+                          )}
+                          {itemCount != null && (
+                            <span className="table-item-count">
+                              {itemCount} item{itemCount !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                          {!displayAmount && !itemCount && (
+                            <span className="table-seats-lbl">Occupied</span>
+                          )}
                         </div>
                       )}
-                      {isNeedsAttn && (
+                      {isNeedsAttn && !isBillReq && (
                         <div className="waiter-table-card__attn-info">
-                          <span className="table-guests-lbl">Bill Requested</span>
-                          {table.amount && <span className="table-amount-lbl">₹{parseFloat(table.amount).toLocaleString()}</span>}
+                          <span className="table-guests-lbl">Needs Attention</span>
                         </div>
                       )}
                     </div>
+
+                    {/* Footer: action buttons */}
                     <div className="waiter-table-card__footer">
                       {isAvailable && (
-                        <button className="btn-primary btn-sm w-full" onClick={() => navigate(`/orders/new?table=${table.id}`)}>
-                          Start Order
+                        <button
+                          className="btn-primary btn-sm w-full"
+                          onClick={() => navigate(`/orders/new?table=${table.id}`)}
+                          id={`start-order-table-${table.id}`}
+                        >
+                          + Start Order
                         </button>
                       )}
-                      {isOccupied && (
+                      {(isOccupied || isBillReq) && (
                         <div className="waiter-table-card__actions">
-                          <button className="btn-outline btn-sm" onClick={() => orderId && navigate(`/orders/${orderId}/active`)}>Add Item</button>
-                          <button className="btn-primary btn-sm" onClick={() => orderId && navigate(`/orders/${orderId}/active`)}>View Order</button>
+                          <button
+                            className="btn-outline btn-sm"
+                            onClick={() => orderId
+                              ? navigate(`/orders/${orderId}/add-items`)
+                              : navigate(`/orders/new?table=${table.id}`)
+                            }
+                            id={`add-item-table-${table.id}`}
+                          >
+                            Add Item
+                          </button>
+                          <button
+                            className="btn-primary btn-sm"
+                            onClick={() => orderId
+                              ? navigate(`/orders/${orderId}`)
+                              : navigate('/orders')
+                            }
+                            id={`view-order-table-${table.id}`}
+                          >
+                            View Order
+                          </button>
                         </div>
                       )}
-                      {isNeedsAttn && (
-                        <button className="btn-primary btn-sm w-full btn-danger-bg" onClick={() => setPaymentTable(table)}>
+                      {isNeedsAttn && !isBillReq && (
+                        <button
+                          className="btn-primary btn-sm w-full btn-danger-bg"
+                          onClick={() => setPaymentTable(table)}
+                        >
                           Process Payment
                         </button>
                       )}

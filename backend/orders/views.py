@@ -26,10 +26,11 @@ from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Order, OrderItem
+from .models import Order, OrderItem, Invoice, Payment
 from .serializers import (
     OrderSerializer, OrderListSerializer,
     OrderStatusSerializer, OrderItemSerializer,
+    InvoiceSerializer, PaymentSerializer,
 )
 
 
@@ -111,12 +112,73 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['patch'], url_path='set_status')
     def set_status(self, request, pk=None):
-        order      = self.get_object()
-        serializer = OrderStatusSerializer(order, data=request.data, partial=True)
+        """
+        Advance order status one step at a time:
+          pending → preparing → ready → completed
+
+        Table.status stays OCCUPIED for all active states.
+        Table becomes AVAILABLE only after complete_order (bill paid).
+        Cancellation returns table to AVAILABLE immediately.
+        """
+        order    = self.get_object()
+        new_stat = (request.data.get('status') or '').lower().strip()
+
+        # Allowed step-by-step transitions
+        TRANSITIONS = {
+            Order.STATUS_PENDING:   Order.STATUS_PREPARING,
+            Order.STATUS_PREPARING: Order.STATUS_READY,
+            Order.STATUS_READY:     Order.STATUS_COMPLETED,
+        }
+        CANCELLED = Order.STATUS_CANCELLED
+
+        if new_stat == CANCELLED:
+            if order.status == Order.STATUS_COMPLETED:
+                return Response(
+                    {'detail': 'Cannot cancel a completed order.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            expected_next = TRANSITIONS.get(order.status)
+            if new_stat != expected_next:
+                if expected_next:
+                    return Response(
+                        {'detail': (
+                            f'Cannot go from "{order.status}" to "{new_stat}". '
+                            f'The only allowed next step is "{expected_next}".')
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                else:
+                    return Response(
+                        {'detail': f'Order is already "{order.status}". No further status changes allowed.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        serializer = OrderStatusSerializer(order, data={'status': new_stat}, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         order.refresh_from_db()
+
+        # Keep table.status in sync
+        if order.table_id:
+            try:
+                from menu.models import Table
+                if new_stat == CANCELLED:
+                    Table.objects.filter(pk=order.table_id).update(
+                        status=Table.STATUS_AVAILABLE,
+                        current_order_ref='',
+                    )
+                else:
+                    # All active statuses → table stays occupied
+                    Table.objects.filter(pk=order.table_id).update(
+                        status=Table.STATUS_OCCUPIED,
+                        current_order_ref=order.order_number,
+                    )
+            except Exception:
+                pass
+
         return Response(OrderSerializer(order, context={'request': request}).data)
+
 
     @action(detail=True, methods=['post'], url_path='add_item')
     def add_item(self, request, pk=None):
@@ -140,6 +202,201 @@ class OrderViewSet(viewsets.ModelViewSet):
             return Response(OrderSerializer(order, context={'request': request}).data)
         except OrderItem.DoesNotExist:
             return Response({'detail': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['patch'], url_path=r'update_item/(?P<item_id>\d+)')
+    def update_item(self, request, pk=None, item_id=None):
+        """PATCH /orders/{id}/update_item/{item_id}/  { quantity: N }"""
+        order = self.get_object()
+        try:
+            item = order.items.get(pk=item_id)
+        except OrderItem.DoesNotExist:
+            return Response({'detail': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        qty = request.data.get('quantity')
+        try:
+            qty = int(qty)
+            if qty < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            return Response({'detail': 'quantity must be a positive integer.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        item.quantity = qty
+        item.subtotal = item.unit_price * qty
+        item.save(update_fields=['quantity', 'subtotal'])
+        order.recalculate_totals()
+        order.refresh_from_db()
+        return Response(OrderSerializer(order, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'], url_path='generate_bill')
+    def generate_bill(self, request, pk=None):
+        """
+        POST /orders/{id}/generate_bill/
+        Payload: { whatsapp_number: '9876543210' }
+
+        Creates or updates an Invoice for this order.
+        Returns the Invoice data including invoice_number and receipt_url.
+        """
+        from django.db import transaction
+
+        order = self.get_object()
+        if order.status == Order.STATUS_CANCELLED:
+            return Response({'detail': 'Cannot generate bill for a cancelled order.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        whatsapp = request.data.get('whatsapp_number', '').replace(' ', '')
+
+        # Validate 10-digit Indian number
+        if whatsapp and (not whatsapp.isdigit() or len(whatsapp) != 10):
+            return Response({'detail': 'Please enter a valid 10-digit WhatsApp number.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            # Refresh totals before snapshotting
+            order.recalculate_totals()
+            order.refresh_from_db()
+
+            # Store WhatsApp number on order
+            if whatsapp:
+                Order.objects.filter(pk=order.pk).update(whatsapp_number=whatsapp)
+                order.whatsapp_number = whatsapp
+
+            # Create or update invoice
+            invoice, _ = Invoice.objects.get_or_create(
+                order=order,
+                defaults={
+                    'whatsapp_number': whatsapp,
+                    'subtotal':   order.subtotal,
+                    'tax_amount': order.tax_amount,
+                    'total':      order.total,
+                }
+            )
+            # Update financials + whatsapp on existing invoice
+            invoice.whatsapp_number = whatsapp
+            invoice.subtotal   = order.subtotal
+            invoice.tax_amount = order.tax_amount
+            invoice.total      = order.total
+            invoice.save(update_fields=['whatsapp_number', 'subtotal', 'tax_amount', 'total', 'updated_at'])
+
+            # Mark table as bill_requested
+            if order.table:
+                try:
+                    from menu.models import Table
+                    Table.objects.filter(pk=order.table_id).update(status='bill_requested')
+                except Exception:
+                    pass
+
+            # Notification
+            try:
+                from notifications.models import Notification
+                Notification.objects.create(
+                    type='bill_requested',
+                    title=f'Bill Requested: {order.order_number}',
+                    message=(
+                        f'Bill generated for {order.table_label}. '
+                        f'Invoice {invoice.invoice_number}. '
+                        f'Total: \u20b9{invoice.total}.'
+                    ),
+                    order=order,
+                    table=order.table,
+                )
+            except Exception:
+                pass
+
+        return Response(
+            InvoiceSerializer(invoice, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'], url_path='complete_order')
+    def complete_order(self, request, pk=None):
+        """
+        POST /orders/{id}/complete_order/
+        Payload: { method: 'cash'|'card'|'upi'|'other', status: 'paid'|'pending' }
+
+        Atomically:
+        1. Mark order completed
+        2. Mark invoice paid
+        3. Create/update payment record
+        4. Release table
+        """
+        from django.db import transaction
+
+        order = self.get_object()
+        method = request.data.get('method', 'cash').lower()
+        pay_status = request.data.get('status', 'paid').lower()
+
+        if method not in [Payment.METHOD_CASH, Payment.METHOD_CARD,
+                          Payment.METHOD_UPI, Payment.METHOD_OTHER]:
+            method = Payment.METHOD_CASH
+        if pay_status not in [Payment.STATUS_PAID, Payment.STATUS_PENDING]:
+            pay_status = Payment.STATUS_PAID
+
+        with transaction.atomic():
+            # Complete the order
+            order.status = Order.STATUS_COMPLETED
+            order.completed_at = timezone.now()
+            order.save(update_fields=['status', 'completed_at', 'updated_at'])
+
+            # Mark invoice paid
+            invoice = None
+            try:
+                invoice = order.invoice
+                invoice.status  = Invoice.STATUS_PAID
+                invoice.paid_at = timezone.now()
+                invoice.save(update_fields=['status', 'paid_at', 'updated_at'])
+            except Invoice.DoesNotExist:
+                pass
+
+            # Create or update payment
+            payment, _ = Payment.objects.get_or_create(
+                order=order,
+                defaults={
+                    'invoice': invoice,
+                    'method':  method,
+                    'status':  pay_status,
+                    'amount':  order.total,
+                }
+            )
+            if pay_status == Payment.STATUS_PAID and payment.status != Payment.STATUS_PAID:
+                payment.method  = method
+                payment.status  = pay_status
+                payment.paid_at = timezone.now()
+                payment.save(update_fields=['method', 'status', 'paid_at'])
+
+            # Release table
+            if order.table:
+                try:
+                    from menu.models import Table
+                    Table.objects.filter(pk=order.table_id).update(
+                        status='available',
+                        current_order_ref='',
+                    )
+                except Exception:
+                    pass
+
+            # Notification
+            try:
+                from notifications.models import Notification
+                Notification.objects.create(
+                    type='payment_completed',
+                    title=f'Payment Complete: {order.order_number}',
+                    message=(
+                        f'Order {order.order_number} paid via {method.title()}. '
+                        f'Total: \u20b9{order.total}. '
+                        f'Table {order.table_label} is now available.'
+                    ),
+                    order=order,
+                    table=order.table,
+                )
+            except Exception:
+                pass
+
+        order.refresh_from_db()
+        return Response({
+            'order':   OrderSerializer(order, context={'request': request}).data,
+            'payment': PaymentSerializer(payment).data,
+        })
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -448,3 +705,41 @@ class ReportsTopCategoriesView(APIView):
             for row in rows
         ]
         return Response(data)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Invoice Views
+# ─────────────────────────────────────────────────────────────────────────────
+
+class InvoiceByOrderView(APIView):
+    """
+    GET /api/v1/orders/{order_id}/invoice/
+    Returns the invoice for the given order (if it exists).
+    """
+    def get(self, request, order_id):
+        try:
+            order   = Order.objects.get(pk=order_id)
+            invoice = order.invoice
+        except Order.DoesNotExist:
+            return Response({'detail': 'Order not found.'}, status=status.HTTP_404_NOT_FOUND)
+        except Invoice.DoesNotExist:
+            return Response({'detail': 'No invoice yet. Please generate a bill first.'},
+                            status=status.HTTP_404_NOT_FOUND)
+        return Response(InvoiceSerializer(invoice, context={'request': request}).data)
+
+
+class PublicReceiptView(APIView):
+    """
+    GET /receipt/{token}/
+    Public page — no auth required.
+    Returns invoice data for the customer-facing digital receipt.
+    """
+    permission_classes = []  # public
+
+    def get(self, request, token):
+        try:
+            invoice = Invoice.objects.select_related('order__table').get(token=token)
+        except (Invoice.DoesNotExist, ValueError):
+            return Response({'detail': 'Receipt not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(InvoiceSerializer(invoice, context={'request': request}).data)
+
