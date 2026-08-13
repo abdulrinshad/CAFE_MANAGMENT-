@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
 import { productApi } from '../api'
+import { getCategoryName } from '../utils/categoryHelper'
 import './MenuPage.css'
+
 
 /* ── Product Card ── */
 function ProductCard({ item, onToggle, onEdit, toggling }) {
@@ -98,8 +100,9 @@ export default function MenuPage() {
   const filtered = products.filter((it) => {
     const matchSearch  = it.name.toLowerCase().includes(search.toLowerCase())
     // category is FK id from API; match by category_name
-    const catName = (it.category_name || '').toLowerCase()
+    const catName = getCategoryName(it.category || it.category_name).toLowerCase()
     const matchCat     = filterCategory === 'all' || catName === filterCategory.toLowerCase()
+
     const matchAvail   =
       filterAvail === 'all' ||
       (filterAvail === 'available' && it.available && !it.soldOut) ||

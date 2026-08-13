@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.http import FileResponse
 
-from .models import Category, Product, Table, QRCode
+from .models import Category, Product, Table, QRCode, WaiterRequest
 from .serializers import (
     CategorySerializer,
     ProductSerializer,
@@ -25,7 +25,9 @@ from .serializers import (
     TableActiveSerializer,
     QRCodeSerializer,
     QRCodeStatusSerializer,
+    WaiterRequestSerializer,
 )
+
 from .filters import CategoryFilter, ProductFilter
 
 
@@ -120,6 +122,16 @@ class TableViewSet(viewsets.ModelViewSet):
         table.refresh_from_db()
         return Response(TableSerializer(table, context={'request': request}).data)
 
+    @action(detail=True, methods=['get'], url_path='active_order')
+    def active_order(self, request, pk=None):
+        table = self.get_object()
+        order = table.orders.exclude(status__in=['completed', 'cancelled']).order_by('-created_at').first()
+        if order:
+            from orders.serializers import OrderSerializer
+            return Response(OrderSerializer(order, context={'request': request}).data)
+        return Response({'detail': 'No active order for this table.'}, status=status.HTTP_404_NOT_FOUND)
+
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # QRCode ViewSet
@@ -185,3 +197,43 @@ class QRCodeViewSet(viewsets.ModelViewSet):
             return resp
         except Exception as exc:
             return Response({'detail': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WaiterRequest ViewSet
+# ─────────────────────────────────────────────────────────────────────────────
+
+class WaiterRequestViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for table requests (Call Waiter, Bill Request, etc.)
+    GET    /api/v1/requests/                   list (optional ?status=)
+    POST   /api/v1/requests/                   create
+    GET    /api/v1/requests/{id}/              retrieve
+    PATCH  /api/v1/requests/{id}/              partial update
+    DELETE /api/v1/requests/{id}/              delete / dismiss
+    PATCH  /api/v1/requests/{id}/set_status/   change status
+    """
+
+    queryset         = WaiterRequest.objects.select_related('table').all()
+    serializer_class = WaiterRequestSerializer
+    ordering_fields  = ['created_at', 'status']
+    ordering         = ['-created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        status_param = self.request.query_params.get('status')
+        if status_param and status_param.lower() != 'all':
+            qs = qs.filter(status=status_param.lower())
+        return qs
+
+    @action(detail=True, methods=['patch'], url_path='set_status')
+    def set_status(self, request, pk=None):
+        req_obj = self.get_object()
+        new_status = request.data.get('status')
+        if new_status:
+            req_obj.status = new_status.lower()
+        if 'assigned_waiter' in request.data:
+            req_obj.assigned_waiter = request.data['assigned_waiter']
+        req_obj.save()
+        return Response(WaiterRequestSerializer(req_obj, context={'request': request}).data)
+

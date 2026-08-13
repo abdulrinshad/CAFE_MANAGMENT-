@@ -247,3 +247,39 @@ class QRCode(models.Model):
 
         filename = f'{self.qr_id}.png'
         self.image.save(filename, ContentFile(buf.read()), save=False)
+
+
+class WaiterRequest(models.Model):
+    """
+    A customer or system request assigned to waiters (e.g. Call Waiter, Refill, Bill Request).
+    """
+
+    STATUS_NEW         = 'new'
+    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_COMPLETED   = 'completed'
+    STATUS_DISMISSED   = 'dismissed'
+
+    STATUS_CHOICES = [
+        (STATUS_NEW,         'New'),
+        (STATUS_IN_PROGRESS, 'In Progress'),
+        (STATUS_COMPLETED,   'Completed'),
+        (STATUS_DISMISSED,   'Dismissed'),
+    ]
+
+    table           = models.ForeignKey(Table, on_delete=models.CASCADE, related_name='requests')
+    request_type    = models.CharField(max_length=50, default='Call Waiter')
+    message         = models.TextField(blank=True, default='')
+    status          = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW, db_index=True)
+    assigned_waiter = models.CharField(max_length=120, blank=True, default='')
+    amount          = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    created_at      = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at      = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'Waiter Request'
+        verbose_name_plural = 'Waiter Requests'
+        ordering            = ['-created_at']
+
+    def __str__(self):
+        return f'[{self.get_status_display()}] Table {self.table.name} - {self.request_type}'
+

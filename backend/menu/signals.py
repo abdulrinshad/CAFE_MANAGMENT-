@@ -55,3 +55,31 @@ def auto_create_qr_for_table(sender, instance, created, **kwargs):
     qr.generate_qr_image()
 
     qr.save()
+
+
+@receiver(post_save, sender='menu.WaiterRequest')
+def waiter_request_notification(sender, instance, created, **kwargs):
+    """
+    When a WaiterRequest is created, generate an unread Admin Notification.
+    """
+    if created:
+        try:
+            from notifications.models import Notification
+            req_type = instance.request_type
+            is_bill  = 'bill' in req_type.lower()
+            ntype    = Notification.TYPE_BILL_REQUESTED if is_bill else Notification.TYPE_TABLE_ATTENTION
+            
+            title = f'Table {instance.table.name}: {req_type}'
+            msg   = instance.message if instance.message else f'New request: {req_type} at Table {instance.table.name}'
+            if instance.amount:
+                msg += f' (Amount: \u20b9{instance.amount})'
+
+            Notification.objects.create(
+                type=ntype,
+                title=title,
+                message=msg,
+                table=instance.table,
+            )
+        except Exception:
+            pass
+
