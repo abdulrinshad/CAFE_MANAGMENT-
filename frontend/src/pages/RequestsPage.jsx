@@ -62,9 +62,10 @@ export default function RequestsPage() {
           {filtered.map((req) => (
             <div key={req.id} className={`waiter-request-card ${req.status}`}>
               <div className="waiter-request-card__header">
-                <span className="request-table-badge">Table {req.tableId.replace('T-', '')}</span>
+                <span className="request-table-badge">Table {req.tableId ? String(req.tableId).replace('T-', '') : (req.table_name || '')}</span>
                 <span className="request-time">{req.time}</span>
               </div>
+
               <div className="waiter-request-card__body">
                 <div className="request-type-label">{req.type}</div>
                 <p className="request-msg">{req.message}</p>

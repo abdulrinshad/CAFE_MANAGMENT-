@@ -10,7 +10,7 @@ Serializer hierarchy:
 """
 
 from rest_framework import serializers
-from .models import Category, Product, Table, QRCode
+from .models import Category, Product, Table, QRCode, WaiterRequest
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -199,19 +199,25 @@ class TableSerializer(serializers.ModelSerializer):
     Exposes the related QR code id and image_url as read-only convenience fields.
     """
 
-    qr_code_id  = serializers.SerializerMethodField()
-    qr_image_url = serializers.SerializerMethodField()
-    qr_status    = serializers.SerializerMethodField()
+    qr_code_id       = serializers.SerializerMethodField()
+    qr_image_url      = serializers.SerializerMethodField()
+    qr_status        = serializers.SerializerMethodField()
+    current_order_id = serializers.SerializerMethodField()
 
     class Meta:
         model  = Table
         fields = [
             'id', 'name', 'seats', 'status', 'active',
-            'current_order_ref', 'amount',
+            'current_order_ref', 'current_order_id', 'amount',
             'qr_code_id', 'qr_image_url', 'qr_status',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'qr_code_id', 'qr_image_url', 'qr_status', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'qr_code_id', 'qr_image_url', 'qr_status', 'current_order_id', 'created_at', 'updated_at']
+
+    def get_current_order_id(self, obj):
+        order = obj.orders.exclude(status__in=['completed', 'cancelled']).order_by('-created_at').first()
+        return order.id if order else None
+
 
     def get_qr_code_id(self, obj):
         try:
@@ -284,3 +290,35 @@ class QRCodeStatusSerializer(serializers.ModelSerializer):
         model  = QRCode
         fields = ['id', 'status']
         read_only_fields = ['id']
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# WaiterRequest serializer
+# ─────────────────────────────────────────────────────────────────────────────
+
+class WaiterRequestSerializer(serializers.ModelSerializer):
+    table_name = serializers.CharField(source='table.name', read_only=True)
+    table_id   = serializers.SerializerMethodField()
+    type       = serializers.CharField(source='request_type', required=False, allow_blank=True)
+    time       = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = WaiterRequest
+        fields = [
+            'id', 'table', 'table_id', 'table_name', 'type', 'request_type',
+            'message', 'status', 'assigned_waiter', 'amount',
+            'time', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'table_name', 'table_id', 'time', 'created_at', 'updated_at']
+
+    def get_table_id(self, obj):
+        if not obj.table:
+            return ''
+        name = obj.table.name
+        return name if name.startswith('T-') else f'T-{name}'
+
+    def get_time(self, obj):
+        if not obj.created_at:
+            return ''
+        return obj.created_at.strftime('%I:%M %p').lstrip('0')
+

@@ -14,6 +14,7 @@ ReportsTopCategories  — GET /api/v1/reports/top-categories/?period=...
 from datetime import date, timedelta, datetime
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import (
     Sum, Count, Avg, Q, F,
     ExpressionWrapper, DecimalField
@@ -95,7 +96,28 @@ class OrderViewSet(viewsets.ModelViewSet):
             return OrderListSerializer
         return OrderSerializer
 
+    def get_object(self):
+        queryset = self.filter_queryset(self.get_queryset())
+        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
+        pk = self.kwargs.get(lookup_url_kwarg)
+        if pk:
+            # Check numeric ID first
+            if str(pk).isdigit():
+                obj = queryset.filter(pk=int(pk)).first()
+                if obj:
+                    self.check_object_permissions(self.request, obj)
+                    return obj
+            # Check order_number (e.g. ORD-0001 or ORD-1)
+            obj = queryset.filter(
+                Q(order_number__iexact=str(pk)) | Q(order_number__iexact=f'ORD-{str(pk).zfill(4)}')
+            ).first()
+            if obj:
+                self.check_object_permissions(self.request, obj)
+                return obj
+        return super().get_object()
+
     def get_queryset(self):
+
         qs = super().get_queryset()
         status_filter = self.request.query_params.get('status')
         search        = self.request.query_params.get('search')
@@ -109,13 +131,41 @@ class OrderViewSet(viewsets.ModelViewSet):
             )
         return qs
 
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        order = serializer.save()
+
+        # Automatically update table status to occupied if table attached
+        if order.table:
+            order.table.status = 'occupied'
+            order.table.current_order_ref = order.order_number
+            order.table.save(update_fields=['status', 'current_order_ref'])
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            OrderSerializer(order, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
+
     @action(detail=True, methods=['patch'], url_path='set_status')
+    @transaction.atomic
     def set_status(self, request, pk=None):
+
         order      = self.get_object()
         serializer = OrderStatusSerializer(order, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
         order.refresh_from_db()
+
+        # Table workflow: when order is completed or cancelled, make table available
+        if order.table and order.status in [Order.STATUS_COMPLETED, Order.STATUS_CANCELLED]:
+            order.table.status = 'available'
+            order.table.current_order_ref = ''
+            order.table.save(update_fields=['status', 'current_order_ref'])
+
         return Response(OrderSerializer(order, context={'request': request}).data)
 
     @action(detail=True, methods=['post'], url_path='add_item')
@@ -129,6 +179,36 @@ class OrderViewSet(viewsets.ModelViewSet):
         return Response(OrderSerializer(order, context={'request': request}).data,
                         status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=['patch', 'post'], url_path='update_item_qty')
+    @transaction.atomic
+    def update_item_qty(self, request, pk=None):
+        order = self.get_object()
+        item_id = request.data.get('item_id')
+        qty = request.data.get('quantity')
+        delta = request.data.get('delta')
+
+        try:
+            item = order.items.get(pk=item_id)
+            if qty is not None:
+                new_qty = int(qty)
+            elif delta is not None:
+                new_qty = item.quantity + int(delta)
+            else:
+                new_qty = item.quantity
+
+            if new_qty <= 0:
+                item.delete()
+            else:
+                item.quantity = new_qty
+                item.subtotal = item.unit_price * new_qty
+                item.save()
+
+            order.recalculate_totals()
+            order.refresh_from_db()
+            return Response(OrderSerializer(order, context={'request': request}).data)
+        except OrderItem.DoesNotExist:
+            return Response({'detail': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+
     @action(detail=True, methods=['delete'], url_path=r'remove_item/(?P<item_id>\d+)')
     def remove_item(self, request, pk=None, item_id=None):
         order = self.get_object()
@@ -140,6 +220,125 @@ class OrderViewSet(viewsets.ModelViewSet):
             return Response(OrderSerializer(order, context={'request': request}).data)
         except OrderItem.DoesNotExist:
             return Response({'detail': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=True, methods=['post'], url_path='generate_bill')
+    @transaction.atomic
+    def generate_bill(self, request, pk=None):
+        order = self.get_object()
+        raw_phone = str(request.data.get('whatsapp_number', '')).strip().replace(' ', '').replace('-', '').replace('+91', '')
+        
+        # Validate 10-digit Indian phone number
+        if not raw_phone.isdigit() or len(raw_phone) != 10:
+            return Response(
+                {'detail': 'Please enter a valid 10-digit WhatsApp number.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        order.whatsapp_number = raw_phone
+
+        # Ensure totals are recalculated from database items using Decimal
+        order.recalculate_totals()
+
+        # Generate invoice number if not already present
+        if not order.invoice_number:
+            from .models import Invoice
+            last_inv = Invoice.objects.order_by('-id').first()
+            next_num = (last_inv.id + 10450) if last_inv and last_inv.id else 10450
+            order.invoice_number = f'INV-{next_num}'
+
+        if not order.transaction_ref:
+            import random
+            rand_ref = random.randint(10000, 99999)
+            order.transaction_ref = f'#AB-{rand_ref}'
+
+        order.save()
+
+        # Create or update Invoice record in PostgreSQL
+        from .models import Invoice
+        inv, _ = Invoice.objects.update_or_create(
+            order=order,
+            defaults={
+                'invoice_number': order.invoice_number,
+                'whatsapp_number': order.whatsapp_number,
+                'subtotal': order.subtotal,
+                'tax_amount': order.tax_amount,
+                'total': order.total,
+                'payment_method': order.payment_method,
+                'payment_status': order.payment_status,
+                'transaction_ref': order.transaction_ref,
+            }
+        )
+
+        # Update table status if attached
+        if order.table:
+            order.table.status = 'bill_requested'
+            order.table.save(update_fields=['status'])
+
+        # Notification for Admin
+        try:
+            from notifications.models import Notification
+            Notification.objects.create(
+                order=order,
+                type='bill_requested',
+                title=f'Bill Generated: {order.invoice_number}',
+                message=f'Bill generated for {order.table_label}. Total: ₹{order.total}.'
+            )
+        except Exception:
+            pass
+
+        order_data = OrderSerializer(order, context={'request': request}).data
+        order_data['whatsapp_formatted'] = f'+91{raw_phone}'
+        order_data['receipt_url'] = f'/invoice/{order.invoice_number}'
+        return Response(order_data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post', 'patch'], url_path='complete_payment')
+    @transaction.atomic
+    def complete_payment(self, request, pk=None):
+        order = self.get_object()
+        pay_method = request.data.get('payment_method', 'Cash')
+        pay_status = request.data.get('payment_status', 'Paid')
+
+        order.payment_method = pay_method
+        order.payment_status = 'paid' if pay_status.lower() == 'paid' else 'unpaid'
+        order.status = Order.STATUS_COMPLETED
+        order.completed_at = timezone.now()
+        order.save()
+
+        # Update Invoice record
+        from .models import Invoice
+        try:
+            inv = order.invoice
+            inv.payment_method = order.payment_method
+            inv.payment_status = order.payment_status
+            inv.save()
+        except Exception:
+            pass
+
+        # Release table to available
+        if order.table:
+            order.table.status = 'available'
+            order.table.current_order_ref = ''
+            order.table.save(update_fields=['status', 'current_order_ref'])
+
+        # Create Admin notification
+        try:
+            from notifications.models import Notification
+            Notification.objects.create(
+                order=order,
+                type='payment_completed',
+                title=f'Payment Completed: {order.order_number}',
+                message=f'Payment of ₹{order.total} completed ({pay_method}) for {order.table_label}.'
+            )
+        except Exception:
+            pass
+
+        return Response(OrderSerializer(order, context={'request': request}).data)
+
+    @action(detail=True, methods=['get'], url_path='receipt')
+    def receipt(self, request, pk=None):
+        order = self.get_object()
+        return Response(OrderSerializer(order, context={'request': request}).data)
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -188,30 +387,41 @@ class DashboardStatsView(APIView):
         today_ready     = today_qs.filter(status=Order.STATUS_READY).count()
         today_cancelled = today_qs.filter(status=Order.STATUS_CANCELLED).count()
 
-        # Active tables (occupied or bill_requested)
+        # Table & Waiter request counts directly from PostgreSQL
         try:
-            from menu.models import Table
-            active_tables = Table.objects.filter(
-                status__in=['occupied', 'bill_requested']
-            ).count()
-            total_tables = Table.objects.filter(active=True).count()
+            from menu.models import Table, WaiterRequest
+            occupied_tables_count = Table.objects.filter(status='occupied').count()
+            active_tables_count   = Table.objects.filter(status__in=['occupied', 'bill_requested']).count()
+            total_tables          = Table.objects.filter(active=True).count()
+            active_requests_count = WaiterRequest.objects.filter(status__in=['new', 'in_progress']).count()
+            active_orders_count   = Order.objects.filter(status__in=[Order.STATUS_PENDING, Order.STATUS_PREPARING]).count()
+            pending_bills_count   = Table.objects.filter(status__in=['bill_requested', 'needs_attention']).count()
         except Exception:
-            active_tables = 0
-            total_tables  = 0
+            occupied_tables_count = 0
+            active_tables_count   = 0
+            total_tables          = 0
+            active_requests_count = 0
+            active_orders_count   = 0
+            pending_bills_count   = 0
 
         return Response({
-            'today_sales':       float(today_sales),
-            'yesterday_sales':   float(yesterday_sales),
-            'sales_change_pct':  sales_change_pct,
-            'today_orders':      today_total,
-            'pending':           today_pending,
-            'preparing':         today_preparing,
-            'ready':             today_ready,
-            'completed':         today_completed,
-            'cancelled':         today_cancelled,
-            'active_tables':     active_tables,
-            'total_tables':      total_tables,
+            'today_sales':           float(today_sales),
+            'yesterday_sales':       float(yesterday_sales),
+            'sales_change_pct':      sales_change_pct,
+            'today_orders':          today_total,
+            'pending':               today_pending,
+            'preparing':             today_preparing,
+            'ready':                 today_ready,
+            'completed':             today_completed,
+            'cancelled':             today_cancelled,
+            'active_tables':         active_tables_count,
+            'occupied_tables':       occupied_tables_count,
+            'total_tables':          total_tables,
+            'active_requests':       active_requests_count,
+            'active_orders':         active_orders_count,
+            'pending_bills':         pending_bills_count,
         })
+
 
 
 class DashboardRecentOrdersView(APIView):
