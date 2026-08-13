@@ -10,7 +10,7 @@ const FILTER_TABS = ['All Tables', 'Available', 'Occupied', 'Needs Attention']
 
 export default function TablesPage() {
   const navigate = useNavigate()
-  const { tables, addTable, updateTable } = useApp()
+  const { tables, addTable, updateTable, currentRole, orders } = useApp()
 
   const [activeFilter, setActiveFilter] = useState('All Tables')
   const [addTableOpen, setAddTableOpen] = useState(false)
@@ -44,6 +44,147 @@ export default function TablesPage() {
     if (!paymentTable) return
     updateTable(paymentTable.id, { status: 'available', currentOrderId: null, amount: null, items: [], seatedMinutes: null, waitingMinutes: null })
     setPaymentTable(null)
+  }
+
+  if (currentRole === 'waiter') {
+    return (
+      <AdminLayout
+        searchPlaceholder="Search dining floor..."
+        pageTitle="Floor Plan"
+        pageIcon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="7" width="18" height="3" rx="1"/><line x1="8" y1="10" x2="8" y2="20"/><line x1="16" y1="10" x2="16" y2="20"/><line x1="5" y1="20" x2="19" y2="20"/></svg>}
+      >
+        <div className="floor-plan-page">
+          {/* Legend and Subtitle Row */}
+          <div className="floor-plan__header-row">
+            <div className="floor-plan__subtitle-wrap">
+              <h2>Main Dining Room</h2>
+              <p>Manage tables, guests, and instant table actions.</p>
+            </div>
+            
+            {/* Status Legend */}
+            <div className="floor-plan__legend">
+              <div className="legend-item">
+                <span className="legend-dot legend-dot--available" />
+                <span>Available</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot legend-dot--occupied" />
+                <span>Occupied</span>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot legend-dot--action" />
+                <span>Action Needed</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Table Cards Grid */}
+          <div className="floor-plan__grid">
+            {tables.map((table) => {
+              const isAvailable = table.status === 'available'
+              const isOccupied = table.status === 'occupied'
+              const isNeedsAttn = table.status === 'needs_attention'
+              
+              // Find the active order for this table
+              const activeOrd = orders ? orders.find(o => o.table === table.label && o.status !== 'COMPLETED') : null
+              const orderId = activeOrd ? activeOrd.id : 'ORD-1041' // Default fallback to a known order
+
+              // Map some guest counts & activities for visual reference
+              let guestCount = '2 Guests'
+              let activity = 'Coffee · 12m'
+              if (table.id === 'T-02') {
+                guestCount = '2 Guests'
+                activity = 'Dining · 15m'
+              } else if (table.id === 'T-04') {
+                guestCount = '4 Guests'
+                activity = 'Bill Requested'
+              }
+
+              return (
+                <div 
+                  key={table.id} 
+                  className={`waiter-table-card ${table.status}`}
+                >
+                  <div className="waiter-table-card__top">
+                    <span className="waiter-table-card__id">{table.label}</span>
+                    <span className={`waiter-table-status-pill ${table.status}`}>
+                      {table.status.replace('_', ' ')}
+                    </span>
+                  </div>
+
+                  <div className="waiter-table-card__body">
+                    {isAvailable && (
+                      <div className="waiter-table-card__available-info">
+                        <span className="table-seats-lbl">{table.seats} Seats</span>
+                        <div className="waiter-table-card__icon-wrap">🛋️</div>
+                      </div>
+                    )}
+                    {isOccupied && (
+                      <div className="waiter-table-card__occupied-info">
+                        <span className="table-guests-lbl">{guestCount}</span>
+                        <span className="table-activity-lbl">{activity}</span>
+                      </div>
+                    )}
+                    {isNeedsAttn && (
+                      <div className="waiter-table-card__attn-info">
+                        <span className="table-guests-lbl">{guestCount}</span>
+                        <span className="table-amount-lbl">₹{(table.amount || 105.00 * 80).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="waiter-table-card__footer">
+                    {isAvailable && (
+                      <button 
+                        className="btn-primary btn-sm w-full"
+                        onClick={() => navigate(`/orders/new?table=${table.id}`)}
+                      >
+                        Start Order
+                      </button>
+                    )}
+                    {isOccupied && (
+                      <div className="waiter-table-card__actions">
+                        <button 
+                          className="btn-outline btn-sm"
+                          onClick={() => navigate(`/orders/${orderId}/active`)}
+                        >
+                          Add Item
+                        </button>
+                        <button 
+                          className="btn-primary btn-sm"
+                          onClick={() => navigate(`/orders/${orderId}/active`)}
+                        >
+                          View Order
+                        </button>
+                      </div>
+                    )}
+                    {isNeedsAttn && (
+                      <button 
+                        className="btn-primary btn-sm w-full btn-danger-bg"
+                        onClick={() => navigate(`/orders/${orderId}/active`)}
+                      >
+                        Process Payment
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Process Payment Confirm */}
+        <ConfirmModal
+          open={!!paymentTable}
+          onClose={() => setPaymentTable(null)}
+          onConfirm={handleProcessPayment}
+          title="Process Payment"
+          message={paymentTable ? `Mark payment for ${paymentTable.label} (${paymentTable.currentOrderId || 'Current Order'}) as completed and free the table?` : ''}
+          confirmLabel="Process Payment"
+          cancelLabel="Cancel"
+        />
+      </AdminLayout>
+    )
   }
 
   return (

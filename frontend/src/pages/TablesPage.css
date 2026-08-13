@@ -208,3 +208,190 @@
 @media (max-width: 600px) {
   .tables-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Floor Plan / Waiter View Styles ── */
+.floor-plan-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.floor-plan__header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px 24px;
+}
+.floor-plan__subtitle-wrap h2 {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-espresso);
+}
+.floor-plan__subtitle-wrap p {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.floor-plan__legend {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.legend-dot--available { background: var(--color-green); }
+.legend-dot--occupied { background: var(--color-tan-dark); }
+.legend-dot--action { background: var(--color-red); }
+
+.floor-plan__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.waiter-table-card {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+  box-shadow: 0 2px 12px rgba(44, 24, 16, 0.02);
+  transition: all var(--transition);
+}
+.waiter-table-card:hover {
+  box-shadow: 0 6px 20px rgba(44, 24, 16, 0.06);
+  transform: translateY(-2px);
+}
+.waiter-table-card.occupied {
+  border-color: var(--color-peach-border);
+}
+.waiter-table-card.needs_attention {
+  border-color: var(--color-red);
+  border-width: 2px;
+  box-shadow: 0 4px 18px rgba(192, 57, 43, 0.06);
+}
+
+.waiter-table-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.waiter-table-card__id {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-espresso);
+}
+.waiter-table-status-pill {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+}
+.waiter-table-status-pill.available {
+  background: rgba(74, 124, 89, 0.1);
+  color: var(--color-green);
+}
+.waiter-table-status-pill.occupied {
+  background: rgba(212, 165, 116, 0.15);
+  color: var(--color-brown-mid);
+}
+.waiter-table-status-pill.needs_attention {
+  background: rgba(192, 57, 43, 0.1);
+  color: var(--color-red);
+}
+
+.waiter-table-card__body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.waiter-table-card__available-info,
+.waiter-table-card__occupied-info,
+.waiter-table-card__attn-info {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+.waiter-table-card__available-info {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.table-seats-lbl {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.waiter-table-card__icon-wrap {
+  font-size: 28px;
+  opacity: 0.35;
+}
+.table-guests-lbl {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-espresso);
+}
+.table-activity-lbl {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+.table-amount-lbl {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-red);
+  margin-top: 2px;
+}
+
+.waiter-table-card__footer {
+  margin-top: auto;
+}
+.waiter-table-card__actions {
+  display: flex;
+  gap: 8px;
+}
+.waiter-table-card__actions button {
+  flex: 1;
+}
+.btn-danger-bg {
+  background: var(--color-red) !important;
+}
+.btn-danger-bg:hover {
+  background: #a93226 !important;
+}
+.w-full {
+  width: 100%;
+}
+
+@media (max-width: 600px) {
+  .floor-plan__header-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+

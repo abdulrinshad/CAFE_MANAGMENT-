@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
+import { useApp } from '../context/AppContext'
 import { recentOrders, bestSellers, salesChartData } from '../data/mockData'
 import './DashboardPage.css'
 
@@ -65,6 +66,132 @@ function StatusBadge({ status }) {
 /* ── Dashboard Page ── */
 export default function DashboardPage() {
   const navigate = useNavigate()
+  const { currentRole, currentWaiter, waiterRequests, tables, orders, updateRequestStatus, dismissRequest } = useApp()
+
+  // Waiter Stats calculation
+  const occupiedTablesCount = tables ? tables.filter(t => t.status === 'occupied').length : 0
+  const activeRequestsCount = waiterRequests ? waiterRequests.filter(r => r.status === 'new').length : 0
+  const activeOrdersCount = orders ? orders.filter(o => o.status === 'PREPARING' || o.status === 'NEW').length : 0
+  const pendingBillsCount = tables ? tables.filter(t => t.status === 'needs_attention').length : 0
+
+  if (currentRole === 'waiter') {
+    return (
+      <AdminLayout 
+        searchPlaceholder="Search active tables, orders..."
+        pageTitle="Dashboard"
+        pageIcon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>}
+      >
+        <div className="dashboard">
+          {/* Greeting */}
+          <div className="dashboard__greeting">
+            <h1 className="dashboard__greeting-title">Good morning, {currentWaiter?.name || 'Waiter'}</h1>
+            <p className="dashboard__greeting-sub">Current Shift Performance &middot; {currentWaiter?.station || 'Station'}</p>
+          </div>
+
+          {/* Quick CTA to create order */}
+          <div className="dashboard__waiter-cta">
+            <div className="waiter-cta__card">
+              <div className="waiter-cta__info">
+                <h3>Serve a Table</h3>
+                <p>Start a new order, add items, or process payment requests.</p>
+              </div>
+              <button className="btn-primary" onClick={() => navigate('/tables')}>
+                Create New Order
+              </button>
+            </div>
+          </div>
+
+          {/* Stats Row */}
+          <div className="dashboard__stats-grid">
+            <div className="waiter-stat-card">
+              <span className="waiter-stat-card__icon text-orange">🪑</span>
+              <div className="waiter-stat-card__details">
+                <span className="waiter-stat-card__val">{occupiedTablesCount}</span>
+                <span className="waiter-stat-card__lbl">Active Tables</span>
+              </div>
+            </div>
+            <div className="waiter-stat-card">
+              <span className="waiter-stat-card__icon text-red">🛎️</span>
+              <div className="waiter-stat-card__details">
+                <span className="waiter-stat-card__val">{activeRequestsCount}</span>
+                <span className="waiter-stat-card__lbl">Active Requests</span>
+              </div>
+            </div>
+            <div className="waiter-stat-card">
+              <span className="waiter-stat-card__icon text-green">☕</span>
+              <div className="waiter-stat-card__details">
+                <span className="waiter-stat-card__val">{activeOrdersCount}</span>
+                <span className="waiter-stat-card__lbl">Active Orders</span>
+              </div>
+            </div>
+            <div className="waiter-stat-card">
+              <span className="waiter-stat-card__icon text-tan">💵</span>
+              <div className="waiter-stat-card__details">
+                <span className="waiter-stat-card__val">{pendingBillsCount}</span>
+                <span className="waiter-stat-card__lbl">Pending Bills</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent Requests Section */}
+          <div className="recent-requests-section">
+            <div className="recent-orders__header">
+              <h2 className="recent-orders__title">Recent Table Requests</h2>
+              <button className="recent-orders__view-all" onClick={() => navigate('/requests')}>
+                View All <span>→</span>
+              </button>
+            </div>
+
+            <div className="waiter-requests-list">
+              {waiterRequests && waiterRequests.length > 0 ? (
+                waiterRequests.slice(0, 3).map((req) => (
+                  <div key={req.id} className={`waiter-request-card ${req.status}`}>
+                    <div className="waiter-request-card__header">
+                      <span className="request-table-badge">Table {req.tableId.replace('T-', '')}</span>
+                      <span className="request-time">{req.time}</span>
+                    </div>
+                    <div className="waiter-request-card__body">
+                      <div className="request-type-label">{req.type}</div>
+                      <p className="request-msg">{req.message}</p>
+                      {req.amount && <div className="request-amount">Amount: ₹{req.amount}</div>}
+                    </div>
+                    <div className="waiter-request-card__actions">
+                      {req.status === 'new' ? (
+                        <>
+                          <button 
+                            className="btn-outline btn-sm"
+                            onClick={() => dismissRequest(req.id)}
+                          >
+                            Dismiss
+                          </button>
+                          <button 
+                            className="btn-primary btn-sm"
+                            onClick={() => updateRequestStatus(req.id, 'in_progress')}
+                          >
+                            Accept
+                          </button>
+                        </>
+                      ) : (
+                        <button 
+                          className="btn-primary btn-sm btn-success-bg"
+                          onClick={() => updateRequestStatus(req.id, 'completed')}
+                          disabled={req.status === 'completed'}
+                        >
+                          {req.status === 'completed' ? 'Completed' : 'Mark Completed'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="requests-empty">No requests at the moment.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </AdminLayout>
+    )
+  }
 
   return (
     <AdminLayout searchPlaceholder="Search orders, items...">

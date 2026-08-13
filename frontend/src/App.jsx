@@ -8,6 +8,13 @@ import EditProductPage      from './pages/EditProductPage'
 import OrdersPage           from './pages/OrdersPage'
 import OrderDetailPage      from './pages/OrderDetailPage'
 import TablesPage           from './pages/TablesPage'
+import RequestsPage         from './pages/RequestsPage'
+import ActiveOrderPage      from './pages/ActiveOrderPage'
+import NewOrderPOSPage      from './pages/NewOrderPOSPage'
+import InvoicePreviewPage   from './pages/InvoicePreviewPage'
+import CheckoutPage         from './pages/CheckoutPage'
+import SuccessPage          from './pages/SuccessPage'
+import CustomerMenuPage     from './pages/CustomerMenuPage'
 import QRCodesPage          from './pages/QRCodesPage'
 import QRPreviewPage        from './pages/QRPreviewPage'
 import ReportsPage          from './pages/ReportsPage'
@@ -38,10 +45,21 @@ export default function App() {
 
         {/* Orders */}
         <Route path="/orders"        element={<OrdersPage />} />
+        <Route path="/orders/new"    element={<NewOrderPOSPage />} />
         <Route path="/orders/:id"    element={<OrderDetailPage />} />
+        <Route path="/orders/:id/active"   element={<ActiveOrderPage />} />
+        <Route path="/orders/:id/invoice"  element={<InvoicePreviewPage />} />
+        <Route path="/orders/:id/checkout" element={<CheckoutPage />} />
+        <Route path="/orders/:id/success"  element={<SuccessPage />} />
+
+        {/* Customer QR Digital Menu */}
+        <Route path="/customer/menu" element={<CustomerMenuPage />} />
 
         {/* Tables */}
         <Route path="/tables"        element={<TablesPage />} />
+
+        {/* Requests */}
+        <Route path="/requests"      element={<RequestsPage />} />
 
         {/* QR Codes */}
         <Route path="/qr-codes"      element={<QRCodesPage />} />

@@ -519,3 +519,191 @@
   }
   .stat-tables { grid-column: 1; }
 }
+
+/* ── Waiter Dashboard Styles ── */
+.dashboard__waiter-cta {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 20px 24px;
+}
+.waiter-cta__card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.waiter-cta__info h3 {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--color-espresso);
+  margin-bottom: 4px;
+}
+.waiter-cta__info p {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+.dashboard__stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.waiter-stat-card {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 2px 12px rgba(44, 24, 16, 0.02);
+}
+.waiter-stat-card__icon {
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-bg);
+}
+.text-orange { color: var(--color-orange); background: rgba(212, 96, 26, 0.1); }
+.text-red { color: var(--color-red); background: rgba(192, 57, 43, 0.1); }
+.text-green { color: var(--color-green); background: rgba(74, 124, 89, 0.1); }
+.text-tan { color: var(--color-tan-dark); background: rgba(212, 165, 116, 0.1); }
+
+.waiter-stat-card__details {
+  display: flex;
+  flex-direction: column;
+}
+.waiter-stat-card__val {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-espresso);
+  line-height: 1.1;
+}
+.waiter-stat-card__lbl {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.recent-requests-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+.waiter-requests-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.waiter-request-card {
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.01);
+  transition: all var(--transition);
+}
+.waiter-request-card.new {
+  border-left-color: var(--color-red);
+}
+.waiter-request-card.in_progress {
+  border-left-color: var(--color-orange);
+}
+.waiter-request-card.completed {
+  border-left-color: var(--color-green);
+  opacity: 0.85;
+}
+.waiter-request-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.request-table-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-espresso);
+  background: var(--color-cream);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+.request-time {
+  font-size: 11px;
+  color: var(--color-text-light);
+}
+.waiter-request-card__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.request-type-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-espresso);
+}
+.request-msg {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+.request-amount {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-espresso);
+  margin-top: 4px;
+}
+.waiter-request-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.btn-success-bg {
+  background: var(--color-green) !important;
+}
+.btn-success-bg:hover {
+  background: #3e6649 !important;
+}
+.requests-empty {
+  grid-column: span 3;
+  padding: 32px;
+  text-align: center;
+  color: var(--color-text-light);
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .dashboard__stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .waiter-requests-list {
+    grid-template-columns: 1fr;
+  }
+  .requests-empty {
+    grid-column: 1;
+  }
+}
+@media (max-width: 600px) {
+  .dashboard__stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .waiter-cta__card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+

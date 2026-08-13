@@ -16,6 +16,15 @@ export function AppProvider({ children }) {
   const [tables,     setTables]     = useState(initTables)
   const [qrCodes,    setQRCodes]    = useState(initQR)
 
+  // ── Waiter / Role Context State ──
+  const [currentRole, setCurrentRole] = useState('admin') // 'admin' | 'waiter'
+  const [currentWaiter, setCurrentWaiter] = useState(null)
+  const [waiterRequests, setWaiterRequests] = useState([
+    { id: 'req-1', tableId: 'T-02', type: 'Water Refill', time: '5m ago', status: 'in_progress', message: 'More water needed', assignedWaiter: 'Priya' },
+    { id: 'req-2', tableId: 'T-04', type: 'Bill Requested', time: '2m ago', status: 'new', message: 'Ready to pay / Bill request', amount: 105.00 },
+    { id: 'req-3', tableId: 'T-01', type: 'Ready to Order', time: 'Just now', status: 'new', message: 'Customer has requested assistance' }
+  ])
+
   // ── Product CRUD ──────────────────────────────────────────────────
   const addProduct = (data) => {
     const newProduct = {
@@ -122,6 +131,16 @@ export function AppProvider({ children }) {
     )
   }
 
+  const updateRequestStatus = (id, status) => {
+    setWaiterRequests((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status } : r))
+    )
+  }
+
+  const dismissRequest = (id) => {
+    setWaiterRequests((prev) => prev.filter((r) => r.id !== id))
+  }
+
   return (
     <AppContext.Provider
       value={{
@@ -131,6 +150,14 @@ export function AppProvider({ children }) {
         orders,
         tables,
         qrCodes,
+        currentRole,
+        setCurrentRole,
+        currentWaiter,
+        setCurrentWaiter,
+        waiterRequests,
+        setWaiterRequests,
+        updateRequestStatus,
+        dismissRequest,
         // product actions
         addProduct,
         updateProduct,

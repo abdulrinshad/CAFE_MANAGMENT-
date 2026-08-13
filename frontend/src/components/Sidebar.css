@@ -259,3 +259,68 @@
   background: #fdf0ef;
   color: var(--color-red);
 }
+
+/* ── Waiter Session ── */
+.sidebar__waiter-session {
+  margin: 6px 14px 12px;
+  background: var(--color-bg-alt);
+  border: 1px solid var(--color-border-light);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.sidebar__station-badge {
+  display: inline-block;
+  background: var(--color-espresso);
+  color: var(--color-white);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.sidebar__waiter-profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar__waiter-avatar {
+  font-size: 20px;
+}
+
+.sidebar__waiter-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar__waiter-role {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.sidebar__waiter-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-espresso);
+  line-height: 1.2;
+}
+
+/* ── Navigation Badge ── */
+.sidebar__nav-badge {
+  margin-left: auto;
+  background: var(--color-red);
+  color: var(--color-white);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+}
+

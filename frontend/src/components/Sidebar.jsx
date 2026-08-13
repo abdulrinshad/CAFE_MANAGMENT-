@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useApp } from '../context/AppContext'
 import './Sidebar.css'
 
 const NAV_ITEMS = [
@@ -14,10 +15,24 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const navigate = useNavigate()
+  const { currentRole, currentWaiter, setCurrentRole, setCurrentWaiter, waiterRequests } = useApp()
 
   const handleLogout = () => {
+    setCurrentRole('admin')
+    setCurrentWaiter(null)
     navigate('/login')
   }
+
+  const activeRequestsCount = waiterRequests ? waiterRequests.filter(r => r.status === 'new').length : 0
+
+  const items = currentRole === 'waiter'
+    ? [
+        { path: '/dashboard', label: 'Dashboard', icon: <DashboardIcon />, exact: true },
+        { path: '/tables',    label: 'Tables',    icon: <TablesIcon /> },
+        { path: '/requests',  label: 'Requests',  icon: <RequestsIcon />, badge: activeRequestsCount > 0 ? activeRequestsCount : null },
+        { path: '/settings/profile', label: 'Settings', icon: <SettingsIcon />, matchPath: '/settings' },
+      ]
+    : NAV_ITEMS
 
   return (
     <aside className="sidebar">
@@ -27,14 +42,32 @@ export default function Sidebar() {
           <img src="/logo.png" alt="Artisan Brew Logo" />
         </div>
         <div className="sidebar__brand-text">
-          <span className="sidebar__brand-name">Artisan Brew</span>
-          <span className="sidebar__brand-sub">Management Suite</span>
+          <span className="sidebar__brand-name">
+            {currentRole === 'waiter' ? 'Artisan POS' : 'Artisan Brew'}
+          </span>
+          <span className="sidebar__brand-sub">
+            {currentRole === 'waiter' ? 'Waiter Terminal' : 'Management Suite'}
+          </span>
         </div>
       </div>
 
+      {/* Waiter Details & Profile Badge (if logged in as waiter) */}
+      {currentRole === 'waiter' && currentWaiter && (
+        <div className="sidebar__waiter-session">
+          <div className="sidebar__station-badge">{currentWaiter.station}</div>
+          <div className="sidebar__waiter-profile">
+            <span className="sidebar__waiter-avatar">{currentWaiter.avatar}</span>
+            <div className="sidebar__waiter-info">
+              <span className="sidebar__waiter-role">Waiter</span>
+              <span className="sidebar__waiter-name">{currentWaiter.name}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* New Order Button */}
       <div className="sidebar__new-order">
-        <button className="btn-new-order" id="btn-new-order">
+        <button className="btn-new-order" id="btn-new-order" onClick={() => navigate('/orders/new')}>
           <span className="btn-new-order__plus">+</span>
           New Order
         </button>
@@ -42,7 +75,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="sidebar__nav">
-        {NAV_ITEMS.map((item) => (
+        {items.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -56,6 +89,9 @@ export default function Sidebar() {
           >
             <span className="sidebar__nav-icon">{item.icon}</span>
             <span className="sidebar__nav-label">{item.label}</span>
+            {item.badge !== undefined && item.badge !== null && (
+              <span className="sidebar__nav-badge">{item.badge}</span>
+            )}
           </NavLink>
         ))}
       </nav>
@@ -170,6 +206,13 @@ function LogoutIcon() {
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
       <polyline points="16 17 21 12 16 7"/>
       <line x1="21" y1="12" x2="9" y2="12"/>
+    </svg>
+  )
+}
+function RequestsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>
   )
 }
