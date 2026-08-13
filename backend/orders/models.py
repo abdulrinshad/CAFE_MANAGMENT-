@@ -39,6 +39,7 @@ class Order(models.Model):
     )
 
     # Identifiers
+<<<<<<< Updated upstream
     customer_name   = models.CharField(max_length=120, blank=True, default='')
     whatsapp_number = models.CharField(max_length=20, blank=True, default='')
     waiter_name     = models.CharField(max_length=120, blank=True, default='')
@@ -49,6 +50,18 @@ class Order(models.Model):
     transaction_ref  = models.CharField(max_length=50, blank=True, default='')
     payment_method   = models.CharField(max_length=20, default='pending')
     payment_status   = models.CharField(max_length=20, default='unpaid')
+=======
+    customer_name    = models.CharField(max_length=120, blank=True, default='')
+    waiter_name      = models.CharField(max_length=120, blank=True, default='')
+    notes            = models.TextField(blank=True, default='')
+    whatsapp_number  = models.CharField(max_length=15, blank=True, default='',
+                                        help_text='Customer WhatsApp number (10 digits)')
+    invoice_number   = models.CharField(max_length=30, blank=True, default='')
+    payment_method   = models.CharField(max_length=20, blank=True, default='pending')
+    payment_status   = models.CharField(max_length=20, blank=True, default='unpaid')
+    transaction_ref  = models.CharField(max_length=50, blank=True, default='')
+
+>>>>>>> Stashed changes
 
     # Status
     status        = models.CharField(
@@ -157,6 +170,7 @@ class OrderItem(models.Model):
 
 
 class Invoice(models.Model):
+<<<<<<< Updated upstream
     order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='invoice')
     invoice_number = models.CharField(max_length=30, unique=True)
     whatsapp_number = models.CharField(max_length=20, blank=True, default='')
@@ -166,6 +180,43 @@ class Invoice(models.Model):
     payment_method = models.CharField(max_length=20, default='pending')
     payment_status = models.CharField(max_length=20, default='unpaid')
     transaction_ref = models.CharField(max_length=50, blank=True, default='')
+=======
+    """One invoice per order, generated when waiter clicks 'Generate Bill'."""
+
+    STATUS_UNPAID    = 'unpaid'
+    STATUS_PAID      = 'paid'
+    STATUS_CANCELLED = 'cancelled'
+
+    STATUS_CHOICES = [
+        (STATUS_UNPAID,    'Unpaid'),
+        (STATUS_PAID,      'Paid'),
+        (STATUS_CANCELLED, 'Cancelled'),
+    ]
+
+    order          = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='invoice')
+    invoice_number = models.CharField(max_length=30, unique=True, blank=True,
+                                      help_text='e.g. INV-10452')
+    token          = models.UUIDField(default=uuid.uuid4, unique=True, editable=False,
+                                      help_text='Secure token for public receipt URL')
+
+    # Customer contact (copied from order at bill generation time)
+    whatsapp_number = models.CharField(max_length=20, blank=True, default='')
+
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_UNPAID)
+
+    # Financial snapshot (from order at time of invoice creation)
+    subtotal   = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total      = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    # Payment details
+    payment_method  = models.CharField(max_length=20, default='pending')
+    payment_status  = models.CharField(max_length=20, default='unpaid')
+    transaction_ref = models.CharField(max_length=50, blank=True, default='')
+
+    # Timestamps
+>>>>>>> Stashed changes
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -173,6 +224,7 @@ class Invoice(models.Model):
         verbose_name = 'Invoice'
         verbose_name_plural = 'Invoices'
         ordering = ['-created_at']
+
 
     def __str__(self):
         return f'{self.invoice_number} - {self.order.order_number} (Rs.{self.total})'
