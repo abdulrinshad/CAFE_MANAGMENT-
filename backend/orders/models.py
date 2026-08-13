@@ -39,9 +39,16 @@ class Order(models.Model):
     )
 
     # Identifiers
-    customer_name = models.CharField(max_length=120, blank=True, default='')
-    waiter_name   = models.CharField(max_length=120, blank=True, default='')
-    notes         = models.TextField(blank=True, default='')
+    customer_name   = models.CharField(max_length=120, blank=True, default='')
+    whatsapp_number = models.CharField(max_length=20, blank=True, default='')
+    waiter_name     = models.CharField(max_length=120, blank=True, default='')
+    notes           = models.TextField(blank=True, default='')
+
+    # Invoice & Payment Details
+    invoice_number   = models.CharField(max_length=30, blank=True, default='')
+    transaction_ref  = models.CharField(max_length=50, blank=True, default='')
+    payment_method   = models.CharField(max_length=20, default='pending')
+    payment_status   = models.CharField(max_length=20, default='unpaid')
 
     # Status
     status        = models.CharField(
@@ -63,6 +70,7 @@ class Order(models.Model):
     completed_at  = models.DateTimeField(null=True, blank=True)
 
     class Meta:
+
         verbose_name        = 'Order'
         verbose_name_plural = 'Orders'
         ordering            = ['-created_at']
@@ -146,3 +154,27 @@ class OrderItem(models.Model):
         super().save(*args, **kwargs)
         # Keep order totals in sync
         self.order.recalculate_totals()
+
+
+class Invoice(models.Model):
+    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='invoice')
+    invoice_number = models.CharField(max_length=30, unique=True)
+    whatsapp_number = models.CharField(max_length=20, blank=True, default='')
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_method = models.CharField(max_length=20, default='pending')
+    payment_status = models.CharField(max_length=20, default='unpaid')
+    transaction_ref = models.CharField(max_length=50, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Invoice'
+        verbose_name_plural = 'Invoices'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.invoice_number} - {self.order.order_number} (Rs.{self.total})'
+
+

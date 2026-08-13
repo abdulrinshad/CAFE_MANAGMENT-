@@ -29,14 +29,16 @@ All endpoints under /api/v1/:
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import CategoryViewSet, ProductViewSet, TableViewSet, QRCodeViewSet
+from .views import CategoryViewSet, ProductViewSet, TableViewSet, QRCodeViewSet, WaiterRequestViewSet
 
 router = DefaultRouter()
 router.register(r'categories', CategoryViewSet, basename='category')
 router.register(r'products',   ProductViewSet,  basename='product')
 router.register(r'tables',     TableViewSet,    basename='table')
 router.register(r'qrcodes',    QRCodeViewSet,   basename='qrcode')
+router.register(r'requests',   WaiterRequestViewSet, basename='waiterrequest')
 
 urlpatterns = [
     path('', include(router.urls)),
 ]
+

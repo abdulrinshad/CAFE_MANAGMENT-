@@ -46,8 +46,9 @@ export default function App() {
         {/* Orders */}
         <Route path="/orders"        element={<OrdersPage />} />
         <Route path="/orders/new"    element={<NewOrderPOSPage />} />
-        <Route path="/orders/:id"    element={<OrderDetailPage />} />
-        <Route path="/orders/:id/active"   element={<ActiveOrderPage />} />
+        <Route path="/orders/:id"          element={<OrderDetailPage />} />
+        <Route path="/orders/:id/active"   element={<OrderDetailPage />} />
+
         <Route path="/orders/:id/invoice"  element={<InvoicePreviewPage />} />
         <Route path="/orders/:id/checkout" element={<CheckoutPage />} />
         <Route path="/orders/:id/success"  element={<SuccessPage />} />

@@ -138,7 +138,7 @@ def run():
             }
         )
         status = 'CREATED' if created else 'EXISTS'
-        print(f'  [{status}] {product.name} — ₹{product.price}')
+        print(f'  [{status}] {product.name} - Rs. {product.price}')
 
     print(f'\n✅ Done! {Category.objects.count()} categories, {Product.objects.count()} products in database.')
 

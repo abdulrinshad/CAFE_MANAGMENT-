@@ -115,11 +115,12 @@ export default function DashboardPage() {
     return () => clearInterval(timer)
   }, [loadDashboard])
 
-  // Waiter-specific stats (from local context)
-  const occupiedTablesCount = tables ? tables.filter(t => t.status === 'occupied').length : 0
-  const activeRequestsCount = waiterRequests ? waiterRequests.filter(r => r.status === 'new').length : 0
-  const activeOrdersCount   = orders ? orders.filter(o => o.status === 'PREPARING' || o.status === 'PENDING').length : 0
-  const pendingBillsCount   = tables ? tables.filter(t => t.status === 'needs_attention' || t.status === 'bill_requested').length : 0
+  // Waiter-specific stats (from PostgreSQL API / live context)
+  const occupiedTablesCount = stats?.occupied_tables ?? (tables ? tables.filter(t => t.status === 'occupied').length : 0)
+  const activeRequestsCount = stats?.active_requests ?? (waiterRequests ? waiterRequests.filter(r => r.status === 'new' || r.status === 'in_progress').length : 0)
+  const activeOrdersCount   = stats?.active_orders ?? (orders ? orders.filter(o => o.status === 'PREPARING' || o.status === 'PENDING').length : 0)
+  const pendingBillsCount   = stats?.pending_bills ?? (tables ? tables.filter(t => t.status === 'needs_attention' || t.status === 'bill_requested').length : 0)
+
 
   // ── Waiter view ────────────────────────────────────────────────────────────
   if (currentRole === 'waiter') {

@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
+import { getCategoryName } from '../utils/categoryHelper'
 import './CustomerMenuPage.css'
 
 const CATEGORIES = ['All', 'Coffee', 'Tea', 'Pastries', 'Desserts', 'Cold Beverages', 'Snacks']
 
 export default function CustomerMenuPage() {
   const [searchParams] = useSearchParams()
-  const { products, setWaiterRequests } = useApp()
+  const { products, createWaiterRequest, tables } = useApp()
+
 
   // Dynamic table parameter from URL (?table=T-12 or similar)
   const tableParam = searchParams.get('table')
@@ -23,7 +25,7 @@ export default function CustomerMenuPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setViewState('menu')
-    }, 1500)
+    }, 1200)
     return () => clearTimeout(timer)
   }, [])
 
@@ -33,31 +35,39 @@ export default function CustomerMenuPage() {
     if (!matchSearch) return false
 
     if (activeCategory === 'All') return true
-    const productCat = p.category.toLowerCase()
+    const productCat = getCategoryName(p.category || p.category_name || p.categoryLabel).toLowerCase()
     const activeCat = activeCategory.toLowerCase()
-    if (activeCat === 'pastries') return productCat === 'pastry'
-    if (activeCat === 'cold beverages') return productCat === 'cold beverage'
+    if (activeCat === 'pastries') return productCat === 'pastry' || productCat === 'pastries'
+    if (activeCat === 'cold beverages') return productCat === 'cold beverage' || productCat === 'cold beverages'
     return productCat === activeCat
   }) : []
 
   // Call Waiter Request Handler
-  const handleCallWaiter = () => {
+  const handleCallWaiter = async () => {
     setViewState('request_loading')
-    setTimeout(() => {
-      // Append request to shared waiter context so it displays on waiter dashboard in real-time!
-      if (setWaiterRequests) {
-        const newRequest = {
-          id: `req-${Date.now()}`,
-          tableId: tableParam || 'T-12',
-          type: 'Assistance Requested',
-          time: 'Just now',
+    try {
+      let targetTableId = null
+      if (tables && tableParam) {
+        const found = tables.find((t) => t.name === tableParam || String(t.id) === String(tableParam) || t.label === tableParam)
+        if (found) targetTableId = found.id
+      }
+      if (!targetTableId && tables && tables.length > 0) {
+        targetTableId = tables[0].id
+      }
+
+      if (createWaiterRequest && targetTableId) {
+        await createWaiterRequest({
+          table: targetTableId,
+          request_type: 'Call Waiter',
+          message: `Customer requested assistance at table ${tableLabel}`,
           status: 'new',
-          message: 'Customer has requested assistance'
-        }
-        setWaiterRequests((prev) => [newRequest, ...prev])
+        })
       }
       setViewState('request_sent')
-    }, 1000)
+    } catch (err) {
+      console.error('Call waiter error:', err)
+      setViewState('request_sent')
+    }
   }
 
   const handleCancelRequest = () => {
@@ -176,7 +186,7 @@ export default function CustomerMenuPage() {
                     {p.popular && <span className="popular-badge">POPULAR</span>}
                     {isUnavailable && <span className="unavailable-overlay-badge">CURRENTLY UNAVAILABLE</span>}
                     <div className={`qr-product-thumbnail ${isUnavailable ? 'grayscale' : ''}`}>
-                      {p.category.toLowerCase() === 'coffee' ? '☕' : p.category.toLowerCase() === 'tea' ? '🫖' : '🥐'}
+                      {getCategoryName(p.category).toLowerCase().includes('coffee') ? '☕' : getCategoryName(p.category).toLowerCase().includes('tea') ? '🫖' : '🥐'}
                     </div>
                   </div>
                   <div className="qr-card-body">
@@ -242,7 +252,7 @@ export default function CustomerMenuPage() {
                 <span className="sheet-unavailable-overlay">CURRENTLY UNAVAILABLE</span>
               )}
               <div className={`sheet-thumbnail-large ${(selectedProduct.soldOut || !selectedProduct.available) ? 'grayscale' : ''}`}>
-                {selectedProduct.category.toLowerCase() === 'coffee' ? '☕' : selectedProduct.category.toLowerCase() === 'tea' ? '🫖' : '🥐'}
+                {getCategoryName(selectedProduct.category).toLowerCase().includes('coffee') ? '☕' : getCategoryName(selectedProduct.category).toLowerCase().includes('tea') ? '🫖' : '🥐'}
               </div>
             </div>
 
@@ -263,9 +273,10 @@ export default function CustomerMenuPage() {
               <div className="sheet-ingredients-wrap">
                 <h4 className="sheet-sub-heading">Ingredients</h4>
                 <p className="sheet-ingredients-text">
-                  {selectedProduct.category.toLowerCase() === 'coffee' ? 'Ethopian Espresso Roast, Whole Milk, Velvet Crema' : selectedProduct.category.toLowerCase() === 'tea' ? 'Black Loose Tea leaves, Bergamot Citrus, Hot Water' : 'Organic Croissant Dough, Almond Paste filling, Butter'}
+                  {getCategoryName(selectedProduct.category).toLowerCase().includes('coffee') ? 'Ethopian Espresso Roast, Whole Milk, Velvet Crema' : getCategoryName(selectedProduct.category).toLowerCase().includes('tea') ? 'Black Loose Tea leaves, Bergamot Citrus, Hot Water' : 'Organic Croissant Dough, Almond Paste filling, Butter'}
                 </p>
               </div>
+
 
               {/* Dietary Badges */}
               <div className="sheet-dietary-badges">

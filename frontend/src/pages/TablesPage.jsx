@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
+import { tableApi } from '../api'
 import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 import './TablesPage.css'
@@ -12,7 +13,7 @@ export default function TablesPage() {
   const navigate = useNavigate()
   const {
     tables, addTable, updateTable, deleteTable, setTableStatus, setTableActive,
-    currentRole, orders, loading, apiError, fetchTables,
+    currentRole, orders, loading, apiError, fetchTables, updateOrderStatus,
   } = useApp()
 
   const [activeFilter,   setActiveFilter]   = useState('All Tables')
@@ -54,10 +55,52 @@ export default function TablesPage() {
     }
   }
 
+  const handleStartOrder = async (table) => {
+    try {
+      await setTableStatus(table.id, 'occupied')
+    } catch (err) {
+      console.error('Set table status occupied error:', err)
+    }
+    navigate(`/orders/new?table=${table.id}&tableName=${encodeURIComponent(table.name || table.label || `Table ${table.id}`)}`)
+  }
+
+  const handleViewTableOrder = async (table, openAddModal = false) => {
+    let targetOrderId = table.current_order_id || table.currentOrderId
+    if (!targetOrderId && orders) {
+      const found = orders.find(
+        (o) =>
+          (o.table === table.label || String(o.table) === String(table.id) || o.table_label === table.name || o.tableLabel === table.name) &&
+          o.status !== 'COMPLETED' &&
+          o.status !== 'CANCELLED'
+      )
+      if (found) targetOrderId = found.id
+    }
+    if (!targetOrderId) {
+      try {
+        const active = await tableApi.getActiveOrder(table.id)
+        if (active && active.id) {
+          targetOrderId = active.id
+        }
+      } catch (_) {}
+    }
+
+    if (targetOrderId) {
+      navigate(`/orders/${targetOrderId}${openAddModal ? '?addItem=true' : ''}`)
+    } else {
+      navigate(`/orders/new?table=${table.id}&tableName=${encodeURIComponent(table.name || table.label || `Table ${table.id}`)}`)
+    }
+  }
+
+
   const handleProcessPayment = async () => {
     if (!paymentTable) return
     try {
-      await setTableStatus(paymentTable.id, 'available')
+      const activeOrd = orders ? orders.find(o => o.table === paymentTable.label && o.status !== 'COMPLETED' && o.status !== 'CANCELLED') : null
+      if (activeOrd) {
+        await updateOrderStatus(activeOrd.id, 'completed')
+      } else {
+        await setTableStatus(paymentTable.id, 'available')
+      }
       setPaymentTable(null)
     } catch (err) {
       console.error('Process payment error:', err)
@@ -105,7 +148,7 @@ export default function TablesPage() {
                 const isAvailable  = table.status === 'available'
                 const isOccupied   = table.status === 'occupied'
                 const isNeedsAttn  = table.status === 'needs_attention' || table.status === 'bill_requested'
-                const activeOrd    = orders ? orders.find(o => o.table === table.label && o.status !== 'COMPLETED') : null
+                const activeOrd    = orders ? orders.find(o => (o.table === table.label || String(o.table) === String(table.id)) && o.status !== 'COMPLETED' && o.status !== 'CANCELLED') : null
                 const orderId      = activeOrd ? activeOrd.id : null
 
                 return (
@@ -137,16 +180,17 @@ export default function TablesPage() {
                     </div>
                     <div className="waiter-table-card__footer">
                       {isAvailable && (
-                        <button className="btn-primary btn-sm w-full" onClick={() => navigate(`/orders/new?table=${table.id}`)}>
+                        <button className="btn-primary btn-sm w-full" onClick={() => handleStartOrder(table)}>
                           Start Order
                         </button>
                       )}
                       {isOccupied && (
                         <div className="waiter-table-card__actions">
-                          <button className="btn-outline btn-sm" onClick={() => orderId && navigate(`/orders/${orderId}/active`)}>Add Item</button>
-                          <button className="btn-primary btn-sm" onClick={() => orderId && navigate(`/orders/${orderId}/active`)}>View Order</button>
+                          <button className="btn-outline btn-sm" onClick={() => handleViewTableOrder(table, true)}>Add Item</button>
+                          <button className="btn-primary btn-sm" onClick={() => handleViewTableOrder(table, false)}>View Order</button>
                         </div>
                       )}
+
                       {isNeedsAttn && (
                         <button className="btn-primary btn-sm w-full btn-danger-bg" onClick={() => setPaymentTable(table)}>
                           Process Payment
@@ -159,6 +203,7 @@ export default function TablesPage() {
             </div>
           )}
         </div>
+
 
         <ConfirmModal
           open={!!paymentTable}

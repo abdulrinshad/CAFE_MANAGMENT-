@@ -7,15 +7,22 @@ from .models import Order, OrderItem
 
 class OrderItemSerializer(serializers.ModelSerializer):
     # Both fields are auto-filled from the Product FK if not explicitly provided
-    product_name = serializers.CharField(required=False, allow_blank=True, default='')
-    unit_price   = serializers.DecimalField(
+    product_name  = serializers.CharField(required=False, allow_blank=True, default='')
+    unit_price    = serializers.DecimalField(
         max_digits=10, decimal_places=2, required=False, allow_null=True, default=None
     )
+    product_image = serializers.SerializerMethodField()
 
     class Meta:
         model  = OrderItem
-        fields = ['id', 'product', 'product_name', 'unit_price', 'quantity', 'subtotal']
-        read_only_fields = ['id', 'subtotal']
+        fields = ['id', 'product', 'product_name', 'product_image', 'unit_price', 'quantity', 'subtotal']
+        read_only_fields = ['id', 'subtotal', 'product_image']
+
+    def get_product_image(self, obj):
+        if obj.product and obj.product.image:
+            return obj.product.image.url
+        return None
+
 
     def create(self, validated_data):
         # Snapshot product name + price from product FK if not provided
@@ -41,7 +48,8 @@ class OrderSerializer(serializers.ModelSerializer):
         model  = Order
         fields = [
             'id', 'order_number', 'table', 'table_label',
-            'customer_name', 'waiter_name', 'notes',
+            'customer_name', 'whatsapp_number', 'waiter_name', 'notes',
+            'invoice_number', 'transaction_ref', 'payment_method', 'payment_status',
             'status', 'subtotal', 'tax_amount', 'total',
             'item_count', 'items_summary',
             'items', 'created_at', 'updated_at', 'completed_at',
@@ -51,6 +59,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'subtotal', 'tax_amount', 'total',
             'created_at', 'updated_at', 'completed_at',
         ]
+
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])

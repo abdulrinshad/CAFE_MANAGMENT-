@@ -29,3 +29,14 @@ class OrderItemAdmin(admin.ModelAdmin):
     list_filter   = ['order__status']
     search_fields = ['product_name', 'order__order_number']
     readonly_fields = ['subtotal']
+
+
+from .models import Invoice
+
+@admin.register(Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+    list_display = ['invoice_number', 'order', 'whatsapp_number', 'total', 'payment_method', 'payment_status', 'created_at']
+    list_filter = ['payment_status', 'payment_method', 'created_at']
+    search_fields = ['invoice_number', 'whatsapp_number', 'order__order_number', 'transaction_ref']
+    readonly_fields = ['created_at', 'updated_at']
+
