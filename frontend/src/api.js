@@ -9,10 +9,15 @@ const BASE = '/api/v1'
 
 // ── Generic fetch helper ──────────────────────────────────────────────────────
 
-async function request(method, path, body = null, isFormData = false) {
+async function request(method, path, body = null, isFormData = false, isRetry = false) {
   const headers = {}
   if (body && !isFormData) {
     headers['Content-Type'] = 'application/json'
+  }
+
+  const token = localStorage.getItem('artisan_access')
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
   }
 
   const opts = {
@@ -26,21 +31,76 @@ async function request(method, path, body = null, isFormData = false) {
 
   const res = await fetch(`${BASE}${path}`, opts)
 
+  if (res.status === 401 && !isRetry && !path.includes('/auth/login/')) {
+    const refresh = localStorage.getItem('artisan_refresh')
+    if (refresh) {
+      try {
+        const refreshRes = await fetch(`${BASE}/auth/token/refresh/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ refresh })
+        })
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json()
+          localStorage.setItem('artisan_access', refreshData.access)
+          if (refreshData.refresh) {
+            localStorage.setItem('artisan_refresh', refreshData.refresh)
+          }
+          return request(method, path, body, isFormData, true)
+        } else {
+          localStorage.removeItem('artisan_access')
+          localStorage.removeItem('artisan_refresh')
+          localStorage.removeItem('artisan_user')
+          window.location.href = '/login'
+        }
+      } catch (e) {
+        localStorage.removeItem('artisan_access')
+        localStorage.removeItem('artisan_refresh')
+        localStorage.removeItem('artisan_user')
+        window.location.href = '/login'
+      }
+    }
+  }
+
   if (!res.ok) {
     let errorDetail = `HTTP ${res.status}`
     try {
-      const data = await res.json()
-      errorDetail = JSON.stringify(data)
-    } catch (_) {
-      errorDetail = await res.text()
+      const text = await res.text()
+      try {
+        const data = JSON.parse(text)
+        errorDetail = data.detail ||
+                      (data.non_field_errors && data.non_field_errors[0]) ||
+                      (Array.isArray(data) ? data[0] : null) ||
+                      (data && typeof data === 'object' ? Object.values(data)[0] : null) ||
+                      data.message ||
+                      text
+        if (Array.isArray(errorDetail)) {
+          errorDetail = errorDetail[0]
+        }
+      } catch (_) {
+        errorDetail = text || `HTTP ${res.status}`
+      }
+    } catch (e) {
+      errorDetail = `HTTP ${res.status}`
     }
     throw new Error(errorDetail)
   }
 
-  // 204 No Content (DELETE) returns no body
   if (res.status === 204) return null
   return res.json()
 }
+
+export const authApi = {
+  login: (data) => request('POST', '/auth/login/', data),
+  logout: () => request('POST', '/auth/logout/'),
+  me: () => request('GET', '/auth/me/'),
+  changePassword: (data) => request('POST', '/auth/change-password/', data),
+  getWaiters: () => request('GET', '/auth/waiters/'),
+  waiterLogin: (data) => request('POST', '/auth/waiter-login/', data),
+}
+
 
 // ── Category API ──────────────────────────────────────────────────────────────
 

@@ -9,17 +9,17 @@ const NAV_ITEMS = [
   { path: '/orders',          label: 'Orders',      icon: <OrdersIcon /> },
   { path: '/tables',          label: 'Tables',      icon: <TablesIcon /> },
   { path: '/qr-codes',        label: 'QR Codes',    icon: <QRIcon /> },
+  { path: '/waiters',         label: 'Waiters',     icon: <WaitersIcon /> },
   { path: '/reports',         label: 'Reports',     icon: <ReportsIcon /> },
   { path: '/settings/profile',label: 'Settings',    icon: <SettingsIcon />, matchPath: '/settings' },
 ]
 
 export default function Sidebar() {
   const navigate = useNavigate()
-  const { currentRole, currentWaiter, setCurrentRole, setCurrentWaiter, waiterRequests } = useApp()
+  const { currentRole, currentWaiter, logout, waiterRequests } = useApp()
 
   const handleLogout = () => {
-    setCurrentRole('admin')
-    setCurrentWaiter(null)
+    logout()
     navigate('/login')
   }
 
@@ -213,6 +213,16 @@ function RequestsIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  )
+}
+function WaitersIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   )
 }

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
-import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi } from '../api'
+import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, authApi } from '../api'
 
 const AppContext = createContext(null)
 
@@ -18,7 +18,15 @@ export function AppProvider({ children }) {
   const [apiError, setApiError] = useState(null)
   const pollRef = useRef(null)
 
-  // ── Waiter / Role Context State — persisted to localStorage so refresh keeps session
+  // ── Auth Context State ──────────────────────────────────────────────────
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const u = localStorage.getItem('artisan_user')
+      return u ? JSON.parse(u) : null
+    } catch { return null }
+  })
+  const [authLoading, setAuthLoading] = useState(true)
+
   const [currentRole, setCurrentRoleRaw] = useState(() => {
     try { return localStorage.getItem('artisan_role') || 'admin' } catch { return 'admin' }
   })
@@ -30,7 +38,6 @@ export function AppProvider({ children }) {
   })
   const [waiterRequests, setWaiterRequests] = useState([])
 
-  // Wrapped setters that persist to localStorage
   const setCurrentRole = (role) => {
     try { localStorage.setItem('artisan_role', role) } catch {}
     setCurrentRoleRaw(role)
@@ -42,6 +49,63 @@ export function AppProvider({ children }) {
     } catch {}
     setCurrentWaiterRaw(waiter)
   }
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('artisan_access')
+    localStorage.removeItem('artisan_refresh')
+    localStorage.removeItem('artisan_user')
+    localStorage.removeItem('artisan_role')
+    localStorage.removeItem('artisan_waiter')
+    setCurrentUser(null)
+    setCurrentRoleRaw('admin')
+    setCurrentWaiterRaw(null)
+  }, [])
+
+  const refreshUser = useCallback(async () => {
+    if (localStorage.getItem('artisan_access')) {
+      try {
+        const user = await authApi.me()
+        setCurrentUser(user)
+        const roleLower = user.role.toLowerCase()
+        const frontendRole = roleLower === 'staff' ? 'waiter' : roleLower
+        setCurrentRole(frontendRole)
+      } catch (err) {
+        console.error("Failed to load user profile:", err)
+        logout()
+      }
+    }
+    setAuthLoading(false)
+  }, [logout])
+
+  useEffect(() => {
+    refreshUser()
+  }, [refreshUser])
+
+  const login = async (email, password) => {
+    const res = await authApi.login({ email, password })
+    localStorage.setItem('artisan_access', res.access)
+    localStorage.setItem('artisan_refresh', res.refresh)
+    localStorage.setItem('artisan_user', JSON.stringify(res.user))
+    setCurrentUser(res.user)
+    const roleLower = res.user.role.toLowerCase()
+    const frontendRole = roleLower === 'staff' ? 'waiter' : roleLower
+    setCurrentRole(frontendRole)
+    return res.user
+  }
+
+  const loginWaiter = async (waiterId, pin) => {
+    const res = await authApi.waiterLogin({ waiter_id: waiterId, pin })
+    localStorage.setItem('artisan_access', res.access)
+    localStorage.setItem('artisan_refresh', res.refresh)
+    localStorage.setItem('artisan_user', JSON.stringify(res.user))
+    setCurrentUser(res.user)
+    setCurrentWaiter(res.waiter)
+    setCurrentRole('waiter')
+    return res.waiter
+  }
+
+  const isAuthenticated = !!currentUser
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // Fetch helpers
@@ -507,6 +571,13 @@ export function AppProvider({ children }) {
         unreadCount,
         loading,
         apiError,
+        currentUser,
+        isAuthenticated,
+        authLoading,
+        login,
+        loginWaiter,
+        logout,
+        refreshUser,
         currentRole,       setCurrentRole,
         currentWaiter,     setCurrentWaiter,
         waiterRequests,    setWaiterRequests,

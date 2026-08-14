@@ -1,18 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
+import { authApi } from '../api'
 import './LoginPage.css'
-
-const WAITERS = [
-  { id: 'priya', name: 'Priya', avatar: '👩‍🍳', station: 'Station 2 - Patio', pin: '1234' },
-  { id: 'rahul', name: 'Rahul', avatar: '👨‍🍳', station: 'Station 1 - Indoor', pin: '4321' },
-  { id: 'amit', name: 'Amit', avatar: '🧑‍🍳', station: 'Station 3 - Lounge', pin: '1111' },
-  { id: 'sarah', name: 'Sarah Jenkins', avatar: '👩‍💼', station: 'Station 4 - Terrace', pin: '2222' },
-]
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { setCurrentRole, setCurrentWaiter } = useApp()
+  const { login, loginWaiter } = useApp()
   
   const [loginMode, setLoginMode] = useState('admin') // 'admin' | 'waiter'
   
@@ -20,32 +14,82 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
   
   // Waiter PIN credentials
-  const [selectedWaiter, setSelectedWaiter] = useState(WAITERS[0])
+  const [waiters, setWaiters] = useState([])
+  const [waitersLoading, setWaitersLoading] = useState(true)
+  const [waitersError, setWaitersError] = useState('')
+  const [selectedWaiter, setSelectedWaiter] = useState(null)
   const [pin, setPin] = useState('')
   const [pinError, setPinError] = useState('')
+  const [waiterLoginLoading, setWaiterLoginLoading] = useState(false)
 
-  const handleAdminLogin = (e) => {
+  useEffect(() => {
+    async function loadWaiters() {
+      try {
+        setWaitersLoading(true)
+        const data = await authApi.getWaiters()
+        setWaiters(data)
+        if (data.length > 0) {
+          setSelectedWaiter(data[0])
+        }
+      } catch (err) {
+        console.error(err)
+        setWaitersError('Unable to connect to the server. Please try again.')
+      } finally {
+        setWaitersLoading(false)
+      }
+    }
+    if (loginMode === 'waiter') {
+      loadWaiters()
+    }
+  }, [loginMode])
+
+  const handleAdminLogin = async (e) => {
     e.preventDefault()
-    // Clear any leftover waiter session
-    try { localStorage.removeItem('artisan_waiter') } catch {}
-    setCurrentRole('admin')
-    setCurrentWaiter(null)
-    navigate('/dashboard')
-  }
-
-  const handleWaiterLogin = () => {
-    if (pin === selectedWaiter.pin) {
-      setCurrentRole('waiter')
-      setCurrentWaiter(selectedWaiter)
-      setPinError('')
-      navigate('/dashboard')
-    } else {
-      setPinError('Incorrect PIN. Please try again.')
-      setPin('')
+    if (!email || !password) {
+      setError('Please enter both email and password.')
+      return
+    }
+    setError('')
+    setLoading(true)
+    try {
+      // Clear any leftover waiter session
+      try { localStorage.removeItem('artisan_waiter') } catch {}
+      const user = await login(email, password)
+      
+      // Redirect based on role
+      if (user.role === 'ADMIN' || user.role === 'MANAGER' || user.role === 'STAFF') {
+        navigate('/dashboard')
+      } else {
+        setError('Unauthorized role.')
+      }
+    } catch (err) {
+      console.error(err)
+      setError(err.message || 'Invalid email or password.')
+    } finally {
+      setLoading(false)
     }
   }
+
+  const handleWaiterLogin = async () => {
+    if (!selectedWaiter) return
+    setWaiterLoginLoading(true)
+    setPinError('')
+    try {
+      await loginWaiter(selectedWaiter.id, pin)
+      navigate('/dashboard')
+    } catch (err) {
+      console.error(err)
+      setPinError(err.message || 'Incorrect PIN. Please try again.')
+      setPin('')
+    } finally {
+      setWaiterLoginLoading(false)
+    }
+  }
+
 
   const handleKeyPress = (num) => {
     setPinError('')
@@ -140,25 +184,53 @@ export default function LoginPage() {
               </button>
             </div>
 
-            <button type="submit" className="login-form__submit" id="btn-login">
-              Login
+            {error && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{error}</div>}
+
+            <button type="submit" className="login-form__submit" id="btn-login" disabled={loading}>
+              {loading ? 'Logging in...' : 'Login'}
               <span className="login-form__submit-arrow">→</span>
             </button>
           </form>
+
         ) : (
           /* Waiter PIN Mode */
           <div className="waiter-login-wrap">
             {/* Profiles */}
             <div className="waiter-profiles">
-              {WAITERS.map((w) => (
+              {waitersLoading && (
+                <div style={{ color: '#fff', textAlign: 'center', width: '100%', padding: '1rem' }}>
+                  Loading waiters...
+                </div>
+              )}
+              {waitersError && (
+                <div style={{ color: '#ff4d4d', textAlign: 'center', width: '100%', padding: '1rem' }}>
+                  {waitersError}
+                </div>
+              )}
+              {!waitersLoading && !waitersError && waiters.length === 0 && (
+                <div style={{ color: '#aaa', textAlign: 'center', width: '100%', padding: '1rem' }}>
+                  No active waiters are currently available.
+                </div>
+              )}
+              {!waitersLoading && !waitersError && waiters.map((w) => (
                 <button
                   key={w.id}
-                  className={`waiter-profile-item ${selectedWaiter.id === w.id ? 'active' : ''}`}
+                  className={`waiter-profile-item ${selectedWaiter?.id === w.id ? 'active' : ''}`}
                   onClick={() => { setSelectedWaiter(w); setPin(''); setPinError(''); }}
                 >
-                  <span className="waiter-profile-avatar">{w.avatar}</span>
+                  <span className="waiter-profile-avatar">
+                    {w.photo ? (
+                      <img
+                        src={w.photo}
+                        alt={w.name}
+                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      '👤'
+                    )}
+                  </span>
                   <span className="waiter-profile-name">{w.name}</span>
-                  <span className="waiter-profile-station">{w.station.split(' - ')[1]}</span>
+                  <span className="waiter-profile-station">{w.section}</span>
                 </button>
               ))}
             </div>
@@ -183,21 +255,23 @@ export default function LoginPage() {
                   type="button"
                   className="keypad-btn"
                   onClick={() => handleKeyPress(num.toString())}
+                  disabled={waiterLoginLoading}
                 >
                   {num}
                 </button>
               ))}
-              <button type="button" className="keypad-btn keypad-btn--clear" onClick={handleClear}>
+              <button type="button" className="keypad-btn keypad-btn--clear" onClick={handleClear} disabled={waiterLoginLoading}>
                 Clear
               </button>
               <button
                 type="button"
                 className="keypad-btn"
                 onClick={() => handleKeyPress('0')}
+                disabled={waiterLoginLoading}
               >
                 0
               </button>
-              <button type="button" className="keypad-btn keypad-btn--del" onClick={handleBackspace}>
+              <button type="button" className="keypad-btn keypad-btn--del" onClick={handleBackspace} disabled={waiterLoginLoading}>
                 ⌫
               </button>
             </div>
@@ -207,12 +281,13 @@ export default function LoginPage() {
               type="button"
               className="login-form__submit waiter-submit-btn"
               onClick={handleWaiterLogin}
-              disabled={pin.length < 4}
+              disabled={pin.length < 4 || waiterLoginLoading}
             >
-              Login as {selectedWaiter.name}
+              {waiterLoginLoading ? 'Verifying PIN...' : `Login as ${selectedWaiter?.name || ''}`}
               <span className="login-form__submit-arrow">→</span>
             </button>
           </div>
+
         )}
 
         <p className="login-card__secure">Secure access for authorized personnel only.</p>
