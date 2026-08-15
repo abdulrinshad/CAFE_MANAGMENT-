@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
-import { invoiceApi } from '../api'
+import { invoiceApi, orderApi } from '../api'
 import './InvoicePreviewPage.css'
 
 export default function InvoicePreviewPage() {
@@ -18,6 +18,16 @@ export default function InvoicePreviewPage() {
   const [invoice,  setInvoice]  = useState(null)
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState('')
+  const [sendingWa, setSendingWa] = useState(false)
+
+  const refreshInvoice = async () => {
+    try {
+      const data = await invoiceApi.getByOrder(id)
+      setInvoice(data)
+    } catch (e) {
+      console.error(e)
+    }
+  }
 
   // ── Load invoice from API ──────────────────────────────────────────────────
   useEffect(() => {
@@ -45,46 +55,103 @@ export default function InvoicePreviewPage() {
     return () => { cancelled = true }
   }, [id])
 
+  useEffect(() => {
+    window.addEventListener('focus', refreshInvoice)
+    return () => {
+      window.removeEventListener('focus', refreshInvoice)
+    }
+  }, [id])
+
+  // Helper to normalize the phone number
+  const normalizeWhatsAppPhone = (rawPhone) => {
+    if (!rawPhone) return ''
+    const digits = rawPhone.replace(/[^\d]/g, '')
+    if (digits.length === 10) {
+      return `91${digits}`
+    }
+    return digits
+  }
+
   // ── WhatsApp click-to-chat ─────────────────────────────────────────────────
-  const handleSendWhatsApp = () => {
+  const handleSendWhatsApp = async () => {
     if (!invoice) return
-    const phone   = invoice.whatsapp_number ? `91${invoice.whatsapp_number}` : ''
-    const invNum  = invoice.invoice_number
-    const table   = invoice.table_label || `Order #${id}`
-    const sub     = Number(invoice.subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })
-    const tax     = Number(invoice.tax_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })
-    const total   = Number(invoice.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })
-    const receipt = invoice.receipt_url || ''
+    
+    let phone = invoice.customer_whatsapp || invoice.whatsapp_number
+    if (!phone) {
+      const input = prompt("Enter customer WhatsApp number (+91XXXXXXXXXX):")
+      if (!input) return
+      const digitsOnly = input.replace(/[^\d]/g, '')
+      phone = digitsOnly.length === 10 ? `+91${digitsOnly}` : `+${digitsOnly}`
+    }
 
-    const msg = encodeURIComponent(
-      `🍵 *Artisan Brew*\n\n` +
-      `Invoice: ${invNum}\n` +
-      `Table: ${table}\n\n` +
-      `Subtotal: ₹${sub}\n` +
-      `Tax (GST): ₹${tax}\n` +
-      `*Total: ₹${total}*\n\n` +
-      (receipt ? `Digital Bill: ${receipt}\n\n` : '') +
-      `Thank you for visiting! ☕`
-    )
+    // Validate phone number: length 10 or 12 digits (with 91)
+    const digits = phone.replace(/[^\d]/g, '')
+    if (!digits || !(digits.length === 10 || (digits.length === 12 && digits.startsWith('91')))) {
+      alert("Please enter a valid WhatsApp number.")
+      return
+    }
 
-    const url = phone
-      ? `https://wa.me/${phone}?text=${msg}`
-      : `https://wa.me/?text=${msg}`
+    setSendingWa(true)
+    try {
+      // 1. Update backend receipt status
+      const updatedInvoice = await orderApi.markReceiptShared(id, {
+        method: 'WHATSAPP',
+        customer_whatsapp: phone
+      })
+      setInvoice(updatedInvoice)
 
-    window.open(url, '_blank', 'noopener,noreferrer')
-    // Navigate to success after opening WhatsApp
-    navigate(`/orders/${id}/success`, {
-      state: {
-        invoice_number:  invNum,
-        transaction_ref: invoice.id ? `AB-${String(invoice.id).padStart(5, '0')}` : '',
-        whatsapp_number: invoice.whatsapp_number,
-        whatsapp_opened: true,
-      }
-    })
+      // 2. Open WhatsApp in new tab
+      const phoneDigits = normalizeWhatsAppPhone(phone)
+      const invNum = invoice.invoice_number
+      const ordNum = invoice.order_number || `ORD-${String(id).padStart(4, '0')}`
+      const table = invoice.table_label || `Order #${id}`
+      const sub = Number(invoice.subtotal).toFixed(2)
+      const tax = Number(invoice.tax_amount).toFixed(2)
+      const total = Number(invoice.total).toFixed(2)
+      
+      const itemsText = (invoice.items || []).map(item => {
+        const qty = item.quantity
+        const name = item.product_name
+        const itemSub = Number(item.subtotal).toFixed(2)
+        return `${name} × ${qty} — ₹${itemSub}`
+      }).join('\n')
+
+      const rawMessage = 
+        `Hello,\n\n` +
+        `Thank you for visiting Artisan Brew.\n\n` +
+        `Invoice: ${invNum}\n` +
+        `Order: ${ordNum}\n` +
+        `Table: ${table}\n\n` +
+        `Items:\n${itemsText}\n\n` +
+        `Subtotal: ₹${sub}\n` +
+        `GST (5%): ₹${tax}\n` +
+        `Total: ₹${total}\n\n` +
+        `Please review your bill.\n\n` +
+        `Thank you,\n` +
+        `Artisan Brew`
+
+      const msg = encodeURIComponent(rawMessage)
+      const url = `https://wa.me/${phoneDigits}?text=${msg}`
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      alert("Unable to prepare WhatsApp message. Please try again.")
+    } finally {
+      setSendingWa(false)
+    }
   }
 
   const handleGoToPayment = () => navigate(`/orders/${id}/checkout`)
-  const handlePrint       = () => window.print()
+  
+  const handlePrint = async () => {
+    window.print()
+    try {
+      const data = await orderApi.markReceiptPrinted(id)
+      setInvoice(data)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
 
   // ── Render states ──────────────────────────────────────────────────────────
   if (loading) {
@@ -118,6 +185,13 @@ export default function InvoicePreviewPage() {
   const total    = Number(invoice.total)
   const isPaid   = invoice.status === 'paid'
   const dateInfo = invoice.created_at_str || {}
+
+  const isReceiptShared = invoice.receipt_status === 'SHARED'
+  const isReceiptPrinted = invoice.receipt_status === 'PRINTED'
+  const isReceiptNotShared = invoice.receipt_status === 'NOT_SHARED'
+
+  const isWhatsAppShared = invoice.receipt_status === 'SHARED' && invoice.receipt_method === 'WHATSAPP'
+
 
   return (
     <AdminLayout
@@ -225,19 +299,17 @@ export default function InvoicePreviewPage() {
               <h3 className="invoice-section-heading">Payment Details</h3>
               <div className="payment-detail-box">
                 <div className="payment-box-row">
-                  <span className="payment-box-lbl">Method:</span>
-                  <span className="payment-box-val">Pending</span>
-                </div>
-                <div className="payment-box-row">
-                  <span className="payment-box-lbl">Status:</span>
-                  <span className={`payment-box-val ${isPaid ? 'text-green' : 'text-red'}`}>
-                    {isPaid ? 'Paid' : 'Unpaid'}
+                  <span className="payment-box-lbl">Receipt:</span>
+                  <span className={`payment-box-val ${
+                    isReceiptShared || isReceiptPrinted ? 'text-green' : 'text-red'
+                  }`} style={{ fontWeight: 'bold', textTransform: 'capitalize' }}>
+                    {invoice.receipt_status ? invoice.receipt_status.replace('_', ' ').toLowerCase() : 'not shared'}
                   </span>
                 </div>
-                {invoice.whatsapp_number && (
+                {invoice.customer_whatsapp && (
                   <div className="payment-box-row">
                     <span className="payment-box-lbl">WhatsApp:</span>
-                    <span className="payment-box-val">+91 {invoice.whatsapp_number}</span>
+                    <span className="payment-box-val">{invoice.customer_whatsapp}</span>
                   </div>
                 )}
               </div>
@@ -264,33 +336,52 @@ export default function InvoicePreviewPage() {
 
         {/* Actions footer */}
         <div className="invoice-actions-footer">
-          {invoice.whatsapp_number ? (
-            <button
-              className="btn-primary py-3 px-6"
-              onClick={handleSendWhatsApp}
-              id="send-whatsapp-btn"
-            >
-              📱 Send via WhatsApp
-            </button>
+          {isPaid ? (
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%' }}>
+              <div className="receipt-sent-indicator" style={{ display: 'flex', alignItems: 'center', color: 'var(--color-green, #2e7d32)', fontWeight: 'bold', marginRight: 16 }}>
+                ✓ PAID & TABLE AVAILABLE
+              </div>
+              <button className="btn-outline py-3 px-6" onClick={handlePrint}>
+                🖨 Print Receipt
+              </button>
+            </div>
           ) : (
-            <button
-              className="btn-outline py-3 px-6"
-              onClick={() => navigate(`/orders/${id}`)}
-            >
-              ← Edit Order
-            </button>
+            <>
+              {invoice.receipt_method === 'WHATSAPP' && (
+                <button
+                  type="button"
+                  className="btn-primary py-3 px-6"
+                  onClick={handleSendWhatsApp}
+                  disabled={sendingWa}
+                  style={{
+                    background: '#16a34a',
+                    borderColor: '#16a34a',
+                  }}
+                >
+                  {sendingWa ? 'Sending...' : '✓ Sent via WhatsApp'}
+                </button>
+              )}
+
+              {invoice.receipt_method === 'PRINT' && (
+                <button
+                  type="button"
+                  className="btn-outline py-3 px-6"
+                  onClick={handlePrint}
+                >
+                  🖨 Print Bill
+                </button>
+              )}
+
+              <button
+                className="btn-primary py-3 px-6"
+                onClick={handleGoToPayment}
+                id="go-to-payment-btn"
+                style={{ background: 'var(--color-espresso)' }}
+              >
+                Proceed to Payment →
+              </button>
+            </>
           )}
-          <button
-            className="btn-primary py-3 px-6"
-            onClick={handleGoToPayment}
-            id="go-to-payment-btn"
-            style={{ background: 'var(--color-espresso)' }}
-          >
-            Proceed to Payment →
-          </button>
-          <button className="btn-outline py-3 px-6" onClick={handlePrint}>
-            🖨 Print Bill
-          </button>
         </div>
       </div>
     </AdminLayout>

@@ -16,6 +16,9 @@ def test_waiter_billing_workflow():
     print(" TESTING WAITER-SIDE BILLING & PAYMENT WORKFLOW   ")
     print("==================================================")
     client = APIClient()
+    from django.contrib.auth.models import User
+    admin_user = User.objects.get(username='admin')
+    client.force_authenticate(user=admin_user)
 
     # STEP 1: Fetch/Create Table T-08
     table = Table.objects.filter(name='T-08').first()
@@ -80,7 +83,7 @@ def test_waiter_billing_workflow():
     inv_obj = Invoice.objects.filter(order_id=order_id).first()
     assert inv_obj is not None, "Invoice record missing in PostgreSQL!"
     assert inv_obj.invoice_number == invoice_no
-    assert inv_obj.whatsapp_number == '9876543210'
+    assert inv_obj.whatsapp_number == '+919876543210'
     print(f"[STEP 6] PostgreSQL Invoice Record verified: {inv_obj}")
 
     # STEP 7: Table status is now bill_requested

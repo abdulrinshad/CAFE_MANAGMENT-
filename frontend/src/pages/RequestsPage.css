@@ -214,3 +214,36 @@
 @media (max-width: 600px) {
   .requests-grid { grid-template-columns: 1fr; }
 }
+
+/* Toast Notifications */
+.requests-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 12px 24px;
+  border-radius: 8px;
+  color: var(--color-white);
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: requests-toast-in 0.3s ease;
+}
+.requests-toast--success {
+  background: var(--color-green, #16a34a);
+}
+.requests-toast--error {
+  background: #ef4444;
+}
+@keyframes requests-toast-in {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+  }
+}

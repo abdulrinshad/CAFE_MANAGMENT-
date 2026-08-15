@@ -77,6 +77,7 @@ export default function CheckoutPage() {
           payment_method:  paymentMethod,
           total:           order?.total             || 0,
           whatsapp_opened: false,
+          invoice:         invoice,
         }
       })
     } catch (err) {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
@@ -12,8 +12,13 @@ export default function TablesPage() {
   const navigate = useNavigate()
   const {
     tables, addTable, updateTable, deleteTable, setTableStatus, setTableActive,
-    currentRole, orders, loading, apiError, fetchTables,
+    currentRole, orders, loading, apiError, fetchTables, fetchOrders,
   } = useApp()
+
+  useEffect(() => {
+    fetchTables()
+    fetchOrders()
+  }, [fetchTables, fetchOrders])
 
   const [activeFilter,   setActiveFilter]   = useState('All Tables')
   const [addTableOpen,   setAddTableOpen]   = useState(false)
@@ -202,10 +207,17 @@ export default function TablesPage() {
                           </button>
                           <button
                             className="btn-primary btn-sm"
-                            onClick={() => orderId
-                              ? navigate(`/orders/${orderId}`)
-                              : navigate('/orders')
-                            }
+                            onClick={() => {
+                              if (activeOrd) {
+                                if (activeOrd.receipt_method) {
+                                  navigate(`/orders/${activeOrd.id}/invoice`)
+                                } else {
+                                  navigate(`/orders/${activeOrd.id}`)
+                                }
+                              } else {
+                                navigate('/orders')
+                              }
+                            }}
                             id={`view-order-table-${table.id}`}
                           >
                             View Order
@@ -291,7 +303,18 @@ export default function TablesPage() {
                 table={table}
                 onProcessPayment={() => setPaymentTable(table)}
                 onAddItem={() => navigate('/menu/add')}
-                onView={() => navigate('/orders')}
+                onView={() => {
+                  const activeOrd = orders?.find(o => o.table === table.label && !['COMPLETED', 'CANCELLED'].includes(o.status))
+                  if (activeOrd) {
+                    if (activeOrd.receipt_method) {
+                      navigate(`/orders/${activeOrd.id}/invoice`)
+                    } else {
+                      navigate(`/orders/${activeOrd.id}`)
+                    }
+                  } else {
+                    navigate('/orders')
+                  }
+                }}
                 onQR={() => table.qrCodeId && navigate(`/qr-codes/${table.qrCodeId}`)}
                 onDelete={() => setDeleteTarget(table)}
                 onToggleActive={() => setTableActive(table.id, !table.active)}

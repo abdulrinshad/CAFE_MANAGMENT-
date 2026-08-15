@@ -15,7 +15,12 @@ class CustomTokenObtainPairView(APIView):
         serializer = CustomTokenObtainPairSerializer(data=request.data)
         if serializer.is_valid():
             return Response(serializer.validated_data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_401_UNAUTHORIZED)
+        
+        errors = serializer.errors
+        non_field_errors = errors.get('non_field_errors', [])
+        if any("permission" in str(err) for err in non_field_errors):
+            return Response(errors, status=status.HTTP_403_FORBIDDEN)
+        return Response(errors, status=status.HTTP_401_UNAUTHORIZED)
 
 class LogoutView(APIView):
     permission_classes = [AllowAny]

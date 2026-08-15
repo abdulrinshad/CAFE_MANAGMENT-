@@ -33,12 +33,12 @@ class OrderItemAdmin(admin.ModelAdmin):
 
 @admin.register(Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
-    list_display  = ['invoice_number', 'order', 'status', 'whatsapp_number',
+    list_display  = ['invoice_number', 'order', 'status', 'receipt_status', 'customer_whatsapp',
                      'subtotal', 'tax_amount', 'total', 'created_at', 'paid_at']
-    list_filter   = ['status', 'created_at']
-    search_fields = ['invoice_number', 'order__order_number', 'whatsapp_number']
+    list_filter   = ['status', 'receipt_status', 'created_at']
+    search_fields = ['invoice_number', 'order__order_number', 'customer_whatsapp']
     readonly_fields = ['invoice_number', 'token', 'subtotal', 'tax_amount', 'total',
-                       'created_at', 'updated_at', 'paid_at']
+                       'created_at', 'updated_at', 'paid_at', 'receipt_shared_at', 'receipt_printed_at']
     ordering = ['-created_at']
 
 

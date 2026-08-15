@@ -40,10 +40,10 @@ function notifToRequest(n) {
     orderRef: n.order_number,
     time:     relativeTime(n.created_at),
     rawTime:  n.created_at,
-    // Map to request status based on is_read + type
-    status: n.is_read
-      ? 'completed'
-      : (n._in_progress ? 'in_progress' : 'new'),
+    status:   n.status || 'new',
+    whatsapp: n.whatsapp_number,
+    invoiceNo: n.invoice_number,
+    amount:   n.total_amount,
   }
 }
 
@@ -54,24 +54,32 @@ function typeLabel(type) {
   if (type === 'table_attention')   return 'Needs Attention'
   if (type === 'payment_completed') return 'Payment Done'
   if (type === 'status_changed')    return 'Status Changed'
+  if (type === 'bill_share')        return 'Bill Share Request'
   return type
 }
 
 export default function RequestsPage() {
   const navigate = useNavigate()
-  const { notifications, markNotificationRead, fetchNotifications } = useApp()
+  const { notifications, updateNotificationStatus, fetchNotifications } = useApp()
 
-  // Local in-progress tracking (persisted in component until page reload)
-  const [inProgress, setInProgress] = useState({})  // { [notifId]: true }
+  // Local actions loading state: { [reqId]: 'accepting' | 'dismissing' | 'completing' }
+  const [actionLoading, setActionLoading] = useState({})
+  // Toast notifications state: { type: 'success' | 'error', message: '...' }
+  const [toast, setToast] = useState(null)
+
+  const showToast = (type, message) => {
+    setToast({ type, message })
+    setTimeout(() => setToast(null), 3000)
+  }
 
   // Only show actionable types on Requests page
   const actionable = (notifications || []).filter((n) =>
-    ['new_order', 'bill_requested', 'table_attention'].includes(n.type)
+    ['new_order', 'bill_requested', 'table_attention', 'bill_share'].includes(n.type)
   )
 
   const requests = actionable.map((n) => ({
     ...notifToRequest(n),
-    status: n.is_read ? 'completed' : (inProgress[n.id] ? 'in_progress' : 'new'),
+    status: n.status || 'new', // map directly to backend status
   }))
 
   const [activeTab, setActiveTab] = useState('All Requests')
@@ -85,33 +93,69 @@ export default function RequestsPage() {
   }
 
   const filtered = requests.filter((r) => {
-    if (activeTab === 'All Requests') return true
+    if (activeTab === 'All Requests') return r.status !== 'dismissed'
     if (activeTab === 'New')          return r.status === 'new'
     if (activeTab === 'In Progress')  return r.status === 'in_progress'
     if (activeTab === 'Completed')    return r.status === 'completed'
     return true
   })
 
-  const handleAccept = (req) => {
-    setInProgress((prev) => ({ ...prev, [req.id]: true }))
-    // If it's a bill request and we have an order id, navigate to invoice
-    if (req.type === 'bill_requested' && req.orderId) {
-      navigate(`/orders/${req.orderId}/invoice`)
+  const handleApiError = (err) => {
+    console.error("API error updating request:", err)
+    if (err.status === 404) {
+      showToast('error', 'Request no longer exists. Refreshing requests...')
+      fetchNotifications()
+    } else if (err.status === 401) {
+      showToast('error', 'Your session has expired. Please log in again.')
+    } else if (err.status === 403) {
+      showToast('error', "You don't have permission to update this request.")
+    } else if (err.status === 400 && err.message) {
+      showToast('error', err.message)
+    } else {
+      showToast('error', 'Unable to update request. Please try again.')
+    }
+  }
+
+  const handleAccept = async (req) => {
+    if (actionLoading[req.id]) return
+    setActionLoading((prev) => ({ ...prev, [req.id]: 'accepting' }))
+    try {
+      await updateNotificationStatus(req.id, 'in_progress')
+      showToast('success', 'Request accepted')
+      if ((req.type === 'bill_requested' || req.type === 'bill_share') && req.orderId) {
+        navigate(`/orders/${req.orderId}/checkout`)
+      }
+    } catch (err) {
+      handleApiError(err)
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [req.id]: null }))
     }
   }
 
   const handleDismiss = async (req) => {
-    await markNotificationRead(req.id)
+    if (actionLoading[req.id]) return
+    setActionLoading((prev) => ({ ...prev, [req.id]: 'dismissing' }))
+    try {
+      await updateNotificationStatus(req.id, 'dismissed')
+      showToast('success', 'Request dismissed')
+    } catch (err) {
+      handleApiError(err)
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [req.id]: null }))
+    }
   }
 
   const handleMarkCompleted = async (req) => {
-    await markNotificationRead(req.id)
-    setInProgress((prev) => {
-      const next = { ...prev }
-      delete next[req.id]
-      return next
-    })
-    await fetchNotifications()
+    if (actionLoading[req.id]) return
+    setActionLoading((prev) => ({ ...prev, [req.id]: 'completing' }))
+    try {
+      await updateNotificationStatus(req.id, 'completed')
+      showToast('success', 'Request completed')
+    } catch (err) {
+      handleApiError(err)
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [req.id]: null }))
+    }
   }
 
   const newCount = requests.filter((r) => r.status === 'new').length
@@ -163,7 +207,7 @@ export default function RequestsPage() {
           {filtered.map((req) => (
             <div
               key={req.id}
-              className={`waiter-request-card ${req.status}${req.type === 'bill_requested' ? ' bill-req' : ''}`}
+              className={`waiter-request-card ${req.status}${req.type === 'bill_requested' || req.type === 'bill_share' ? ' bill-req' : ''}`}
             >
               <div className="waiter-request-card__header">
                 <span className="request-table-badge">
@@ -176,13 +220,30 @@ export default function RequestsPage() {
                 </div>
               </div>
 
-              <div className="waiter-request-card__body">
-                <div className="request-type-label">{typeLabel(req.type)}</div>
-                <p className="request-msg">"{req.message}"</p>
-                <div className="request-time">
-                  <ClockIcon /> {req.time}
+              {req.type === 'bill_share' ? (
+                <div className="waiter-request-card__body">
+                  <div className="request-type-label">BILL READY</div>
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {req.invoiceNo && <div><strong>Invoice:</strong> {req.invoiceNo}</div>}
+                    {req.amount && <div><strong>Amount:</strong> ₹{Number(req.amount).toFixed(2)}</div>}
+                    {req.whatsapp && <div><strong>Customer WhatsApp:</strong> {req.whatsapp}</div>}
+                  </div>
+                  <p className="request-msg" style={{ marginTop: 8 }}>
+                    "Bill is ready to be shared with the customer."
+                  </p>
+                  <div className="request-time">
+                    <ClockIcon /> {req.time}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="waiter-request-card__body">
+                  <div className="request-type-label">{typeLabel(req.type)}</div>
+                  <p className="request-msg">"{req.message}"</p>
+                  <div className="request-time">
+                    <ClockIcon /> {req.time}
+                  </div>
+                </div>
+              )}
 
               <div className="waiter-request-card__actions">
                 {req.status === 'new' && (
@@ -191,15 +252,19 @@ export default function RequestsPage() {
                       className="btn-outline btn-sm"
                       onClick={() => handleDismiss(req)}
                       id={`dismiss-req-${req.id}`}
+                      disabled={!!actionLoading[req.id]}
                     >
-                      Dismiss
+                      {actionLoading[req.id] === 'dismissing' ? 'Dismissing...' : 'Dismiss'}
                     </button>
                     <button
                       className="btn-primary btn-sm"
                       onClick={() => handleAccept(req)}
                       id={`accept-req-${req.id}`}
+                      disabled={!!actionLoading[req.id]}
                     >
-                      ✓ Accept
+                      {actionLoading[req.id] === 'accepting' 
+                        ? 'Accepting...' 
+                        : (req.type === 'bill_share' ? 'Accept & Proceed to Payment' : '✓ Accept')}
                     </button>
                   </>
                 )}
@@ -208,9 +273,10 @@ export default function RequestsPage() {
                     className="btn-primary btn-sm w-full"
                     onClick={() => handleMarkCompleted(req)}
                     id={`complete-req-${req.id}`}
+                    disabled={!!actionLoading[req.id]}
                     style={{ background: 'var(--color-green, #16a34a)' }}
                   >
-                    Mark Completed
+                    {actionLoading[req.id] === 'completing' ? 'Completing...' : 'Mark Completed'}
                   </button>
                 )}
                 {req.status === 'completed' && (
@@ -221,6 +287,13 @@ export default function RequestsPage() {
           ))}
         </div>
       </div>
+
+      {/* Success/Error Toast */}
+      {toast && (
+        <div className={`requests-toast requests-toast--${toast.type}`}>
+          {toast.message}
+        </div>
+      )}
     </AdminLayout>
   )
 }
