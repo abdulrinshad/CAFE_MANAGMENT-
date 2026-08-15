@@ -237,3 +237,35 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
         req_obj.save()
         return Response(WaiterRequestSerializer(req_obj, context={'request': request}).data)
 
+    @action(detail=True, methods=['post', 'patch'], url_path='attend')
+    def attend(self, request, pk=None):
+        """
+        Atomically claim/attend a waiter request.
+        Prevents double-attendance using database row-level locking (select_for_update).
+        """
+        from django.db import transaction
+        waiter_name = request.data.get('assigned_waiter') or request.data.get('waiter_name') or 'Staff'
+
+        with transaction.atomic():
+            req_obj = WaiterRequest.objects.select_for_update().filter(pk=pk).first()
+            if not req_obj:
+                return Response({'detail': 'Request not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Check if already attended by someone else
+            if req_obj.status in [WaiterRequest.STATUS_IN_PROGRESS, WaiterRequest.STATUS_COMPLETED] or (req_obj.assigned_waiter and req_obj.assigned_waiter != waiter_name):
+                assigned_by = req_obj.assigned_waiter or 'another waiter'
+                return Response({
+                    'detail': f'This request has already been attended by {assigned_by}.',
+                    'already_attended': True,
+                    'assigned_waiter': req_obj.assigned_waiter,
+                    'status': req_obj.status,
+                    'request': WaiterRequestSerializer(req_obj, context={'request': request}).data
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            req_obj.status = WaiterRequest.STATUS_IN_PROGRESS
+            req_obj.assigned_waiter = waiter_name
+            req_obj.save()
+
+        return Response(WaiterRequestSerializer(req_obj, context={'request': request}).data, status=status.HTTP_200_OK)
+
+

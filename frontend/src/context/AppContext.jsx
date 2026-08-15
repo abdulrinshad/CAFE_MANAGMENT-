@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
-import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, authApi } from '../api'
+import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, waiterRequestApi, authApi } from '../api'
+
+
 
 const AppContext = createContext(null)
 
@@ -194,12 +196,21 @@ export function AppProvider({ children }) {
       setNotifications(items)
       setUnreadCount(countData.count ?? 0)
     } catch (err) {
-      // Silent — don't show error banner for notification polling failures
       console.warn('fetchNotifications error:', err)
     }
   }, [])
 
-  // Load on mount + start notification polling
+  const fetchWaiterRequests = useCallback(async () => {
+    try {
+      const list = await waiterRequestApi.list()
+      const items = Array.isArray(list) ? list : (list.results ?? [])
+      setWaiterRequests(items)
+    } catch (err) {
+      console.warn('fetchWaiterRequests error:', err)
+    }
+  }, [])
+
+  // Load on mount + start notification and request polling
   useEffect(() => {
     fetchCategories()
     fetchProducts()
@@ -207,16 +218,19 @@ export function AppProvider({ children }) {
     fetchQRCodes()
     fetchOrders()
     fetchNotifications()
+    fetchWaiterRequests()
 
-    // Poll unread count every 30 seconds
+    // Poll notifications & waiter requests every 4 seconds for live multi-waiter updates
     pollRef.current = setInterval(() => {
       fetchNotifications()
-    }, 30000)
+      fetchWaiterRequests()
+    }, 4000)
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
-  }, [fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications])
+  }, [fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications, fetchWaiterRequests])
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // Field normalisers (API → UI shape)
@@ -551,6 +565,21 @@ export function AppProvider({ children }) {
   // ─────────────────────────────────────────────────────────────────────────
   // Waiter request helpers
   // ─────────────────────────────────────────────────────────────────────────
+  const createWaiterRequest = async (data) => {
+    const created = await waiterRequestApi.create(data)
+    setWaiterRequests((prev) => [created, ...prev])
+    await fetchNotifications()
+    await fetchWaiterRequests()
+    return created
+  }
+
+  const attendWaiterRequest = async (id, waiterName) => {
+    const result = await waiterRequestApi.attend(id, { assigned_waiter: waiterName })
+    await fetchNotifications()
+    await fetchWaiterRequests()
+    return result
+  }
+
   const updateRequestStatus = (id, status) => {
     setWaiterRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)))
   }
@@ -581,6 +610,10 @@ export function AppProvider({ children }) {
         currentRole,       setCurrentRole,
         currentWaiter,     setCurrentWaiter,
         waiterRequests,    setWaiterRequests,
+        fetchWaiterRequests,
+        createWaiterRequest,
+        attendWaiterRequest,
+
         updateRequestStatus,
         dismissRequest,
         // product actions

@@ -180,14 +180,30 @@ export default function TablesPage() {
                     {/* Footer: action buttons */}
                     <div className="waiter-table-card__footer">
                       {isAvailable && (
-                        <button
-                          className="btn-primary btn-sm w-full"
-                          onClick={() => navigate(`/orders/new?table=${table.id}`)}
-                          id={`start-order-table-${table.id}`}
-                        >
-                          + Start Order
-                        </button>
+                        <div className="waiter-table-card__actions">
+                          <button
+                            className="btn-primary btn-sm"
+                            onClick={() => navigate(`/orders/new?table=${table.id}`)}
+                            id={`start-order-table-${table.id}`}
+                          >
+                            + Start Order
+                          </button>
+                          {table.qrCodeId && (
+                            <button
+                              className="btn-outline btn-sm"
+                              title="View QR Code"
+                              onClick={() => navigate(`/qr-codes/${table.qrCodeId}`)}
+                              id={`qr-table-${table.id}`}
+                              style={{ flex: '0 0 auto', padding: '0 10px' }}
+                            >
+                              QR
+                            </button>
+                          )}
+                        </div>
                       )}
+
+
+
                       {(isOccupied || isBillReq) && (
                         <div className="waiter-table-card__actions">
                           <button

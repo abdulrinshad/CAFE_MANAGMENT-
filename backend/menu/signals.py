@@ -44,6 +44,8 @@ def auto_create_qr_for_table(sender, instance, created, **kwargs):
 
     menu_url = f'http://localhost:5173/customer/menu?table={instance.name}'
 
+
+
     qr = QRCode(
         table    = instance,
         qr_id    = qr_id,

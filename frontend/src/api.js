@@ -10,8 +10,9 @@ const BASE = '/api/v1'
 // ── Generic fetch helper ──────────────────────────────────────────────────────
 
 async function request(method, path, body = null, isFormData = false, isRetry = false) {
+  const isForm = isFormData || (typeof FormData !== 'undefined' && body instanceof FormData)
   const headers = {}
-  if (body && !isFormData) {
+  if (body && !isForm) {
     headers['Content-Type'] = 'application/json'
   }
 
@@ -26,7 +27,7 @@ async function request(method, path, body = null, isFormData = false, isRetry = 
   }
 
   if (body) {
-    opts.body = isFormData ? body : JSON.stringify(body)
+    opts.body = isForm ? body : JSON.stringify(body)
   }
 
   const res = await fetch(`${BASE}${path}`, opts)
@@ -360,3 +361,43 @@ export const notificationApi = {
   /** POST /notifications/mark_all_read/ */
   markAllRead: () => request('POST', '/notifications/mark_all_read/'),
 }
+
+// ── Waiter Request API ────────────────────────────────────────────────────────
+
+export const waiterRequestApi = {
+  /** GET /requests/ — list active table requests */
+  list: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/requests/${qs ? `?${qs}` : ''}`)
+  },
+
+  /** POST /requests/ — create new table request */
+  create: (data) => request('POST', '/requests/', data),
+
+  /** POST /requests/{id}/attend/ — claim / attend a request */
+  attend: (id, data) => request('POST', `/requests/${id}/attend/`, data),
+
+  /** PATCH /requests/{id}/set_status/ — update status */
+  setStatus: (id, data) => request('PATCH', `/requests/${id}/set_status/`, data),
+}
+
+// ── Waiter API ────────────────────────────────────────────────────────────────
+
+export const waiterApi = {
+  /** GET /waiters/ — list waiters */
+  list: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/waiters/${qs ? `?${qs}` : ''}`)
+  },
+
+  /** POST /waiters/ — create new waiter */
+  create: (data) => request('POST', '/waiters/', data, data instanceof FormData),
+
+  /** PATCH /waiters/{id}/ — update existing waiter */
+  update: (id, data) => request('PATCH', `/waiters/${id}/`, data, data instanceof FormData),
+
+  /** DELETE /waiters/{id}/ — delete waiter */
+  delete: (id) => request('DELETE', `/waiters/${id}/`),
+}
+
+

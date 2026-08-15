@@ -106,7 +106,7 @@ export default function QRCodesPage() {
           </div>
         </div>
 
-        {/* Loading / Empty / Grid */}
+        {/* Table-Specific QR Cards Grid */}
         {loading.qrCodes && qrCodes.length === 0 ? (
           <div style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 0' }}>Loading QR codes…</div>
         ) : qrCodes.length === 0 ? (
@@ -130,6 +130,8 @@ export default function QRCodesPage() {
           </div>
         )}
       </div>
+
+
 
       <ConfirmModal
         open={!!confirmRegen}

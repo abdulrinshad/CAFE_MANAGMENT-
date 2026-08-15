@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import AdminLayout from '../layouts/AdminLayout'
-import { authApi } from '../api'
+import { waiterApi } from '../api'
 import './WaitersPage.css'
 
 export default function WaitersPage() {
@@ -29,34 +29,22 @@ export default function WaitersPage() {
   const fetchWaiters = async () => {
     try {
       setLoading(true)
-      let url = '/waiters/'
-      const params = []
-      if (searchTerm) {
-        params.push(`search=${encodeURIComponent(searchTerm)}`)
-      }
-      if (filterActive !== 'all') {
-        params.push(`is_active=${filterActive}`)
-      }
-      if (params.length > 0) {
-        url += `?${params.join('&')}`
-      }
+      setError('')
+      const params = {}
+      if (searchTerm) params.search = searchTerm
+      if (filterActive !== 'all') params.is_active = filterActive
       
-      const token = localStorage.getItem('artisan_access')
-      const res = await fetch(`/api/v1${url}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (!res.ok) throw new Error('Failed to fetch waiters.')
-      const data = await res.json()
-      setWaiters(Array.isArray(data) ? data : (data.results ?? []))
+      const data = await waiterApi.list(params)
+      const list = Array.isArray(data) ? data : (data.results ?? [])
+      setWaiters(list)
     } catch (err) {
       console.error(err)
-      setError('Unable to load waiters. Please check server connection.')
+      setError(err.message || 'Unable to load waiters. Please check server connection.')
     } finally {
       setLoading(false)
     }
   }
+
 
   useEffect(() => {
     fetchWaiters()
@@ -133,21 +121,10 @@ export default function WaitersPage() {
         formData.append('photo', photoFile)
       }
 
-      const token = localStorage.getItem('artisan_access')
-      const url = isEditing ? `/api/v1/waiters/${currentWaiterId}/` : '/api/v1/waiters/'
-      const method = isEditing ? 'PATCH' : 'POST'
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      })
-
-      if (!res.ok) {
-        const errData = await res.json()
-        throw new Error(errData.detail || Object.values(errData)[0] || 'Operation failed.')
+      if (isEditing) {
+        await waiterApi.update(currentWaiterId, formData)
+      } else {
+        await waiterApi.create(formData)
       }
 
       setShowModal(false)
@@ -163,20 +140,14 @@ export default function WaitersPage() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this waiter?')) return
     try {
-      const token = localStorage.getItem('artisan_access')
-      const res = await fetch(`/api/v1/waiters/${id}/`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (!res.ok) throw new Error('Failed to delete waiter.')
+      await waiterApi.delete(id)
       fetchWaiters()
     } catch (err) {
       console.error(err)
       alert(err.message || 'Failed to delete waiter.')
     }
   }
+
 
   const totalWaiters = waiters.length
   const activeWaiters = waiters.filter(w => w.is_active).length

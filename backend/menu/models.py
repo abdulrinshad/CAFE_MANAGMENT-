@@ -228,8 +228,10 @@ class QRCode(models.Model):
         except ImportError:
             return  # qrcode library not installed — skip silently
 
-        if not self.menu_url:
+        if not self.menu_url or 'table=' not in self.menu_url:
             self.menu_url = f'{base_url}/customer/menu?table={self.table.name}'
+
+
 
         qr = qrlib.QRCode(
             version=1,
