@@ -17,16 +17,18 @@ class UserSerializer(serializers.ModelSerializer):
         return 'STAFF'
 
 class CustomTokenObtainPairSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True)
+    email = serializers.CharField(required=True)
     password = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
         email = attrs.get('email')
         password = attrs.get('password')
 
-        users = User.objects.filter(email=email)
+        from django.db.models import Q
+        users = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email))
         if not users.exists():
             raise serializers.ValidationError("Invalid email or password.")
+
 
         if all(not u.is_active for u in users):
             raise serializers.ValidationError("Your account is inactive. Please contact an administrator.")

@@ -30,8 +30,10 @@ export default function Sidebar() {
         { path: '/dashboard', label: 'Dashboard', icon: <DashboardIcon />, exact: true },
         { path: '/tables',    label: 'Tables',    icon: <TablesIcon /> },
         { path: '/requests',  label: 'Requests',  icon: <RequestsIcon />, badge: activeRequestsCount > 0 ? activeRequestsCount : null },
+        { path: '/qr-codes',  label: 'QR Codes',  icon: <QRIcon /> },
       ]
     : NAV_ITEMS
+
 
 
   return (

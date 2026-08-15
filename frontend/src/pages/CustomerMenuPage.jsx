@@ -13,7 +13,8 @@ export default function CustomerMenuPage() {
 
   // Dynamic table parameter from URL (?table=T-12 or similar)
   const tableParam = searchParams.get('table')
-  const tableLabel = tableParam ? tableParam.replace('T-', 'Table ') : 'Table 12'
+  const tableLabel = tableParam ? tableParam.replace('T-', 'Table ') : 'Digital Menu'
+
 
   // View States: 'splash' | 'menu' | 'request_loading' | 'request_sent' | 'empty'
   const [viewState, setViewState] = useState('splash')

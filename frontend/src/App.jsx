@@ -200,15 +200,16 @@ export default function App() {
 
         {/* QR Codes */}
         <Route path="/qr-codes"      element={
-          <ProtectedRoute allowedRoles={['admin', 'manager']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
             <QRCodesPage />
           </ProtectedRoute>
         } />
         <Route path="/qr-codes/:id"  element={
-          <ProtectedRoute allowedRoles={['admin', 'manager']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
             <QRPreviewPage />
           </ProtectedRoute>
         } />
+
 
         {/* Waiters */}
         <Route path="/waiters"       element={
