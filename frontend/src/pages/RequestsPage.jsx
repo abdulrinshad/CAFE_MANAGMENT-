@@ -42,10 +42,10 @@ function notifToRequest(n) {
     orderRef: n.order_number,
     time:     relativeTime(n.created_at),
     rawTime:  n.created_at,
-    // Map to request status based on is_read + type
-    status: n.is_read
-      ? 'completed'
-      : (n._in_progress ? 'in_progress' : 'new'),
+    status:   n.status || 'new',
+    whatsapp: n.whatsapp_number,
+    invoiceNo: n.invoice_number,
+    amount:   n.total_amount,
   }
 }
 
@@ -56,6 +56,7 @@ function typeLabel(type) {
   if (type === 'table_attention')   return 'Needs Attention'
   if (type === 'payment_completed') return 'Payment Done'
   if (type === 'status_changed')    return 'Status Changed'
+  if (type === 'bill_share')        return 'Bill Share Request'
   return type
 }
 
@@ -116,7 +117,7 @@ export default function RequestsPage() {
   }
 
   const filtered = requests.filter((r) => {
-    if (activeTab === 'All Requests') return true
+    if (activeTab === 'All Requests') return r.status !== 'dismissed'
     if (activeTab === 'New')          return r.status === 'new'
     if (activeTab === 'In Progress')  return r.status === 'in_progress'
     if (activeTab === 'Completed')    return r.status === 'completed'
@@ -293,6 +294,13 @@ export default function RequestsPage() {
           })}
         </div>
       </div>
+
+      {/* Success/Error Toast */}
+      {toast && (
+        <div className={`requests-toast requests-toast--${toast.type}`}>
+          {toast.message}
+        </div>
+      )}
     </AdminLayout>
   )
 }

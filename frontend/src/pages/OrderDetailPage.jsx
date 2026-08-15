@@ -61,7 +61,8 @@ function normaliseOrder(o) {
 }
 
 function validateWhatsApp(num) {
-  return /^\d{10}$/.test(num.replace(/\s/g, ''))
+  const digits = num.replace(/[^\d]/g, '')
+  return digits.length === 10 || (digits.length === 12 && digits.startsWith('91'))
 }
 
 export default function OrderDetailPage() {
@@ -77,6 +78,7 @@ export default function OrderDetailPage() {
 
   // ── Generate Bill modal ───────────────────────────────────────────────────
   const [showBillModal, setShowBillModal] = useState(false)
+  const [billStep,      setBillStep]      = useState('choose') // 'choose' | 'whatsapp'
   const [whatsapp,      setWhatsapp]      = useState('')
   const [waError,       setWaError]       = useState('')
   const [billLoading,   setBillLoading]   = useState(false)
@@ -161,21 +163,35 @@ export default function OrderDetailPage() {
   }
 
   // ── Generate Bill submit ──────────────────────────────────────────────────
-  const handleGenerateBill = async () => {
+  const handleGenerateBillSubmit = async (method, phoneVal = '') => {
     setWaError('')
-    const digits = whatsapp.replace(/\s/g, '')
-    if (!validateWhatsApp(digits)) {
-      setWaError('Please enter a valid 10-digit WhatsApp number.')
-      return
-    }
-    setBillLoading(true)
     setBillError('')
+    let normalized = ''
+
+    if (method === 'whatsapp') {
+      const trimmed = phoneVal.trim()
+      if (!trimmed) {
+        setWaError('WhatsApp number is required.')
+        return
+      }
+      if (!validateWhatsApp(trimmed)) {
+        setWaError('Please enter a valid WhatsApp number.')
+        return
+      }
+      const digitsOnly = trimmed.replace(/[^\d]/g, '')
+      normalized = digitsOnly.length === 10 ? `+91${digitsOnly}` : `+${digitsOnly}`
+    }
+
+    setBillLoading(true)
     try {
-      await orderApi.generateBill(id, { whatsapp_number: digits })
+      await orderApi.generateBill(id, {
+        delivery_method: method,
+        whatsapp_number: normalized
+      })
       setShowBillModal(false)
       navigate(`/orders/${id}/invoice`)
     } catch (err) {
-      setBillError('Unable to generate bill. Please try again.')
+      setBillError(err.message || 'Unable to generate bill. Please try again.')
     } finally {
       setBillLoading(false)
     }
@@ -463,7 +479,9 @@ export default function OrderDetailPage() {
         <div className="od-modal-backdrop" onClick={() => !billLoading && setShowBillModal(false)}>
           <div className="od-modal" onClick={(e) => e.stopPropagation()}>
             <div className="od-modal__header">
-              <h2 className="od-modal__title">Customer Details</h2>
+              <h2 className="od-modal__title">
+                {billStep === 'choose' ? 'Generate Customer Bill' : 'Send Bill via WhatsApp'}
+              </h2>
               <button
                 className="od-modal__close"
                 onClick={() => !billLoading && setShowBillModal(false)}
@@ -471,48 +489,91 @@ export default function OrderDetailPage() {
               >×</button>
             </div>
 
-            <p className="od-modal__desc">
-              Enter the customer's WhatsApp number to send the digital receipt instantly.
-            </p>
+            {billError && <p className="od-modal__api-error" style={{ marginBottom: 16 }}>{billError}</p>}
 
-            <div className="od-modal__field">
-              <label className="od-modal__label" htmlFor="whatsapp-input">
-                WhatsApp Number
-              </label>
-              <div className="od-modal__phone-row">
-                <span className="od-modal__prefix">+91</span>
-                <input
-                  id="whatsapp-input"
-                  type="tel"
-                  className={`od-modal__input${waError ? ' od-modal__input--error' : ''}`}
-                  placeholder="98765 43210"
-                  value={whatsapp}
-                  maxLength={11}
-                  onChange={(e) => { setWhatsapp(e.target.value); setWaError('') }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleGenerateBill() }}
-                  disabled={billLoading}
-                  autoFocus
-                />
-              </div>
-              {waError && <p className="od-modal__field-error">{waError}</p>}
-              <p className="od-modal__hint">A link will also be generated.</p>
-            </div>
+            {billStep === 'choose' ? (
+              <>
+                <p className="od-modal__desc">
+                  Choose how you would like to deliver the bill to the customer.
+                </p>
 
-            {billError && <p className="od-modal__api-error">{billError}</p>}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+                  <button
+                    className="btn-primary"
+                    style={{ background: 'var(--color-espresso)', width: '100%', display: 'flex', flexDirection: 'column', padding: '12px', alignItems: 'center' }}
+                    onClick={() => setBillStep('whatsapp')}
+                    disabled={billLoading}
+                  >
+                    <span style={{ fontWeight: 'bold' }}>📱 WhatsApp</span>
+                    <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>Send a digital copy to the customer.</span>
+                  </button>
 
-            <div className="od-modal__actions">
-              <button className="btn-outline" onClick={() => setShowBillModal(false)} disabled={billLoading}>
-                Cancel
-              </button>
-              <button
-                className="btn-primary"
-                onClick={handleGenerateBill}
-                disabled={billLoading}
-                id="confirm-generate-bill"
-              >
-                {billLoading ? 'Generating…' : 'Generate Bill'}
-              </button>
-            </div>
+                  <button
+                    className="btn-outline"
+                    style={{ width: '100%', display: 'flex', flexDirection: 'column', padding: '12px', alignItems: 'center' }}
+                    onClick={() => handleGenerateBillSubmit('print')}
+                    disabled={billLoading}
+                  >
+                    <span style={{ fontWeight: 'bold' }}>🧾 Print Bill</span>
+                    <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>Print a physical copy of the bill.</span>
+                  </button>
+
+                  <button
+                    className="btn-outline"
+                    style={{ width: '100%', display: 'flex', flexDirection: 'column', padding: '12px', alignItems: 'center' }}
+                    onClick={() => handleGenerateBillSubmit('none')}
+                    disabled={billLoading}
+                  >
+                    <span style={{ fontWeight: 'bold' }}>→ Continue Without Sharing</span>
+                    <span style={{ fontSize: '0.8rem', opacity: 0.8 }}>Continue directly to payment without sharing.</span>
+                  </button>
+                </div>
+
+                <div className="od-modal__actions" style={{ marginTop: 20 }}>
+                  <button className="btn-outline" onClick={() => setShowBillModal(false)} disabled={billLoading} style={{ width: '100%' }}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="od-modal__field" style={{ marginTop: 12 }}>
+                  <label className="od-modal__label" htmlFor="whatsapp-input">
+                    WhatsApp Number
+                  </label>
+                  <div className="od-modal__phone-row">
+                    <span className="od-modal__prefix">+91</span>
+                    <input
+                      id="whatsapp-input"
+                      type="tel"
+                      className={`od-modal__input${waError ? ' od-modal__input--error' : ''}`}
+                      placeholder="98765 43210"
+                      value={whatsapp}
+                      maxLength={11}
+                      onChange={(e) => { setWhatsapp(e.target.value); setWaError('') }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleGenerateBillSubmit('whatsapp', whatsapp) }}
+                      disabled={billLoading}
+                      autoFocus
+                    />
+                  </div>
+                  {waError && <p className="od-modal__field-error">{waError}</p>}
+                </div>
+
+                <div className="od-modal__actions" style={{ marginTop: 24 }}>
+                  <button className="btn-outline" onClick={() => setBillStep('choose')} disabled={billLoading}>
+                    Cancel
+                  </button>
+                  <button
+                    className="btn-primary"
+                    onClick={() => handleGenerateBillSubmit('whatsapp', whatsapp)}
+                    disabled={billLoading}
+                    id="confirm-generate-bill"
+                  >
+                    {billLoading ? 'Generating…' : 'Send Bill'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

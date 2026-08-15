@@ -1,0 +1,8 @@
+- `[x]` Modify `orders/models.py` to add `receipt_status` and `receipt_sent_at`
+- `[x]` Generate and run Django migrations
+- `[x]` Modify `orders/serializers.py` to expose `receipt_status` and `receipt_sent_at`
+- `[x]` Modify `orders/views.py` to add `receipt-sent` API action
+- `[x]` Update Django Admin settings in `orders/admin.py`
+- `[x]` Update frontend API client in `frontend/src/api.js`
+- `[x]` Update frontend invoice preview UI in `InvoicePreviewPage.jsx`
+- `[x]` Verify payment and receipt flows manually and via tests

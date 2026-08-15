@@ -30,17 +30,21 @@ def order_notification(sender, instance, created, **kwargs):
         table_label = fresh.table_label
 
         if created:
-            Notification.objects.create(
+            if not Notification.objects.filter(
                 type='new_order',
-                title=f'New Order: {fresh.order_number}',
-                message=(
-                    f'New order received for {table_label}. '
-                    f'Total: \u20b9{fresh.total}. '
-                    f'{fresh.item_count} item(s).'
-                ),
-                order=fresh,
-                table=fresh.table,
-            )
+                order=fresh
+            ).exclude(status__in=[Notification.STATUS_COMPLETED, Notification.STATUS_DISMISSED]).exists():
+                Notification.objects.create(
+                    type='new_order',
+                    title=f'New Order: {fresh.order_number}',
+                    message=(
+                        f'New order received for {table_label}. '
+                        f'Total: \u20b9{fresh.total}. '
+                        f'{fresh.item_count} item(s).'
+                    ),
+                    order=fresh,
+                    table=fresh.table,
+                )
         else:
             # Status-change notifications
             status_messages = {
@@ -64,12 +68,17 @@ def order_notification(sender, instance, created, **kwargs):
             }
             if fresh.status in status_messages:
                 ntype, msg = status_messages[fresh.status]
-                Notification.objects.create(
+                if not Notification.objects.filter(
                     type=ntype,
-                    title=f'Order {fresh.order_number}: {fresh.get_status_display()}',
-                    message=msg,
                     order=fresh,
-                    table=fresh.table,
-                )
+                    message=msg
+                ).exclude(status__in=[Notification.STATUS_COMPLETED, Notification.STATUS_DISMISSED]).exists():
+                    Notification.objects.create(
+                        type=ntype,
+                        title=f'Order {fresh.order_number}: {fresh.get_status_display()}',
+                        message=msg,
+                        order=fresh,
+                        table=fresh.table,
+                    )
     except Exception:
         pass  # Never let notification errors break order saves

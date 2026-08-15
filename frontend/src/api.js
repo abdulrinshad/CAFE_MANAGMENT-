@@ -55,22 +55,25 @@ async function request(method, path, body = null, isFormData = false, isRetry = 
           localStorage.removeItem('artisan_refresh')
           localStorage.removeItem('artisan_user')
           window.location.href = '/login'
+          throw new Error('Session expired')
         }
       } catch (e) {
         localStorage.removeItem('artisan_access')
         localStorage.removeItem('artisan_refresh')
         localStorage.removeItem('artisan_user')
         window.location.href = '/login'
+        throw new Error('Session expired')
       }
     }
   }
 
   if (!res.ok) {
     let errorDetail = `HTTP ${res.status}`
+    let data = null
     try {
       const text = await res.text()
       try {
-        const data = JSON.parse(text)
+        data = JSON.parse(text)
         errorDetail = data.detail ||
                       (data.non_field_errors && data.non_field_errors[0]) ||
                       (Array.isArray(data) ? data[0] : null) ||
@@ -86,7 +89,10 @@ async function request(method, path, body = null, isFormData = false, isRetry = 
     } catch (e) {
       errorDetail = `HTTP ${res.status}`
     }
-    throw new Error(errorDetail)
+    const err = new Error(errorDetail)
+    err.status = res.status
+    err.data = data
+    throw err
   }
 
   if (res.status === 204) return null
@@ -277,13 +283,33 @@ export const orderApi = {
   updateItem: (orderId, itemId, data) =>
     request('PATCH', `/orders/${orderId}/update_item/${itemId}/`, data),
 
-  /** POST /orders/{id}/generate_bill/  { whatsapp_number: '...' } */
+  /** POST /orders/{orderId}/generate_bill/ */
   generateBill: (orderId, data) =>
     request('POST', `/orders/${orderId}/generate_bill/`, data),
 
-  /** POST /orders/{id}/complete_order/  { method: 'cash', status: 'paid' } */
+  /** POST /orders/{orderId}/share_bill/ */
+  shareBill: (orderId, data) =>
+    request('POST', `/orders/${orderId}/share_bill/`, data),
+
+  /** POST /orders/{orderId}/complete_order/ */
   completeOrder: (orderId, data) =>
     request('POST', `/orders/${orderId}/complete_order/`, data),
+
+  /** POST /orders/{id}/receipt-sent/ */
+  markReceiptSent: (orderId) =>
+    request('POST', `/orders/${orderId}/receipt-sent/`),
+
+  /** POST /orders/{orderId}/mark_receipt_shared/ */
+  markReceiptShared: (orderId, data) =>
+    request('POST', `/orders/${orderId}/mark_receipt_shared/`, data),
+
+  /** POST /orders/{orderId}/mark_receipt_printed/ */
+  markReceiptPrinted: (orderId) =>
+    request('POST', `/orders/${orderId}/mark_receipt_printed/`),
+
+  /** POST /orders/{orderId}/mark_receipt_not_shared/ */
+  markReceiptNotShared: (orderId) =>
+    request('POST', `/orders/${orderId}/mark_receipt_not_shared/`),
 
   /** GET /orders/{id}/invoice/ */
   getInvoice: (orderId) => request('GET', `/orders/${orderId}/invoice/`),
@@ -354,6 +380,9 @@ export const notificationApi = {
 
   /** GET /notifications/unread_count/ → { count: N } */
   unreadCount: () => request('GET', '/notifications/unread_count/'),
+
+  /** PATCH /notifications/{id}/ */
+  patch: (id, data) => request('PATCH', `/notifications/${id}/`, data),
 
   /** POST /notifications/{id}/mark_read/ */
   markRead: (id) => request('POST', `/notifications/${id}/mark_read/`),

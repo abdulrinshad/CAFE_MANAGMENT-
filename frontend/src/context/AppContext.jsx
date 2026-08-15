@@ -38,7 +38,24 @@ export function AppProvider({ children }) {
       return s ? JSON.parse(s) : null
     } catch { return null }
   })
-  const [waiterRequests, setWaiterRequests] = useState([])
+
+  // Derive waiterRequests directly from notifications
+  const waiterRequests = useMemo(() => {
+    return notifications.filter((n) =>
+      ['new_order', 'bill_requested', 'table_attention'].includes(n.type)
+    ).map(n => ({
+      id:       n.id,
+      type:     n.type,
+      title:    n.title,
+      message:  n.message,
+      tableId:  n.table_name ? n.table_name : (n.table ? `T-${n.table}` : '—'),
+      tableFK:  n.table,
+      orderId:  n.order,
+      orderRef: n.order_number,
+      status:   n.status || 'new',
+      time:     n.created_at,
+    }))
+  }, [notifications])
 
   const setCurrentRole = (role) => {
     try { localStorage.setItem('artisan_role', role) } catch {}
@@ -544,8 +561,9 @@ export function AppProvider({ children }) {
   const markNotificationRead = async (id) => {
     try {
       const updated = await notificationApi.markRead(id)
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)))
-      setUnreadCount((c) => Math.max(0, c - 1))
+      setNotifications((prev) => prev.map((n) => (n.id === id ? updated : n)))
+      const countData = await notificationApi.unreadCount()
+      setUnreadCount(countData.count ?? 0)
       return updated
     } catch (err) {
       console.error('markNotificationRead error:', err)
@@ -555,11 +573,19 @@ export function AppProvider({ children }) {
   const markAllNotificationsRead = async () => {
     try {
       await notificationApi.markAllRead()
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
+      setNotifications((prev) => prev.map((n) => ({ ...n, status: 'dismissed', is_read: true })))
       setUnreadCount(0)
     } catch (err) {
       console.error('markAllNotificationsRead error:', err)
     }
+  }
+
+  const updateNotificationStatus = async (id, status) => {
+    const updated = await notificationApi.patch(id, { status })
+    setNotifications((prev) => prev.map((n) => (n.id === id ? updated : n)))
+    const countData = await notificationApi.unreadCount()
+    setUnreadCount(countData.count ?? 0)
+    return updated
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -583,8 +609,8 @@ export function AppProvider({ children }) {
   const updateRequestStatus = (id, status) => {
     setWaiterRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)))
   }
-  const dismissRequest = (id) => {
-    setWaiterRequests((prev) => prev.filter((r) => r.id !== id))
+  const dismissRequest = async (id) => {
+    await updateNotificationStatus(id, 'dismissed')
   }
 
   return (
@@ -616,6 +642,7 @@ export function AppProvider({ children }) {
 
         updateRequestStatus,
         dismissRequest,
+        updateNotificationStatus,
         // product actions
         addProduct,
         updateProduct,

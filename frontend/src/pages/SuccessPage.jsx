@@ -5,11 +5,14 @@
  * Receives real transaction_ref + invoice_number from CheckoutPage (or InvoicePreviewPage) via route state.
  * Wording distinguishes between "WhatsApp opened" (click-to-chat) and "order completed".
  */
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { useNavigate, useLocation, useParams } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
+import { orderApi } from '../api'
 import './SuccessPage.css'
 
 export default function SuccessPage() {
+  const { id } = useParams()
   const navigate  = useNavigate()
   const location  = useLocation()
 
@@ -19,7 +22,10 @@ export default function SuccessPage() {
     payment_method  = '',
     total           = 0,
     whatsapp_opened = false,
+    invoice: initialInvoice = null,
   } = location.state || {}
+
+  const [invoice, setInvoice] = useState(initialInvoice)
 
   const timeStr = new Date().toLocaleTimeString('en-IN', {
     hour:   '2-digit',
@@ -43,12 +49,10 @@ export default function SuccessPage() {
 
           {/* Message */}
           <h1 className="success-heading">
-            {whatsapp_opened ? 'WhatsApp message prepared' : 'Order completed!'}
+            ✓ Payment Successful
           </h1>
           <p className="success-description">
-            {whatsapp_opened
-              ? 'The WhatsApp message was opened with the customer\'s bill. Please confirm it was sent.'
-              : 'The order has been marked as completed and the table has been released.'}
+            The order has been marked as completed and the table has been released.
           </p>
 
           {/* Details grid */}
@@ -75,7 +79,7 @@ export default function SuccessPage() {
             )}
             {total > 0 && (
               <div className="success-detail-card">
-                <div className="success-detail-lbl">Amount</div>
+                <div className="success-detail-lbl">Amount Paid</div>
                 <div className="success-detail-val">
                   ₹{Number(total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </div>
@@ -88,7 +92,7 @@ export default function SuccessPage() {
           </div>
 
           {/* Actions */}
-          <div className="success-action-buttons">
+          <div className="success-action-buttons" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <button
               type="button"
               className="btn-primary py-3 w-full success-cta-btn"
@@ -96,6 +100,22 @@ export default function SuccessPage() {
             >
               + New Order
             </button>
+            <div style={{ display: 'flex', gap: 12, width: '100%' }}>
+              <button
+                type="button"
+                className="btn-outline py-3 w-full"
+                onClick={() => navigate(`/orders/${id}/invoice`)}
+              >
+                View Invoice
+              </button>
+              <button
+                type="button"
+                className="btn-outline py-3 w-full"
+                onClick={() => navigate(`/orders/${id}/invoice`)}
+              >
+                Print Receipt
+              </button>
+            </div>
             <button
               type="button"
               className="btn-outline py-3 w-full success-dashboard-btn"

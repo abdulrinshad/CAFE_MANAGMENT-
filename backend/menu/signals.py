@@ -76,12 +76,17 @@ def waiter_request_notification(sender, instance, created, **kwargs):
             if instance.amount:
                 msg += f' (Amount: \u20b9{instance.amount})'
 
-            Notification.objects.create(
+            if not Notification.objects.filter(
                 type=ntype,
-                title=title,
-                message=msg,
                 table=instance.table,
-            )
+                title=title
+            ).exclude(status__in=[Notification.STATUS_COMPLETED, Notification.STATUS_DISMISSED]).exists():
+                Notification.objects.create(
+                    type=ntype,
+                    title=title,
+                    message=msg,
+                    table=instance.table,
+                )
         except Exception:
             pass
 

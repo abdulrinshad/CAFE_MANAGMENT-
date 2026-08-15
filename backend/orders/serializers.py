@@ -43,6 +43,8 @@ class OrderSerializer(serializers.ModelSerializer):
     table_label = serializers.CharField(read_only=True)
     item_count  = serializers.IntegerField(read_only=True)
     items_summary = serializers.CharField(read_only=True)
+    receipt_method = serializers.SerializerMethodField()
+    receipt_status = serializers.SerializerMethodField()
 
     class Meta:
         model  = Order
@@ -52,12 +54,22 @@ class OrderSerializer(serializers.ModelSerializer):
             'status', 'subtotal', 'tax_amount', 'total',
             'item_count', 'items_summary',
             'items', 'created_at', 'updated_at', 'completed_at',
+            'receipt_method', 'receipt_status',
         ]
         read_only_fields = [
             'id', 'order_number', 'table_label', 'item_count', 'items_summary',
             'subtotal', 'tax_amount', 'total',
             'created_at', 'updated_at', 'completed_at',
+            'receipt_method', 'receipt_status',
         ]
+
+    def get_receipt_method(self, obj):
+        invoice = getattr(obj, 'invoice', None)
+        return invoice.receipt_method if invoice else None
+
+    def get_receipt_status(self, obj):
+        invoice = getattr(obj, 'invoice', None)
+        return invoice.receipt_status if invoice else None
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
@@ -110,6 +122,8 @@ class OrderListSerializer(serializers.ModelSerializer):
     table_label   = serializers.CharField(read_only=True)
     items_summary = serializers.CharField(read_only=True)
     item_count    = serializers.IntegerField(read_only=True)
+    receipt_method = serializers.SerializerMethodField()
+    receipt_status = serializers.SerializerMethodField()
 
     class Meta:
         model  = Order
@@ -118,8 +132,17 @@ class OrderListSerializer(serializers.ModelSerializer):
             'customer_name', 'waiter_name',
             'status', 'total', 'item_count', 'items_summary',
             'created_at', 'completed_at',
+            'receipt_method', 'receipt_status',
         ]
         read_only_fields = fields
+
+    def get_receipt_method(self, obj):
+        invoice = getattr(obj, 'invoice', None)
+        return invoice.receipt_method if invoice else None
+
+    def get_receipt_status(self, obj):
+        invoice = getattr(obj, 'invoice', None)
+        return invoice.receipt_status if invoice else None
 
 
 class OrderStatusSerializer(serializers.ModelSerializer):
@@ -141,6 +164,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
     items        = serializers.SerializerMethodField()
     order_status = serializers.CharField(source='order.status', read_only=True)
     created_at_str = serializers.SerializerMethodField()
+    bill_share_status = serializers.SerializerMethodField()
 
     class Meta:
         model  = Invoice
@@ -148,17 +172,31 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'id', 'invoice_number', 'token',
             'order', 'order_number', 'table_label', 'table_id', 'order_status',
             'whatsapp_number', 'status',
+            'receipt_status',
             'subtotal', 'tax_amount', 'total',
             'receipt_url', 'items',
             'created_at', 'created_at_str', 'updated_at', 'paid_at',
+            'bill_share_status', 'delivery_method', 'delivery_status',
+            'receipt_method', 'customer_whatsapp', 'receipt_shared_at', 'receipt_printed_at',
         ]
         read_only_fields = [
             'id', 'invoice_number', 'token',
             'order_number', 'table_label', 'table_id', 'order_status',
+            'receipt_status',
             'subtotal', 'tax_amount', 'total',
             'receipt_url', 'items',
             'created_at', 'created_at_str', 'updated_at',
+            'bill_share_status', 'delivery_method', 'delivery_status',
+            'receipt_method', 'customer_whatsapp', 'receipt_shared_at', 'receipt_printed_at',
         ]
+
+    def get_bill_share_status(self, obj):
+        from notifications.models import Notification
+        notif = Notification.objects.filter(
+            order=obj.order,
+            type='bill_share'
+        ).exclude(status__in=['completed', 'dismissed']).first()
+        return notif.status if notif else None
 
     def get_receipt_url(self, obj):
         request = self.context.get('request')

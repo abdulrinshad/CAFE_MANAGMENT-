@@ -179,6 +179,45 @@ class Invoice(models.Model):
     # Customer contact (copied from order at bill generation time)
     whatsapp_number = models.CharField(max_length=20, blank=True, default='')
 
+    # Delivery method
+    DELIVERY_WHATSAPP = 'whatsapp'
+    DELIVERY_PRINT    = 'print'
+    DELIVERY_NONE     = 'none'
+
+    DELIVERY_CHOICES = [
+        (DELIVERY_WHATSAPP, 'WhatsApp'),
+        (DELIVERY_PRINT, 'Print'),
+        (DELIVERY_NONE, 'None'),
+    ]
+
+    delivery_method = models.CharField(max_length=20, choices=DELIVERY_CHOICES, default=DELIVERY_NONE)
+
+    DELIVERY_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('shared', 'Shared'),
+        ('printed', 'Printed'),
+        ('not_shared', 'Not Shared'),
+    ]
+    delivery_status = models.CharField(max_length=20, choices=DELIVERY_STATUS_CHOICES, default='pending')
+
+    RECEIPT_STATUS_CHOICES = [
+        ('NOT_SHARED', 'Not Shared'),
+        ('SHARED', 'Shared'),
+        ('PRINTED', 'Printed'),
+    ]
+
+    RECEIPT_METHOD_CHOICES = [
+        ('NONE', 'None'),
+        ('WHATSAPP', 'WhatsApp'),
+        ('PRINT', 'Print'),
+    ]
+
+    receipt_status     = models.CharField(max_length=20, choices=RECEIPT_STATUS_CHOICES, default='NOT_SHARED')
+    receipt_method     = models.CharField(max_length=20, choices=RECEIPT_METHOD_CHOICES, default='NONE')
+    customer_whatsapp  = models.CharField(max_length=20, blank=True, null=True)
+    receipt_shared_at  = models.DateTimeField(null=True, blank=True)
+    receipt_printed_at = models.DateTimeField(null=True, blank=True)
+
     # Status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_UNPAID)
 
