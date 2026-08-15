@@ -80,7 +80,22 @@ function StatusBadge({ status }) {
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { currentRole, currentWaiter, waiterRequests, tables, orders,
-          updateRequestStatus, dismissRequest } = useApp()
+          updateRequestStatus, dismissRequest, currentUser } = useApp()
+
+  // Time-aware greeting
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+
+  // Derive display name: prefer first name, fall back to email username, then 'Owner'
+  const displayName = (() => {
+    if (!currentUser) return 'Owner'
+    const first = (currentUser.first_name || '').trim()
+    const last  = (currentUser.last_name  || '').trim()
+    if (first && last) return `${first} ${last}`
+    if (first)         return first
+    if (currentUser.email) return currentUser.email.split('@')[0]
+    return 'Owner'
+  })()
 
   // Dashboard API state
   const [stats,        setStats]        = useState(null)
@@ -236,7 +251,7 @@ export default function DashboardPage() {
       <div className="dashboard">
         {/* Greeting */}
         <div className="dashboard__greeting">
-          <h1 className="dashboard__greeting-title">Good morning, Owner</h1>
+          <h1 className="dashboard__greeting-title">{greeting}, {displayName}</h1>
           <p className="dashboard__greeting-sub">Here&apos;s what&apos;s happening at your café today.</p>
         </div>
 

@@ -257,17 +257,24 @@ export default function OrderDetailPage() {
             {/* Step-advance button (New→Preparing→Ready→Completed) */}
             {nextStep && (
               <button
-                className="btn-secondary"
+                className="advance-status-btn"
                 onClick={handleAdvanceStatus}
                 disabled={advancing}
                 id="advance-status-btn"
-                style={{
-                  background: 'var(--color-latte, #8b6347)',
-                  color: '#fff',
-                  border: 'none',
-                }}
+                aria-label={advancing ? 'Updating order status…' : nextStep.label}
               >
-                {advancing ? 'Updating…' : nextStep.label}
+                {advancing ? (
+                  <>
+                    <SpinnerIcon />
+                    <span>Updating…</span>
+                  </>
+                ) : (
+                  <>
+                    <ChefHatIcon />
+                    <span>{nextStep.label}</span>
+                    <ArrowRightIcon />
+                  </>
+                )}
               </button>
             )}
 
@@ -336,11 +343,22 @@ export default function OrderDetailPage() {
           {nextStep && (
             <div className="stepper-advance-wrap">
               <button
-                className="btn-primary stepper-advance-btn"
+                className="advance-status-btn advance-status-btn--stepper"
                 onClick={handleAdvanceStatus}
                 disabled={advancing}
               >
-                {advancing ? 'Updating…' : `→ ${nextStep.label}`}
+                {advancing ? (
+                  <>
+                    <SpinnerIcon />
+                    <span>Updating…</span>
+                  </>
+                ) : (
+                  <>
+                    <ChefHatIcon />
+                    <span>{nextStep.label}</span>
+                    <ArrowRightIcon />
+                  </>
+                )}
               </button>
               <span className="stepper-advance-hint">
                 {order.status === 'PENDING' && 'Kitchen received? Mark as Preparing.'}
@@ -584,6 +602,25 @@ export default function OrderDetailPage() {
 /* ── Icons ── */
 function ArrowLeftIcon() {
   return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+}
+function ArrowRightIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+}
+function ChefHatIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/>
+      <line x1="6" y1="17" x2="18" y2="17"/>
+    </svg>
+  )
+}
+function SpinnerIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{ animation: 'advance-btn-spin 0.7s linear infinite' }}>
+      <circle cx="12" cy="12" r="10" strokeOpacity="0.25"/>
+      <path d="M12 2a10 10 0 0 1 10 10"/>
+    </svg>
+  )
 }
 function TableIcon() {
   return <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="7" width="18" height="3" rx="1"/><line x1="8" y1="10" x2="8" y2="20"/><line x1="16" y1="10" x2="16" y2="20"/></svg>
