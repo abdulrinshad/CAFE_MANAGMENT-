@@ -178,3 +178,20 @@ body {
 }
 .form-textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 
+/* ── Global Responsive Safeguards ── */
+.table-wrap, .table-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 767px) {
+  button, .btn-primary, .btn-outline, .btn-danger, .btn-ghost {
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+

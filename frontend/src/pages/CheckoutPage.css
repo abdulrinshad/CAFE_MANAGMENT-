@@ -278,3 +278,23 @@
   background: var(--color-brown, #6b3a25) !important;
 }
 
+@media (max-width: 767px) {
+  .checkout-methods-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .checkout-card {
+    padding: 24px;
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .checkout-methods-grid {
+    grid-template-columns: 1fr;
+  }
+  .checkout-card {
+    padding: 16px;
+  }
+}
+
+

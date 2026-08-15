@@ -711,6 +711,20 @@ class DashboardStatsView(APIView):
             active_tables = 0
             total_tables  = 0
 
+        # Active requests (new or in_progress status WaiterRequests)
+        try:
+            from menu.models import WaiterRequest
+            active_requests = WaiterRequest.objects.filter(
+                status__in=[WaiterRequest.STATUS_NEW, WaiterRequest.STATUS_IN_PROGRESS]
+            ).count()
+        except Exception:
+            active_requests = 0
+
+        # Active orders (pending, preparing, or ready status Orders today)
+        active_orders = today_qs.filter(
+            status__in=[Order.STATUS_PENDING, Order.STATUS_PREPARING, Order.STATUS_READY]
+        ).count()
+
         return Response({
             'today_sales':       float(today_sales),
             'yesterday_sales':   float(yesterday_sales),
@@ -722,7 +736,10 @@ class DashboardStatsView(APIView):
             'completed':         today_completed,
             'cancelled':         today_cancelled,
             'active_tables':     active_tables,
+            'occupied_tables':   active_tables,
             'total_tables':      total_tables,
+            'active_requests':   active_requests,
+            'active_orders':     active_orders,
         })
 
 

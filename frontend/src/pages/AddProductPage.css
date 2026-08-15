@@ -227,3 +227,27 @@
     order: -1;
   }
 }
+
+@media (max-width: 767px) {
+  .form-row {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .form-row > * {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .add-product-page__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .add-product-page__actions {
+    width: 100%;
+  }
+  .add-product-page__actions button {
+    flex: 1;
+  }
+}
+

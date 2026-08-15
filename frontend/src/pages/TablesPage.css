@@ -205,10 +205,6 @@
 /* Small button variant */
 .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 7px; }
 
-@media (max-width: 600px) {
-  .tables-grid { grid-template-columns: 1fr; }
-}
-
 /* ── Floor Plan / Waiter View Styles ── */
 .floor-plan-page {
   display: flex;
@@ -388,14 +384,6 @@
   width: 100%;
 }
 
-@media (max-width: 600px) {
-  .floor-plan__header-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-
 /* -- New floor plan card classes -- */
 .waiter-table-card__num {
   font-family: var(--font-serif);
@@ -424,3 +412,59 @@
   font-weight: 700;
   color: var(--color-espresso);
 }
+
+/* ── Responsive ── */
+@media (max-width: 1023px) {
+  .tables-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .floor-plan__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .tables-grid {
+    grid-template-columns: 1fr;
+  }
+  .floor-plan__grid {
+    grid-template-columns: 1fr;
+  }
+  .floor-plan__header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+  }
+  .tables-page__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .btn-add-table {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .table-card__footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .table-card__action-btns {
+    flex-direction: column;
+    width: 100%;
+  }
+  .table-card__action-btns button {
+    width: 100%;
+    text-align: center;
+  }
+  .waiter-table-card__actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .waiter-table-card__actions button {
+    width: 100%;
+  }
+}
+

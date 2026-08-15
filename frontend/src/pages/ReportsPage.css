@@ -5,7 +5,48 @@
   gap: 20px;
 }
 
-/* Period tabs (injected into header) */
+/* Page title override on desktop for Reports */
+@media (min-width: 1024px) {
+  .layout-reports-analytics .top-header__page-title {
+    display: none !important;
+  }
+}
+
+/* Reports Header Block */
+.reports-page__header-block {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.reports-page__header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reports-page__title {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--color-espresso);
+  margin: 0;
+  line-height: 1.1;
+}
+
+.reports-page__subtitle {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.reports-page__header-right {
+  display: flex;
+  align-items: center;
+}
+
+/* Period tabs */
 .reports-period-tabs {
   display: flex;
   align-items: center;
@@ -37,6 +78,7 @@
   font-weight: 500;
 }
 .period-tab--custom { gap: 5px; }
+
 
 /* ── Stat Row ── */
 .reports-stat-row {
@@ -240,10 +282,66 @@
   transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1023px) {
   .reports-stat-row { grid-template-columns: repeat(3, 1fr); }
   .reports-bottom-row { grid-template-columns: 1fr; }
 }
-@media (max-width: 700px) {
-  .reports-stat-row { grid-template-columns: repeat(2, 1fr); }
+
+@media (max-width: 767px) {
+  .reports-page__header-block {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .reports-page__title {
+    display: none !important;
+  }
+  .reports-page__subtitle {
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+  }
+  .reports-page__header-right {
+    width: 100%;
+  }
+  .reports-period-tabs {
+    overflow-x: auto;
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    background: var(--color-cream);
+    padding: 2px;
+    border-radius: 12px;
+    scrollbar-width: none;
+    width: 100%;
+  }
+  .reports-period-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .period-tab {
+    padding: 8px 16px;
+    font-size: 13px;
+    flex: 1;
+    justify-content: center;
+  }
+  .reports-stat-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .stat-card:nth-child(5) {
+    grid-column: span 2;
+  }
 }
+
+
+@media (max-width: 480px) {
+  .reports-revenue-card__header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .reports-revenue-card__total {
+    font-size: 24px;
+  }
+}
+

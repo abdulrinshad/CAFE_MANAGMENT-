@@ -78,9 +78,10 @@ export default function RequestsPage() {
   // Local state for feedback message
   const [attendError, setAttendError] = useState(null)
   const [attendingId, setAttendingId] = useState(null)
+  const [toast, setToast] = useState(null)
 
-  // Map backend WaiterRequests + Notifications
-  const reqList = (waiterRequests || []).map((wr) => ({
+  // Map backend WaiterRequests
+  const requests = (waiterRequests || []).map((wr) => ({
     id: wr.id,
     rawId: wr.id,
     type: 'table_attention',
@@ -93,18 +94,6 @@ export default function RequestsPage() {
     assignedWaiter: wr.assigned_waiter || '',
     isWaiterRequest: true,
   }))
-
-  const notifList = (notifications || [])
-    .filter((n) => ['new_order', 'bill_requested', 'table_attention'].includes(n.type))
-    .map((n) => notifToRequest(n))
-
-  // Merge and deduplicate by table/message if needed
-  const requests = [...reqList]
-  notifList.forEach((n) => {
-    if (!requests.some((r) => r.tableId === n.tableId && r.status === n.status)) {
-      requests.push(n)
-    }
-  })
 
   const [activeTab, setActiveTab] = useState('All Requests')
 
@@ -138,10 +127,14 @@ export default function RequestsPage() {
       }
       await fetchWaiterRequests()
       await fetchNotifications()
+      setToast({ type: 'success', message: 'Request accepted!' })
+      setTimeout(() => setToast(null), 3000)
     } catch (err) {
       console.warn('Attend error:', err)
       const errMsg = err.message || 'This request has already been attended.'
       setAttendError(errMsg)
+      setToast({ type: 'error', message: errMsg })
+      setTimeout(() => setToast(null), 3000)
       await fetchWaiterRequests()
       await fetchNotifications()
     } finally {
@@ -150,22 +143,37 @@ export default function RequestsPage() {
   }
 
   const handleDismiss = async (req) => {
-    if (req.isWaiterRequest) {
-      await attendWaiterRequest(req.rawId, activeWaiterName)
-    } else {
-      await markNotificationRead(req.id)
+    try {
+      if (req.isWaiterRequest) {
+        await waiterRequestApi.setStatus(req.rawId, { status: 'dismissed' })
+      } else {
+        await markNotificationRead(req.id)
+      }
+      await fetchWaiterRequests()
+      await fetchNotifications()
+      setToast({ type: 'success', message: 'Request dismissed.' })
+      setTimeout(() => setToast(null), 3000)
+    } catch (err) {
+      setToast({ type: 'error', message: err.message || 'Error dismissing request.' })
+      setTimeout(() => setToast(null), 3000)
     }
   }
 
   const handleMarkCompleted = async (req) => {
-    if (req.isWaiterRequest) {
-      await waiterRequestApi.setStatus(req.rawId, { status: 'completed' })
-    } else {
-      await markNotificationRead(req.id)
+    try {
+      if (req.isWaiterRequest) {
+        await waiterRequestApi.setStatus(req.rawId, { status: 'completed' })
+      } else {
+        await markNotificationRead(req.id)
+      }
+      await fetchWaiterRequests()
+      await fetchNotifications()
+      setToast({ type: 'success', message: 'Request completed!' })
+      setTimeout(() => setToast(null), 3000)
+    } catch (err) {
+      setToast({ type: 'error', message: err.message || 'Error completing request.' })
+      setTimeout(() => setToast(null), 3000)
     }
-
-    await fetchWaiterRequests()
-    await fetchNotifications()
   }
 
   const newCount = requests.filter((r) => r.status === 'new').length

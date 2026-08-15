@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { getCategoryName } from '../utils/categoryHelper'
+import { waiterRequestApi } from '../api'
 import './CustomerMenuPage.css'
 
 const CATEGORIES = ['All', 'Coffee', 'Tea', 'Pastries', 'Desserts', 'Cold Beverages', 'Snacks']
@@ -21,14 +22,62 @@ export default function CustomerMenuPage() {
   const [activeCategory, setActiveCategory] = useState('All')
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [activeRequest, setActiveRequest] = useState(null)
+  const [splashFinished, setSplashFinished] = useState(false)
+  const [targetTableId, setTargetTableId] = useState(null)
 
   // Handle Initial Splash Screen Animation
   useEffect(() => {
     const timer = setTimeout(() => {
-      setViewState('menu')
+      setSplashFinished(true)
     }, 1200)
     return () => clearTimeout(timer)
   }, [])
+
+  // Resolve targetTableId from tables & tableParam
+  useEffect(() => {
+    if (tables && tableParam) {
+      const found = tables.find((t) => t.name === tableParam || String(t.id) === String(tableParam) || t.label === tableParam)
+      if (found) {
+        setTargetTableId(found.id)
+      }
+    } else if (tables && tables.length > 0) {
+      setTargetTableId(tables[0].id)
+    }
+  }, [tables, tableParam])
+
+  // Fetch active request for this table
+  const checkActiveRequest = async () => {
+    if (!targetTableId) return
+    try {
+      const res = await waiterRequestApi.list({ table: targetTableId })
+      const reqList = Array.isArray(res) ? res : (res?.results ?? [])
+      const active = reqList.find(r => r.status === 'new' || r.status === 'in_progress')
+      setActiveRequest(active || null)
+    } catch (err) {
+      console.error('Error checking active request:', err)
+    }
+  }
+
+  // Poll for active request changes
+  useEffect(() => {
+    if (targetTableId) {
+      checkActiveRequest()
+      const interval = setInterval(checkActiveRequest, 5000)
+      return () => clearInterval(interval)
+    }
+  }, [targetTableId])
+
+  // Sync viewState based on activeRequest status when splash finishes or activeRequest changes
+  useEffect(() => {
+    if (splashFinished) {
+      if (activeRequest) {
+        setViewState('request_sent')
+      } else if (viewState === 'request_sent') {
+        setViewState('menu')
+      }
+    }
+  }, [activeRequest, splashFinished])
 
   // Filter products by category and availability
   const filteredProducts = products ? products.filter((p) => {
@@ -45,24 +94,25 @@ export default function CustomerMenuPage() {
 
   // Call Waiter Request Handler
   const handleCallWaiter = async () => {
+    if (activeRequest) {
+      setViewState('request_sent')
+      return
+    }
     setViewState('request_loading')
     try {
-      let targetTableId = null
-      if (tables && tableParam) {
-        const found = tables.find((t) => t.name === tableParam || String(t.id) === String(tableParam) || t.label === tableParam)
-        if (found) targetTableId = found.id
-      }
-      if (!targetTableId && tables && tables.length > 0) {
-        targetTableId = tables[0].id
+      let resolvedTableId = targetTableId
+      if (!resolvedTableId && tables && tables.length > 0) {
+        resolvedTableId = tables[0].id
       }
 
-      if (createWaiterRequest && targetTableId) {
-        await createWaiterRequest({
-          table: targetTableId,
+      if (createWaiterRequest && resolvedTableId) {
+        const created = await createWaiterRequest({
+          table: resolvedTableId,
           request_type: 'Call Waiter',
           message: `Customer requested assistance at table ${tableLabel}`,
           status: 'new',
         })
+        setActiveRequest(created)
       }
       setViewState('request_sent')
     } catch (err) {
@@ -71,7 +121,15 @@ export default function CustomerMenuPage() {
     }
   }
 
-  const handleCancelRequest = () => {
+  const handleCancelRequest = async () => {
+    if (activeRequest && activeRequest.id) {
+      try {
+        await waiterRequestApi.setStatus(activeRequest.id, { status: 'dismissed' })
+      } catch (err) {
+        console.error('Error cancelling request:', err)
+      }
+    }
+    setActiveRequest(null)
     setViewState('menu')
   }
 
@@ -131,9 +189,15 @@ export default function CustomerMenuPage() {
           <span className="hamburger-menu-icon">☰</span>
           <span className="header-cafe-name">L&apos;Essence Café &middot; {tableLabel}</span>
         </div>
-        <button className="btn-primary btn-sm call-waiter-btn" onClick={handleCallWaiter}>
-          Call Waiter
-        </button>
+        {activeRequest ? (
+          <button className="btn-primary btn-sm call-waiter-btn requested" disabled>
+            ✓ Waiter Requested
+          </button>
+        ) : (
+          <button className="btn-primary btn-sm call-waiter-btn" onClick={handleCallWaiter}>
+            Call Waiter
+          </button>
+        )}
       </header>
 
       {/* Main Container */}
@@ -229,9 +293,12 @@ export default function CustomerMenuPage() {
           <span className="nav-icon">♡</span>
           <span className="nav-label">Favorites</span>
         </button>
-        <button className="nav-item" onClick={handleCallWaiter}>
-          <span className="nav-icon">🛎️</span>
-          <span className="nav-label">Staff</span>
+        <button 
+          className={`nav-item ${activeRequest ? 'requested' : ''}`} 
+          onClick={activeRequest ? () => setViewState('request_sent') : handleCallWaiter}
+        >
+          <span className="nav-icon">{activeRequest ? '✓' : '🛎️'}</span>
+          <span className="nav-label">{activeRequest ? 'Waiter Called' : 'Staff'}</span>
         </button>
         <button className="nav-item" onClick={() => alert('Artisan Brew Boutique Cafe\nOpen: 8:00 AM - 10:00 PM')}>
           <span className="nav-icon">ℹ️</span>

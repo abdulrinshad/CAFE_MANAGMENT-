@@ -224,7 +224,32 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
         status_param = self.request.query_params.get('status')
         if status_param and status_param.lower() != 'all':
             qs = qs.filter(status=status_param.lower())
+        table_param = self.request.query_params.get('table')
+        if table_param:
+            qs = qs.filter(table_id=table_param)
         return qs
+
+    def create(self, request, *args, **kwargs):
+        from django.db import transaction
+        table_id = request.data.get('table')
+        if not table_id:
+            return Response({'detail': 'Table is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            active_request = WaiterRequest.objects.select_for_update().filter(
+                table_id=table_id,
+                status__in=[WaiterRequest.STATUS_NEW, WaiterRequest.STATUS_IN_PROGRESS]
+            ).first()
+
+            if active_request:
+                serializer = self.get_serializer(active_request)
+                return Response(serializer.data, status=status.HTTP_200_OK)
+
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=True, methods=['patch'], url_path='set_status')
     def set_status(self, request, pk=None):

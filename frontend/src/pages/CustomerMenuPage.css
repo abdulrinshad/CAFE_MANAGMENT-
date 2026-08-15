@@ -641,3 +641,48 @@
     align-items: center;
   }
 }
+
+/* Mobile adjustments */
+@media (max-width: 767px) {
+  .qr-header {
+    padding: 10px 16px;
+  }
+  .qr-main-content {
+    padding: 16px;
+  }
+  .cafe-branding-name {
+    font-size: 24px;
+  }
+}
+
+/* Small mobile optimizations */
+@media (max-width: 480px) {
+  .qr-card-image-wrap {
+    width: 90px;
+  }
+  .qr-product-thumbnail {
+    font-size: 32px;
+  }
+  .qr-card-body {
+    padding: 12px;
+  }
+  .qr-card-title {
+    font-size: 14px;
+  }
+  .qr-card-price {
+    font-size: 13px;
+  }
+  .qr-card-desc {
+    -webkit-line-clamp: 1;
+  }
+  .bottom-sheet-card {
+    padding: 16px;
+  }
+  .sheet-product-title {
+    font-size: 18px;
+  }
+  .sheet-product-price {
+    font-size: 16px;
+  }
+}
+

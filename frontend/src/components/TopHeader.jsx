@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import './TopHeader.css'
 
-export default function TopHeader({ searchPlaceholder = 'Search orders, items...', pageTitle, pageIcon, right }) {
+export default function TopHeader({ searchPlaceholder = 'Search orders, items...', pageTitle, pageIcon, right, toggleSidebar }) {
   const navigate = useNavigate()
   const { notifications, unreadCount, markNotificationRead, markAllNotificationsRead } = useApp()
 
@@ -63,31 +63,46 @@ export default function TopHeader({ searchPlaceholder = 'Search orders, items...
 
   return (
     <header className="top-header">
-      {/* Left: search bar or page title */}
-      {pageTitle ? (
-        <div className="top-header__page-title">
-          {pageIcon && <span className="top-header__page-icon">{pageIcon}</span>}
-          <span className="top-header__page-name">{pageTitle}</span>
-        </div>
-      ) : (
-        <div className="top-header__search">
-          <span className="top-header__search-icon"><SearchIcon /></span>
-          <input
-            type="text"
-            className="top-header__search-input"
-            placeholder={searchPlaceholder}
-            value={searchVal}
-            onChange={(e) => setSearchVal(e.target.value)}
-            id="header-search"
-            aria-label="Search"
-          />
-        </div>
-      )}
+      <div className="top-header__row-primary">
+        <button className="top-header__menu-toggle" onClick={toggleSidebar} aria-label="Toggle Sidebar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
 
-      {/* Right: optional slot OR default icons */}
-      {right ? (
-        <div className="top-header__right-slot">
-          {right}
+        {/* Brand logo/name visible on mobile */}
+        <div className="top-header__brand-mobile">
+          <span className="brand-name-mobile">Artisan Brew</span>
+        </div>
+
+        {/* Page Title Mode (Reports, Settings) */}
+        {pageTitle ? (
+          <div className="top-header__page-title">
+            {pageIcon && <span className="top-header__page-icon">{pageIcon}</span>}
+            <span className="top-header__page-name">{pageTitle}</span>
+          </div>
+        ) : (
+          /* Search mode for desktop */
+          <div className="top-header__search desktop-only-search">
+            <span className="top-header__search-icon"><SearchIcon /></span>
+            <input
+              type="text"
+              className="top-header__search-input"
+              placeholder={searchPlaceholder}
+              value={searchVal}
+              onChange={(e) => setSearchVal(e.target.value)}
+              id="header-search"
+              aria-label="Search"
+            />
+          </div>
+        )}
+
+        {/* Header Actions & Profile */}
+        <div className="top-header__actions-wrap">
+          {right && <div className="top-header__right-slot-content">{right}</div>}
+          
           {/* Notification Bell */}
           <div className="notif-bell-wrap" ref={bellRef}>
             <button
@@ -111,41 +126,34 @@ export default function TopHeader({ searchPlaceholder = 'Search orders, items...
               />
             )}
           </div>
+
+          {!right && (
+            <button className="top-header__icon-btn desktop-only-help" id="btn-help" aria-label="Help">
+              <HelpIcon />
+            </button>
+          )}
+
           <button className="top-header__avatar" id="btn-profile" aria-label="Profile">
             <img src="/logo.png" alt="Admin" />
           </button>
         </div>
-      ) : (
-        <div className="top-header__actions">
-          {/* Notification Bell */}
-          <div className="notif-bell-wrap" ref={bellRef}>
-            <button
-              className="top-header__icon-btn"
-              id="btn-notifications"
-              aria-label="Notifications"
-              onClick={handleBellClick}
-            >
-              <BellIcon />
-              {unreadCount > 0 && (
-                <span className="notif-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>
-              )}
-            </button>
-            {bellOpen && (
-              <NotifDropdown
-                notifications={notifications}
-                onMarkAll={handleMarkAll}
-                onNotifClick={handleNotifClick}
-                typeIcon={typeIcon}
-                timeAgo={timeAgo}
-              />
-            )}
+      </div>
+
+      {/* Row 2: Search bar on mobile (if not in pageTitle mode) */}
+      {!pageTitle && (
+        <div className="top-header__row-search-mobile">
+          <div className="top-header__search">
+            <span className="top-header__search-icon"><SearchIcon /></span>
+            <input
+              type="text"
+              className="top-header__search-input"
+              placeholder={searchPlaceholder}
+              value={searchVal}
+              onChange={(e) => setSearchVal(e.target.value)}
+              id="header-search-mobile"
+              aria-label="Search Mobile"
+            />
           </div>
-          <button className="top-header__icon-btn" id="btn-help" aria-label="Help">
-            <HelpIcon />
-          </button>
-          <button className="top-header__avatar" id="btn-profile" aria-label="Profile">
-            <img src="/logo.png" alt="Admin" />
-          </button>
         </div>
       )}
     </header>

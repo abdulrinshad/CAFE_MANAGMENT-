@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { path: '/settings/profile',label: 'Settings',    icon: <SettingsIcon />, matchPath: '/settings' },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate()
   const { currentRole, currentWaiter, logout, waiterRequests } = useApp()
 
@@ -37,7 +37,15 @@ export default function Sidebar() {
 
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? 'sidebar--open' : ''}`}>
+      {/* Mobile Drawer Close Button */}
+      <button className="sidebar__close-btn" onClick={onClose} aria-label="Close sidebar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+
       {/* Brand */}
       <div className="sidebar__brand">
         <div className="sidebar__logo">

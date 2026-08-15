@@ -324,3 +324,130 @@
   text-align: center;
 }
 
+/* Mobile Drawer Close Button */
+.sidebar__close-btn {
+  display: none;
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  transition: background var(--transition);
+  z-index: 10;
+}
+.sidebar__close-btn:hover {
+  background: var(--color-cream);
+  color: var(--color-espresso);
+}
+
+/* Tablet: Compact Collapsed Sidebar */
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --sidebar-width: 70px;
+  }
+  .sidebar {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    align-items: center;
+  }
+  .sidebar__brand {
+    padding: 20px 0;
+    justify-content: center;
+  }
+  .sidebar__brand-text,
+  .sidebar__waiter-info,
+  .sidebar__waiter-role,
+  .sidebar__station-badge {
+    display: none !important;
+  }
+  .sidebar__new-order {
+    padding: 8px 0 16px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+  .btn-new-order {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    justify-content: center;
+    font-size: 0 !important;
+  }
+  .btn-new-order__plus {
+    margin: 0;
+    font-size: 18px !important;
+  }
+  
+  .sidebar__nav {
+    padding: 4px 6px;
+    align-items: center;
+    width: 100%;
+  }
+  .sidebar__nav-item {
+    justify-content: center;
+    padding: 10px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+  }
+  .sidebar__nav-label,
+  .sidebar__chevron,
+  .sidebar__sub-nav {
+    display: none !important;
+  }
+  .sidebar__bottom {
+    padding: 12px 6px 20px;
+    align-items: center;
+    width: 100%;
+  }
+  .sidebar__bottom-item {
+    justify-content: center;
+    padding: 10px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+  }
+  .sidebar__bottom-item span:not(.sidebar__nav-icon) {
+    display: none !important;
+  }
+  .sidebar__waiter-session {
+    margin: 6px 0 12px;
+    padding: 6px;
+    border: none;
+    background: none;
+  }
+  .sidebar__waiter-profile {
+    justify-content: center;
+  }
+}
+
+/* Mobile: Drawer Off-Canvas Navigation */
+@media (max-width: 767px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    width: 260px;
+    min-width: 260px;
+    z-index: 200;
+    height: 100vh;
+    box-shadow: 4px 0 20px rgba(44, 24, 16, 0.15);
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: var(--color-bg);
+  }
+  .sidebar.sidebar--open {
+    left: 0;
+  }
+  .sidebar__close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+

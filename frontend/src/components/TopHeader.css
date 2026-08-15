@@ -3,16 +3,58 @@
   height: 58px;
   min-height: 58px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  justify-content: center;
   padding: 0 28px;
   background: var(--color-bg-alt);
   border-bottom: 1px solid var(--color-border);
   position: sticky;
   top: 0;
   z-index: 10;
-  gap: 16px;
+  gap: 0;
 }
+
+.top-header__row-primary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.top-header__brand-mobile {
+  display: none;
+}
+
+.top-header__actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.top-header__row-search-mobile {
+  display: none;
+}
+
+
+.top-header__menu-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.top-header__menu-toggle:hover {
+  background: var(--color-cream);
+  color: var(--color-espresso);
+}
+
 
 /* Search */
 .top-header__search {
@@ -286,3 +328,62 @@
   flex-shrink: 0;
   margin-top: 6px;
 }
+
+@media (max-width: 1023px) {
+  .top-header {
+    padding: 0 16px;
+  }
+  .top-header__menu-toggle {
+    display: flex;
+  }
+}
+
+@media (max-width: 767px) {
+  .top-header {
+    padding: 10px 14px;
+    height: auto;
+    min-height: auto;
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  
+  .top-header__brand-mobile {
+    display: block;
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-espresso);
+  }
+  
+  .desktop-only-search {
+    display: none !important;
+  }
+  
+  .desktop-only-help {
+    display: none !important;
+  }
+  
+  .top-header__row-search-mobile {
+    display: block;
+    width: 100%;
+  }
+  
+  .top-header__row-search-mobile .top-header__search {
+    width: 100%;
+    border-radius: 12px;
+    padding: 8px 12px;
+  }
+  
+  .top-header__page-name {
+    font-size: 14px;
+  }
+  
+  .notif-dropdown {
+    width: 280px;
+    right: -20px;
+    max-height: 400px;
+  }
+}
+
+

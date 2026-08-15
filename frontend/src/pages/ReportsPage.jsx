@@ -160,29 +160,37 @@ export default function ReportsPage() {
   return (
     <AdminLayout
       pageTitle="Reports & Analytics"
-      headerRight={
-        <div className="reports-period-tabs">
-          {['daily', 'weekly', 'monthly'].map((p) => (
-            <button
-              key={p}
-              className={`period-tab${period === p && !customRange ? ' period-tab--active' : ''}`}
-              onClick={() => { setPeriod(p); setCustomRange(null) }}
-              id={`period-${p}`}
-            >
-              {p.charAt(0).toUpperCase() + p.slice(1)}
-            </button>
-          ))}
-          <button
-            className={`period-tab period-tab--custom${customRange ? ' period-tab--active' : ''}`}
-            onClick={() => setCustomOpen(true)}
-            id="period-custom"
-          >
-            <CalendarIcon /> Custom
-          </button>
-        </div>
-      }
     >
       <div className="reports-page">
+        {/* Reports Header Block */}
+        <div className="reports-page__header-block">
+          <div className="reports-page__header-left">
+            <h1 className="reports-page__title">Reports & Analytics</h1>
+            <p className="reports-page__subtitle">Track sales, orders and performance</p>
+          </div>
+          <div className="reports-page__header-right">
+            <div className="reports-period-tabs">
+              {['daily', 'weekly', 'monthly'].map((p) => (
+                <button
+                  key={p}
+                  className={`period-tab${period === p && !customRange ? ' period-tab--active' : ''}`}
+                  onClick={() => { setPeriod(p); setCustomRange(null) }}
+                  id={`period-${p}`}
+                >
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
+                </button>
+              ))}
+              <button
+                className={`period-tab period-tab--custom${customRange ? ' period-tab--active' : ''}`}
+                onClick={() => setCustomOpen(true)}
+                id="period-custom"
+              >
+                <CalendarIcon /> Custom
+              </button>
+            </div>
+          </div>
+        </div>
+
         {loading ? (
           <div style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 0', fontSize: 14 }}>
             Loading reports…

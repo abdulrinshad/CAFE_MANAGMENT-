@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, waiterRequestApi, authApi } from '../api'
 
 
@@ -14,6 +14,7 @@ export function AppProvider({ children }) {
   const [orders,         setOrders]        = useState([])
   const [notifications,  setNotifications] = useState([])
   const [unreadCount,    setUnreadCount]   = useState(0)
+  const [waiterRequestsState, setWaiterRequests] = useState([])
   const [loading,        setLoading]       = useState({
     products: false, categories: false, tables: false, qrCodes: false, orders: false,
   })
@@ -39,23 +40,23 @@ export function AppProvider({ children }) {
     } catch { return null }
   })
 
-  // Derive waiterRequests directly from notifications
+  // Derive waiterRequests from waiterRequestsState (actual backend WaiterRequests)
   const waiterRequests = useMemo(() => {
-    return notifications.filter((n) =>
-      ['new_order', 'bill_requested', 'table_attention'].includes(n.type)
-    ).map(n => ({
-      id:       n.id,
-      type:     n.type,
-      title:    n.title,
-      message:  n.message,
-      tableId:  n.table_name ? n.table_name : (n.table ? `T-${n.table}` : '—'),
-      tableFK:  n.table,
-      orderId:  n.order,
-      orderRef: n.order_number,
-      status:   n.status || 'new',
-      time:     n.created_at,
+    return waiterRequestsState.map(wr => ({
+      id:             wr.id,
+      type:           wr.request_type || 'Call Waiter',
+      title:          `Table ${wr.table_name || wr.table_id || wr.table}`,
+      message:        wr.message || `Customer requested assistance at table ${wr.table_name || wr.table_id || wr.table}`,
+      tableId:        wr.table_name || (wr.table ? `T-${wr.table}` : '—'),
+      tableFK:        wr.table,
+      status:         wr.status || 'new',
+      time:           wr.time || (wr.created_at ? new Date(wr.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : ''),
+      assignedWaiter: wr.assigned_waiter || '',
+      amount:         wr.amount,
+      isWaiterRequest: true,
     }))
-  }, [notifications])
+  }, [waiterRequestsState])
+
 
   const setCurrentRole = (role) => {
     try { localStorage.setItem('artisan_role', role) } catch {}
@@ -606,11 +607,28 @@ export function AppProvider({ children }) {
     return result
   }
 
-  const updateRequestStatus = (id, status) => {
-    setWaiterRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)))
+  const updateRequestStatus = async (id, status) => {
+    try {
+      if (status === 'in_progress') {
+        const activeWaiterName = currentWaiter?.name || currentUser?.username || 'Staff'
+        await waiterRequestApi.attend(id, { assigned_waiter: activeWaiterName })
+      } else {
+        await waiterRequestApi.setStatus(id, { status })
+      }
+      await fetchWaiterRequests()
+      await fetchNotifications()
+    } catch (err) {
+      console.warn('updateRequestStatus error:', err)
+    }
   }
   const dismissRequest = async (id) => {
-    await updateNotificationStatus(id, 'dismissed')
+    try {
+      await waiterRequestApi.setStatus(id, { status: 'dismissed' })
+      await fetchWaiterRequests()
+      await fetchNotifications()
+    } catch (err) {
+      console.warn('dismissRequest error:', err)
+    }
   }
 
   return (
@@ -635,7 +653,7 @@ export function AppProvider({ children }) {
         refreshUser,
         currentRole,       setCurrentRole,
         currentWaiter,     setCurrentWaiter,
-        waiterRequests,    setWaiterRequests,
+        waiterRequests:    waiterRequests,    setWaiterRequests,
         fetchWaiterRequests,
         createWaiterRequest,
         attendWaiterRequest,

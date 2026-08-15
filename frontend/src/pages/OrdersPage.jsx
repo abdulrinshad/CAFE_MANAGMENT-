@@ -139,8 +139,8 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {/* Table */}
-        <div className="orders-table-wrap">
+        {/* Table (Desktop only) */}
+        <div className="orders-table-wrap desktop-only-table">
           <table className="orders-table">
             <thead>
               <tr>
@@ -200,6 +200,55 @@ export default function OrdersPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile cards view (Mobile only) */}
+        <div className="orders-mobile-cards-wrap">
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 32, color: '#6b7280' }}>Loading orders…</div>
+          ) : paged.length === 0 ? (
+            <div className="orders-empty">No orders found.</div>
+          ) : (
+            paged.map((order) => {
+              const meta = STATUS_META[order.status] || STATUS_META.PENDING
+              return (
+                <div
+                  key={order.id}
+                  className="orders-mobile-card"
+                  onClick={() => navigate(`/orders/${order.id}`)}
+                  id={`order-card-${order.id}`}
+                >
+                  <div className="orders-mobile-card__header">
+                    <span className="card-order-id">{order.orderId}</span>
+                    <span className={`order-badge ${meta.cls}`}>{meta.label}</span>
+                  </div>
+                  <div className="orders-mobile-card__body">
+                    <div className="card-row">
+                      <div className="card-col">
+                        <span className="card-label">TABLE</span>
+                        <span className="card-value">{order.table}</span>
+                      </div>
+                      <div className="card-col">
+                        <span className="card-label">WAITER</span>
+                        <span className="card-value">{order.waiter}</span>
+                      </div>
+                    </div>
+                    <div className="card-items">
+                      <span className="card-label">ITEMS SUMMARY</span>
+                      <span className="card-value">{order.itemsSummary}</span>
+                    </div>
+                  </div>
+                  <div className="orders-mobile-card__footer">
+                    <div className="card-total">
+                      <span className="card-label">TOTAL</span>
+                      <span className="card-price">₹{Number(order.amount).toLocaleString('en-IN')}</span>
+                    </div>
+                    <span className="card-view-btn">View Order →</span>
+                  </div>
+                </div>
+              )
+            })
+          )}
         </div>
 
         {/* Pagination */}

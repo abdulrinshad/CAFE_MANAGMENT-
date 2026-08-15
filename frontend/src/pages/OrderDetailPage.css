@@ -256,11 +256,76 @@
   margin-top: 4px;
 }
 
-@media (max-width: 750px) {
-  .order-detail__body { grid-template-columns: 1fr; }
-  .order-detail__right { order: -1; }
-  .status-stepper__label { font-size: 10px; }
+@media (max-width: 767px) {
+  .order-detail__body {
+    grid-template-columns: 1fr;
+  }
+  .order-detail__right {
+    order: 2; /* Put summary card below items list */
+  }
+  .status-stepper {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding-left: 10px;
+    position: relative;
+  }
+  .status-stepper__item {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    width: 100%;
+    position: relative;
+  }
+  .status-stepper__line {
+    position: absolute;
+    left: 19px;
+    top: 40px;
+    width: 2px;
+    height: calc(100% + 16px);
+    background: var(--color-border-light);
+    z-index: 0;
+  }
+  .status-stepper__line--active {
+    background: var(--color-espresso);
+  }
+  .status-stepper__label {
+    text-align: left;
+    font-size: 13px;
+  }
+  .order-detail__header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .order-detail__header-actions {
+    width: 100%;
+  }
+  .order-detail__header-actions button {
+    flex: 1;
+  }
 }
+
+@media (max-width: 480px) {
+  .order-detail__status-card {
+    padding: 16px;
+  }
+  .order-item--with-controls {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .order-item__qty-controls {
+    order: 2;
+  }
+  .order-item__total {
+    order: 3;
+    margin-left: auto;
+  }
+  .order-item__remove-btn {
+    order: 4;
+  }
+}
+
 
 /* ── Loading / Error states ── */
 .order-detail-loading,
