@@ -558,12 +558,7 @@
   padding-top: 14px;
   border-top: 1px solid var(--color-border, #e8ddd0);
 }
-.stepper-advance-btn {
-  flex-shrink: 0;
-  padding: 9px 20px;
-  font-size: 13px;
-  font-weight: 600;
-}
+/* old helper kept for reference — actual style now via .advance-status-btn */
 .stepper-advance-hint {
   font-size: 12px;
   color: var(--color-text-muted, #888);
@@ -587,3 +582,100 @@
   background: var(--color-surface-alt, #f9f5f0);
   border-radius: 8px;
 }
+
+/* ── Premium "Mark Preparing / Ready / Completed" advance button ── */
+.advance-status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: var(--font-body, system-ui, sans-serif);
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  color: #fff;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  /* Rich dark-brown gradient matching espresso palette */
+  background: linear-gradient(
+    135deg,
+    #4a2612 0%,
+    #6b3a20 40%,
+    #7c4427 100%
+  );
+  box-shadow:
+    0 2px 8px rgba(74, 38, 18, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  /* Smooth transitions */
+  transition:
+    transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.14s ease,
+    background 0.15s ease,
+    opacity 0.12s ease;
+}
+
+/* Hover: lift + intensify shadow */
+.advance-status-btn:hover:not(:disabled) {
+  background: linear-gradient(
+    135deg,
+    #3d1e0e 0%,
+    #5c3018 40%,
+    #6d3a20 100%
+  );
+  box-shadow:
+    0 5px 18px rgba(74, 38, 18, 0.42),
+    0 2px 6px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  transform: translateY(-1.5px);
+}
+
+/* Active / press: sink in */
+.advance-status-btn:active:not(:disabled) {
+  transform: translateY(0.5px) scale(0.98);
+  box-shadow:
+    0 1px 4px rgba(74, 38, 18, 0.30),
+    0 0 0 rgba(0, 0, 0, 0);
+  transition-duration: 0.06s;
+}
+
+/* Focus ring for keyboard nav */
+.advance-status-btn:focus-visible {
+  outline: 2px solid #a0622a;
+  outline-offset: 3px;
+}
+
+/* Disabled */
+.advance-status-btn:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Arrow icon nudges right on hover */
+.advance-status-btn:hover:not(:disabled) svg:last-child {
+  transform: translateX(2px);
+  transition: transform 0.14s ease;
+}
+.advance-status-btn svg:last-child {
+  transition: transform 0.14s ease;
+}
+
+/* Stepper variant: slightly smaller for inline context */
+.advance-status-btn--stepper {
+  padding: 8px 15px;
+  font-size: 13px;
+}
+
+/* Spinner keyframe */
+@keyframes advance-btn-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
