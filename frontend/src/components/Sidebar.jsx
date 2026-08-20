@@ -14,6 +14,48 @@ const NAV_ITEMS = [
   { path: '/settings/profile',label: 'Settings',    icon: <SettingsIcon />, matchPath: '/settings' },
 ]
 
+// ── Owner Navigation (grouped by section) ─────────────────────────────────
+const OWNER_NAV_SECTIONS = [
+  {
+    label: 'MAIN',
+    items: [
+      { path: '/owner/dashboard', label: 'Dashboard',         icon: <DashboardIcon />, exact: true },
+    ],
+  },
+  {
+    label: 'BUSINESS',
+    items: [
+      { path: '/owner/branches', label: 'Branches',           icon: <BranchIcon /> },
+      { path: '/owner/staff',    label: 'Staff & Permissions', icon: <WaitersIcon /> },
+      { path: '/owner/pos',      label: 'POS Terminals',      icon: <POSIcon /> },
+    ],
+  },
+  {
+    label: 'OPERATIONS',
+    items: [
+      { path: '/owner/menu',      label: 'Menu',      icon: <MenuIcon /> },
+      { path: '/owner/orders',    label: 'Orders',    icon: <OrdersIcon /> },
+      { path: '/owner/billing',   label: 'Billing',   icon: <BillingIcon /> },
+      { path: '/owner/payments',  label: 'Payments',  icon: <PaymentsIcon /> },
+      { path: '/owner/inventory', label: 'Inventory', icon: <InventoryIcon /> },
+      { path: '/owner/expenses',  label: 'Expenses',  icon: <ExpensesIcon /> },
+      { path: '/owner/customers', label: 'Customers', icon: <WaitersIcon /> },
+    ],
+  },
+  {
+    label: 'ANALYTICS',
+    items: [
+      { path: '/owner/reports', label: 'Reports & Analytics', icon: <ReportsIcon /> },
+    ],
+  },
+  {
+    label: 'SYSTEM',
+    items: [
+      { path: '/owner/settings', label: 'Settings', icon: <SettingsIcon /> },
+    ],
+  },
+]
+
 export default function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate()
   const { currentRole, currentWaiter, logout, waiterRequests } = useApp()
@@ -24,6 +66,8 @@ export default function Sidebar({ isOpen, onClose }) {
   }
 
   const activeRequestsCount = waiterRequests ? waiterRequests.filter(r => r.status === 'new').length : 0
+
+  const isOwner = currentRole === 'owner' || currentRole === 'admin'
 
   const items = currentRole === 'waiter'
     ? [
@@ -75,36 +119,65 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
       )}
 
-      {/* New Order Button */}
-      <div className="sidebar__new-order">
-        <button className="btn-new-order" id="btn-new-order" onClick={() => navigate('/orders/new')}>
-          <span className="btn-new-order__plus">+</span>
-          New Order
-        </button>
-      </div>
+      {/* New Order Button — hidden for owner role */}
+      {!isOwner && (
+        <div className="sidebar__new-order">
+          <button className="btn-new-order" id="btn-new-order" onClick={() => navigate('/orders/new')}>
+            <span className="btn-new-order__plus">+</span>
+            New Order
+          </button>
+        </div>
+      )}
 
       {/* Navigation */}
-      <nav className="sidebar__nav">
-        {items.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            end={item.exact}
-            className={({ isActive }) => {
-              const active = isActive ||
-                (item.matchPath && window.location.pathname.startsWith(item.matchPath))
-              return `sidebar__nav-item${active ? ' sidebar__nav-item--active' : ''}`
-            }}
-            id={`nav-${item.label.toLowerCase().replace(/\s/g, '-')}`}
-          >
-            <span className="sidebar__nav-icon">{item.icon}</span>
-            <span className="sidebar__nav-label">{item.label}</span>
-            {item.badge !== undefined && item.badge !== null && (
-              <span className="sidebar__nav-badge">{item.badge}</span>
-            )}
-          </NavLink>
-        ))}
-      </nav>
+      {isOwner ? (
+        /* Owner: grouped sections with labels */
+        <nav className="sidebar__nav">
+          {OWNER_NAV_SECTIONS.map(section => (
+            <div key={section.label} className="sidebar__section-group">
+              <span className="sidebar__section-label">{section.label}</span>
+              {section.items.map(item => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.exact}
+                  className={({ isActive }) =>
+                    `sidebar__nav-item${isActive ? ' sidebar__nav-item--active' : ''}`
+                  }
+                  id={`nav-owner-${item.label.toLowerCase().replace(/[\s&]/g, '-')}`}
+                  onClick={onClose}
+                >
+                  <span className="sidebar__nav-icon">{item.icon}</span>
+                  <span className="sidebar__nav-label">{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
+      ) : (
+        /* Admin / Manager / Waiter: flat list */
+        <nav className="sidebar__nav">
+          {items.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end={item.exact}
+              className={({ isActive }) => {
+                const active = isActive ||
+                  (item.matchPath && window.location.pathname.startsWith(item.matchPath))
+                return `sidebar__nav-item${active ? ' sidebar__nav-item--active' : ''}`
+              }}
+              id={`nav-${item.label.toLowerCase().replace(/\s/g, '-')}`}
+            >
+              <span className="sidebar__nav-icon">{item.icon}</span>
+              <span className="sidebar__nav-label">{item.label}</span>
+              {item.badge !== undefined && item.badge !== null && (
+                <span className="sidebar__nav-badge">{item.badge}</span>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+      )}
 
       {/* Bottom */}
       <div className="sidebar__bottom">
@@ -233,6 +306,57 @@ function WaitersIcon() {
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  )
+}
+/* ── Owner-specific Icons ── */
+function BranchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
+    </svg>
+  )
+}
+function POSIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2"/>
+      <line x1="8" y1="21" x2="16" y2="21"/>
+      <line x1="12" y1="17" x2="12" y2="21"/>
+    </svg>
+  )
+}
+function BillingIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="9" y1="13" x2="15" y2="13"/>
+      <line x1="9" y1="17" x2="13" y2="17"/>
+    </svg>
+  )
+}
+function PaymentsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/>
+      <line x1="1" y1="10" x2="23" y2="10"/>
+    </svg>
+  )
+}
+function InventoryIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+    </svg>
+  )
+}
+function ExpensesIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="1" x2="12" y2="23"/>
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
     </svg>
   )
 }
