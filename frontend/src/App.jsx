@@ -25,6 +25,22 @@ import SettingsBillingPage  from './pages/SettingsBillingPage'
 import SettingsMenuPage     from './pages/SettingsMenuPage'
 import WaitersPage          from './pages/WaitersPage'
 
+// ── Owner Module ────────────────────────────────────────────────────
+import OwnerDashboardPage    from './pages/owner/OwnerDashboardPage'
+import OwnerBranchesPage     from './pages/owner/OwnerBranchesPage'
+import OwnerBranchDetailPage from './pages/owner/OwnerBranchDetailPage'
+import OwnerStaffPage        from './pages/owner/OwnerStaffPage'
+import OwnerPOSPage          from './pages/owner/OwnerPOSPage'
+import OwnerMenuPage         from './pages/owner/OwnerMenuPage'
+import OwnerOrdersPage       from './pages/owner/OwnerOrdersPage'
+import OwnerBillingPage      from './pages/owner/OwnerBillingPage'
+import OwnerPaymentsPage     from './pages/owner/OwnerPaymentsPage'
+import OwnerInventoryPage    from './pages/owner/OwnerInventoryPage'
+import OwnerExpensesPage     from './pages/owner/OwnerExpensesPage'
+import OwnerCustomersPage    from './pages/owner/OwnerCustomersPage'
+import OwnerReportsPage      from './pages/owner/OwnerReportsPage'
+import OwnerSettingsPage     from './pages/owner/OwnerSettingsPage'
+
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { currentUser, authLoading, currentRole } = useApp()
@@ -243,9 +259,84 @@ export default function App() {
           </ProtectedRoute>
         } />
 
-        {/* Fallback */}
-        <Route path="*"           element={<Navigate to="/dashboard" replace />} />
+        {/* Fallback — admin goes to owner dashboard */}
+        <Route path="*" element={<Navigate to="/owner/dashboard" replace />} />
+        <Route path="/dashboard" element={<Navigate to="/owner/dashboard" replace />} />
+
+        {/* ── Owner / Main Admin Routes ── */}
+        <Route path="/owner" element={<Navigate to="/owner/dashboard" replace />} />
+        <Route path="/owner/dashboard" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerDashboardPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/branches" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerBranchesPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/branches/:id" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerBranchDetailPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/staff" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerStaffPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/pos" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerPOSPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/menu" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerMenuPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/orders" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerOrdersPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/billing" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerBillingPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/payments" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerPaymentsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/inventory" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerInventoryPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/expenses" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerExpensesPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/customers" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerCustomersPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/reports" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerReportsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/owner/settings" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerSettingsPage />
+          </ProtectedRoute>
+        } />
       </Routes>
     </BrowserRouter>
   )
 }
+

@@ -450,4 +450,26 @@
   }
 }
 
+/* ── Owner Sidebar: Section Groups & Labels ── */
+.sidebar__section-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
 
+.sidebar__section-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--color-text-light);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 14px 10px 4px;
+  display: block;
+}
+
+/* Hide section labels on tablet collapsed sidebar */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .sidebar__section-label {
+    display: none;
+  }
+}
