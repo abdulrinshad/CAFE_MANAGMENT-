@@ -77,20 +77,13 @@ from accounts.permissions import IsAdminOrManagerOrStaff
 # Orders ViewSet
 # ─────────────────────────────────────────────────────────────────────────────
 
+from accounts.utils import get_waiter_branch
+from rest_framework.exceptions import PermissionDenied
+
+
 class OrderViewSet(viewsets.ModelViewSet):
-    """
-    Full CRUD for Orders.
-    GET    /api/v1/orders/             list (with ?status= ?search= filters)
-    POST   /api/v1/orders/             create
-    GET    /api/v1/orders/{id}/        retrieve
-    PATCH  /api/v1/orders/{id}/        partial update
-    DELETE /api/v1/orders/{id}/        cancel (soft)
-    PATCH  /api/v1/orders/{id}/set_status/   change status
-    POST   /api/v1/orders/{id}/add_item/     add an item to the order
-    DELETE /api/v1/orders/{id}/remove_item/{item_id}/  remove item
-    """
     permission_classes = [IsAdminOrManagerOrStaff]
-    queryset = Order.objects.select_related('table').prefetch_related('items__product').all()
+    queryset = Order.objects.select_related('table', 'branch').prefetch_related('items__product').all()
     ordering_fields  = ['created_at', 'status', 'total']
     ordering         = ['-created_at']
 
@@ -101,6 +94,9 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        waiter_branch = get_waiter_branch(self.request)
+        if waiter_branch:
+            qs = qs.filter(branch=waiter_branch)
         status_filter = self.request.query_params.get('status')
         search        = self.request.query_params.get('search')
         if status_filter:
@@ -112,6 +108,24 @@ class OrderViewSet(viewsets.ModelViewSet):
                 Q(table__name__icontains=search)
             )
         return qs
+
+    def perform_create(self, serializer):
+        waiter_branch = get_waiter_branch(self.request)
+        table = serializer.validated_data.get('table')
+        if table:
+            if table.branch and waiter_branch and table.branch != waiter_branch:
+                raise PermissionDenied("Table belongs to another branch.")
+
+        items_data = self.request.data.get('items', [])
+        from menu.models import Product
+        for item in items_data:
+            prod_id = item.get('product')
+            if prod_id:
+                prod = Product.objects.filter(pk=prod_id).first()
+                if prod and prod.branch and waiter_branch and prod.branch != waiter_branch:
+                    raise PermissionDenied(f"Product '{prod.name}' belongs to another branch.")
+
+        serializer.save(branch=waiter_branch)
 
     @action(detail=True, methods=['patch'], url_path='set_status')
     def set_status(self, request, pk=None):
@@ -519,6 +533,48 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         return Response(InvoiceSerializer(invoice, context={'request': request}).data)
 
+    @action(detail=True, methods=['post'], url_path='request_payment')
+    def request_payment(self, request, pk=None):
+        """
+        POST /orders/{id}/request_payment/
+        Status progression: BILL GENERATED -> PAYMENT REQUESTED
+        Sends payment request to Cashier dashboard. Waiter does NOT process payment.
+        """
+        from django.db import transaction
+        order = self.get_object()
+
+        with transaction.atomic():
+            invoice = getattr(order, 'invoice', None)
+            if not invoice:
+                return Response({'detail': 'Invoice not found. Please generate bill first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+            order.payment_status = 'payment_requested'
+            order.save(update_fields=['payment_status', 'updated_at'])
+
+            invoice.payment_status = 'payment_requested'
+            invoice.save(update_fields=['payment_status', 'updated_at'])
+
+            if order.table:
+                from menu.models import Table
+                Table.objects.filter(pk=order.table_id).update(status=Table.STATUS_BILL_REQUESTED)
+
+            # Create notification for cashier
+            try:
+                from notifications.models import Notification
+                Notification.objects.create(
+                    type='payment_requested',
+                    title=f'Payment Requested - Table {order.table_label}',
+                    message=f'Waiter requested cashier payment for Order {order.order_number} (Amount: ₹{order.total}).',
+                    table=order.table,
+                    order=order,
+                    total_amount=order.total,
+                    status='new'
+                )
+            except Exception:
+                pass
+
+        return Response(InvoiceSerializer(invoice, context={'request': request}).data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post', 'patch'], url_path='complete_payment')
     def complete_payment(self, request, pk=None):
         return self.complete_order(request, pk=pk)
@@ -692,6 +748,11 @@ class DashboardStatsView(APIView):
         else:
             sales_change_pct = None  # no baseline
 
+        waiter_branch = get_waiter_branch(request)
+        if waiter_branch:
+            today_qs     = today_qs.filter(branch=waiter_branch)
+            yesterday_qs = yesterday_qs.filter(branch=waiter_branch)
+
         # Order counts
         today_total     = today_qs.count()
         today_pending   = today_qs.filter(status=Order.STATUS_PENDING).count()
@@ -703,22 +764,34 @@ class DashboardStatsView(APIView):
         # Active tables (occupied or bill_requested)
         try:
             from menu.models import Table
-            active_tables = Table.objects.filter(
-                status__in=['occupied', 'bill_requested']
+            tables_qs = Table.objects.filter(active=True)
+            if waiter_branch:
+                tables_qs = tables_qs.filter(branch=waiter_branch)
+            active_tables = tables_qs.filter(
+                status__in=['occupied', 'bill_requested', 'needs_attention']
             ).count()
-            total_tables = Table.objects.filter(active=True).count()
+            pending_bills = tables_qs.filter(status='bill_requested').count()
+            total_tables  = tables_qs.count()
         except Exception:
             active_tables = 0
+            pending_bills = 0
             total_tables  = 0
 
         # Active requests (new or in_progress status WaiterRequests)
         try:
-            from menu.models import WaiterRequest
-            active_requests = WaiterRequest.objects.filter(
+            from menu.models import WaiterRequest, WaiterRequestSerializer
+            reqs_qs = WaiterRequest.objects.all()
+            if waiter_branch:
+                reqs_qs = reqs_qs.filter(branch=waiter_branch)
+            active_requests = reqs_qs.filter(
                 status__in=[WaiterRequest.STATUS_NEW, WaiterRequest.STATUS_IN_PROGRESS]
             ).count()
+            recent_requests = WaiterRequestSerializer(
+                reqs_qs.order_by('-created_at')[:5], many=True, context={'request': request}
+            ).data
         except Exception:
             active_requests = 0
+            recent_requests = []
 
         # Active orders (pending, preparing, or ready status Orders today)
         active_orders = today_qs.filter(
@@ -739,7 +812,11 @@ class DashboardStatsView(APIView):
             'occupied_tables':   active_tables,
             'total_tables':      total_tables,
             'active_requests':   active_requests,
+            'pending_requests':  active_requests,
             'active_orders':     active_orders,
+            'pending_bills':     pending_bills,
+            'recent_requests':   recent_requests,
+            'branch':            waiter_branch.name if waiter_branch else 'Main Branch',
         })
 
 
@@ -748,7 +825,11 @@ class DashboardRecentOrdersView(APIView):
 
     def get(self, request):
         limit  = int(request.query_params.get('limit', 8))
-        orders = Order.objects.select_related('table').prefetch_related('items').order_by('-created_at')[:limit]
+        qs     = Order.objects.select_related('table', 'branch').prefetch_related('items')
+        waiter_branch = get_waiter_branch(request)
+        if waiter_branch:
+            qs = qs.filter(branch=waiter_branch)
+        orders = qs.order_by('-created_at')[:limit]
         data   = []
         for o in orders:
             data.append({

@@ -67,6 +67,7 @@ class Product(models.Model):
 
     # ── Core fields ──────────────────────────────────────────────────────────
     name         = models.CharField(max_length=200)
+    branch       = models.ForeignKey('accounts.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='products')
     category     = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
@@ -158,6 +159,7 @@ class Table(models.Model):
 
     # Table label shown in the UI, e.g. "T-01", "Bar-1"
     name              = models.CharField(max_length=50, unique=True, help_text='Table label, e.g. T-01')
+    branch            = models.ForeignKey('accounts.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='tables')
     seats             = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(1)])
     status            = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_AVAILABLE, db_index=True)
     active            = models.BooleanField(default=True)
@@ -269,6 +271,7 @@ class WaiterRequest(models.Model):
     ]
 
     table           = models.ForeignKey(Table, on_delete=models.CASCADE, related_name='requests')
+    branch          = models.ForeignKey('accounts.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='waiter_requests')
     request_type    = models.CharField(max_length=50, default='Call Waiter')
     message         = models.TextField(blank=True, default='')
     status          = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW, db_index=True)

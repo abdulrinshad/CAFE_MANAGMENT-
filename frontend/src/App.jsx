@@ -142,7 +142,7 @@ export default function App() {
 
         {/* POS Dashboard */}
         <Route path="/pos/dashboard"  element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}>
             <POSDashboardPage />
           </ProtectedRoute>
         } />

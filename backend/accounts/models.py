@@ -2,6 +2,25 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password, check_password
 
+
+class Branch(models.Model):
+    name = models.CharField(max_length=120)
+    code = models.CharField(max_length=50, unique=True, default='BRANCH-001')
+    address = models.TextField(blank=True, default='')
+    phone = models.CharField(max_length=30, blank=True, default='')
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Branch'
+        verbose_name_plural = 'Branches'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
 class UserProfile(models.Model):
     ADMIN = 'ADMIN'
     MANAGER = 'MANAGER'
@@ -15,6 +34,7 @@ class UserProfile(models.Model):
     
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=STAFF)
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name='user_profiles')
     
     def __str__(self):
         return f"{self.user.username} ({self.get_role_display()})"
@@ -22,6 +42,7 @@ class UserProfile(models.Model):
 
 class Waiter(models.Model):
     name = models.CharField(max_length=120)
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name='waiters')
     photo = models.ImageField(upload_to='waiters/', blank=True, null=True)
     section = models.CharField(max_length=100)
     pin_hash = models.CharField(max_length=128)
@@ -36,4 +57,5 @@ class Waiter(models.Model):
         return check_password(raw_pin, self.pin_hash)
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.branch.name if self.branch else 'No Branch'})"
+

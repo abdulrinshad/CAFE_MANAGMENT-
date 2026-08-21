@@ -11,8 +11,10 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.exceptions import PermissionDenied
 from django.http import FileResponse
 
+from accounts.utils import get_waiter_branch
 from .models import Category, Product, Table, QRCode, WaiterRequest
 from .serializers import (
     CategorySerializer,
@@ -41,12 +43,23 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset        = Product.objects.select_related('category').all()
+    queryset        = Product.objects.select_related('category', 'branch').all()
     filterset_class = ProductFilter
     search_fields   = ['name', 'description']
     ordering_fields = ['display_order', 'price', 'name', 'created_at']
     ordering        = ['display_order', 'name']
     parser_classes  = [MultiPartParser, FormParser, JSONParser]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        waiter_branch = get_waiter_branch(self.request)
+        if waiter_branch:
+            qs = qs.filter(branch=waiter_branch)
+        return qs
+
+    def perform_create(self, serializer):
+        waiter_branch = get_waiter_branch(self.request)
+        serializer.save(branch=waiter_branch)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -75,43 +88,45 @@ class ProductViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TableViewSet(viewsets.ModelViewSet):
-    """
-    Full CRUD for Tables.
-    Creating a table auto-generates a QR code via Django signal.
-
-    GET    /api/v1/tables/                   list
-    POST   /api/v1/tables/                   create
-    GET    /api/v1/tables/{id}/              retrieve
-    PUT    /api/v1/tables/{id}/              full update
-    PATCH  /api/v1/tables/{id}/              partial update
-    DELETE /api/v1/tables/{id}/              delete (cascades QR)
-    PATCH  /api/v1/tables/{id}/set_status/   change status
-    PATCH  /api/v1/tables/{id}/set_active/   activate/deactivate
-    """
-
     queryset         = Table.objects.prefetch_related('qr_code').all()
     serializer_class = TableSerializer
     ordering_fields  = ['name', 'seats', 'status', 'created_at']
     ordering         = ['name']
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        waiter_branch = get_waiter_branch(self.request)
+        if waiter_branch:
+            qs = qs.filter(branch=waiter_branch)
+        return qs
+
+    def perform_create(self, serializer):
+        waiter_branch = get_waiter_branch(self.request)
+        serializer.save(branch=waiter_branch)
+
+    def check_table_branch(self, table):
+        waiter_branch = get_waiter_branch(self.request)
+        if waiter_branch and table.branch and table.branch != waiter_branch:
+            raise PermissionDenied("You do not have permission to access tables from another branch.")
+
     @action(detail=True, methods=['patch'], url_path='set_status')
     def set_status(self, request, pk=None):
         table      = self.get_object()
+        self.check_table_branch(table)
         serializer = TableStatusSerializer(table, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        # Refresh from DB to get related qr_code
         table.refresh_from_db()
         return Response(TableSerializer(table, context={'request': request}).data)
 
     @action(detail=True, methods=['patch'], url_path='set_active')
     def set_active(self, request, pk=None):
         table      = self.get_object()
+        self.check_table_branch(table)
         serializer = TableActiveSerializer(table, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        # Sync QR code status with table active state
         try:
             qr = table.qr_code
             qr.status = QRCode.STATUS_ACTIVE if table.active else QRCode.STATUS_INACTIVE
@@ -125,6 +140,7 @@ class TableViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'], url_path='active_order')
     def active_order(self, request, pk=None):
         table = self.get_object()
+        self.check_table_branch(table)
         order = table.orders.exclude(status__in=['completed', 'cancelled']).order_by('-created_at').first()
         if order:
             from orders.serializers import OrderSerializer
@@ -214,13 +230,16 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
     PATCH  /api/v1/requests/{id}/set_status/   change status
     """
 
-    queryset         = WaiterRequest.objects.select_related('table').all()
+    queryset         = WaiterRequest.objects.select_related('table', 'branch').all()
     serializer_class = WaiterRequestSerializer
     ordering_fields  = ['created_at', 'status']
     ordering         = ['-created_at']
 
     def get_queryset(self):
         qs = super().get_queryset()
+        waiter_branch = get_waiter_branch(self.request)
+        if waiter_branch:
+            qs = qs.filter(branch=waiter_branch)
         status_param = self.request.query_params.get('status')
         if status_param and status_param.lower() != 'all':
             qs = qs.filter(status=status_param.lower())
@@ -235,9 +254,20 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
         if not table_id:
             return Response({'detail': 'Table is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Resolve table and its branch
+        target_table = Table.objects.filter(pk=table_id).first()
+        if not target_table:
+            # Try finding table by name/label
+            target_table = Table.objects.filter(name=table_id).first()
+
+        if not target_table:
+            return Response({'detail': 'Specified table does not exist.'}, status=status.HTTP_404_NOT_FOUND)
+
+        table_branch = target_table.branch or get_waiter_branch(request)
+
         with transaction.atomic():
             active_request = WaiterRequest.objects.select_for_update().filter(
-                table_id=table_id,
+                table=target_table,
                 status__in=[WaiterRequest.STATUS_NEW, WaiterRequest.STATUS_IN_PROGRESS]
             ).first()
 
@@ -245,9 +275,11 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
                 serializer = self.get_serializer(active_request)
                 return Response(serializer.data, status=status.HTTP_200_OK)
 
-            serializer = self.get_serializer(data=request.data)
+            request_data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+            request_data['table'] = target_table.id
+            serializer = self.get_serializer(data=request_data)
             serializer.is_valid(raise_exception=True)
-            self.perform_create(serializer)
+            serializer.save(table=target_table, branch=table_branch)
             headers = self.get_success_headers(serializer.data)
             return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
