@@ -1,0 +1,164 @@
+/* ================================================================
+   BranchManagerDashboardPage.css
+   Welcome / placeholder screen for Branch Manager login.
+   ================================================================ */
+
+.bm-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1209 0%, #2c1810 50%, #1a0f06 100%);
+  padding: 24px;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+/* Card */
+.bm-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 48px 40px;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* Brand header */
+.bm-card__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bm-card__brand-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.bm-card__brand-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2c1810;
+  letter-spacing: -0.02em;
+}
+
+/* Welcome section */
+.bm-card__welcome {
+  text-align: center;
+  padding: 8px 0;
+}
+.bm-card__title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #2c1810;
+  margin: 0 0 6px;
+  line-height: 1.2;
+}
+.bm-card__name {
+  font-size: 28px;
+  font-weight: 800;
+  color: #c8812a;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+/* Branch info block */
+.bm-card__branch-info {
+  background: #faf7f4;
+  border: 1px solid #e8ddd6;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bm-info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.bm-info-row__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #8a7060;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.bm-info-row__value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c1810;
+  text-align: right;
+}
+.bm-info-row__value--mono {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  color: #555;
+}
+
+/* Active badge */
+.bm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.bm-badge--active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+/* Placeholder notice */
+.bm-card__notice {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.bm-card__notice-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+.bm-card__notice p {
+  font-size: 13px;
+  color: #92400e;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Logout button */
+.bm-card__logout {
+  width: 100%;
+  padding: 14px;
+  background: #2c1810;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease;
+  letter-spacing: 0.01em;
+}
+.bm-card__logout:hover {
+  background: #c8812a;
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  .bm-card {
+    padding: 32px 24px;
+  }
+}

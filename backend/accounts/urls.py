@@ -8,11 +8,16 @@ from .views import (
     ChangePasswordView,
     WaiterViewSet,
     ActiveWaiterListView,
-    WaiterLoginView
+    WaiterLoginView,
+    BranchViewSet,
+    BranchManagerViewSet,
+    BranchManagerLoginView,
 )
 
 router = DefaultRouter()
 router.register(r'waiters', WaiterViewSet, basename='waiters')
+router.register(r'branches', BranchViewSet, basename='branches')
+router.register(r'branch-managers', BranchManagerViewSet, basename='branch-managers')
 
 urlpatterns = [
     path('auth/login/', CustomTokenObtainPairView.as_view(), name='auth_login'),
@@ -22,5 +27,6 @@ urlpatterns = [
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='auth_token_refresh'),
     path('auth/waiters/', ActiveWaiterListView.as_view(), name='auth_waiters'),
     path('auth/waiter-login/', WaiterLoginView.as_view(), name='auth_waiter_login'),
+    path('auth/branch-manager-login/', BranchManagerLoginView.as_view(), name='auth_branch_manager_login'),
     path('', include(router.urls)),
 ]

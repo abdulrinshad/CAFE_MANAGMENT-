@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, waiterRequestApi, authApi } from '../api'
+import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, waiterRequestApi, authApi, branchManagerApi } from '../api'
 
 
 
@@ -36,6 +36,20 @@ export function AppProvider({ children }) {
   const [currentWaiter, setCurrentWaiterRaw] = useState(() => {
     try {
       const s = localStorage.getItem('artisan_waiter')
+      return s ? JSON.parse(s) : null
+    } catch { return null }
+  })
+
+  // ── Branch Manager session state ────────────────────────────────────────
+  const [currentBranchManager, setCurrentBranchManagerRaw] = useState(() => {
+    try {
+      const s = localStorage.getItem('artisan_bm')
+      return s ? JSON.parse(s) : null
+    } catch { return null }
+  })
+  const [currentBranch, setCurrentBranchRaw] = useState(() => {
+    try {
+      const s = localStorage.getItem('artisan_bm_branch')
       return s ? JSON.parse(s) : null
     } catch { return null }
   })
@@ -79,6 +93,41 @@ export function AppProvider({ children }) {
     setCurrentUser(null)
     setCurrentRoleRaw('admin')
     setCurrentWaiterRaw(null)
+  }, [])
+
+  const setCurrentBranchManager = (mgr) => {
+    try {
+      if (mgr) localStorage.setItem('artisan_bm', JSON.stringify(mgr))
+      else localStorage.removeItem('artisan_bm')
+    } catch {}
+    setCurrentBranchManagerRaw(mgr)
+  }
+
+  const setCurrentBranch = (branch) => {
+    try {
+      if (branch) localStorage.setItem('artisan_bm_branch', JSON.stringify(branch))
+      else localStorage.removeItem('artisan_bm_branch')
+    } catch {}
+    setCurrentBranchRaw(branch)
+  }
+
+  const loginBranchManager = async (managerId, pin) => {
+    const res = await branchManagerApi.login({ manager_id: managerId, pin })
+    // Branch manager gets its own token set — separate from admin/waiter tokens
+    localStorage.setItem('artisan_bm_access', res.access)
+    localStorage.setItem('artisan_bm_refresh', res.refresh)
+    setCurrentBranchManager(res.manager)
+    setCurrentBranch(res.branch)
+    return res
+  }
+
+  const branchManagerLogout = useCallback(() => {
+    localStorage.removeItem('artisan_bm_access')
+    localStorage.removeItem('artisan_bm_refresh')
+    localStorage.removeItem('artisan_bm')
+    localStorage.removeItem('artisan_bm_branch')
+    setCurrentBranchManagerRaw(null)
+    setCurrentBranchRaw(null)
   }, [])
 
   const refreshUser = useCallback(async () => {
@@ -651,8 +700,13 @@ export function AppProvider({ children }) {
         loginWaiter,
         logout,
         refreshUser,
-        currentRole,       setCurrentRole,
-        currentWaiter,     setCurrentWaiter,
+        currentRole,            setCurrentRole,
+        currentWaiter,          setCurrentWaiter,
+        // Branch Manager auth
+        currentBranchManager,   setCurrentBranchManager,
+        currentBranch,          setCurrentBranch,
+        loginBranchManager,
+        branchManagerLogout,
         waiterRequests:    waiterRequests,    setWaiterRequests,
         fetchWaiterRequests,
         createWaiterRequest,

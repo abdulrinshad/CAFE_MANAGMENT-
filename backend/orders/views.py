@@ -26,12 +26,14 @@ from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Order, OrderItem, Invoice, Payment
+from .models import Order, OrderItem, Invoice, Payment, Expense
 from .serializers import (
     OrderSerializer, OrderListSerializer,
     OrderStatusSerializer, OrderItemSerializer,
     InvoiceSerializer, PaymentSerializer,
+    ExpenseSerializer,
 )
+from accounts.permissions import IsAdminOrManager
 
 
 def _get_period_range(period, date_from=None, date_to=None):
@@ -360,10 +362,17 @@ class OrderViewSet(viewsets.ModelViewSet):
             order.recalculate_totals()
             order.refresh_from_db()
 
-            # Store WhatsApp number on order if whatsapp delivery method
+            # Store WhatsApp number and customer name on order
+            update_fields_order = {}
             if whatsapp:
-                Order.objects.filter(pk=order.pk).update(whatsapp_number=whatsapp)
+                update_fields_order['whatsapp_number'] = whatsapp
                 order.whatsapp_number = whatsapp
+            customer_name_val = str(request.data.get('customer_name', '') or '').strip()
+            if customer_name_val:
+                update_fields_order['customer_name'] = customer_name_val
+                order.customer_name = customer_name_val
+            if update_fields_order:
+                Order.objects.filter(pk=order.pk).update(**update_fields_order)
 
             # Create or update invoice
             invoice, _ = Invoice.objects.get_or_create(
@@ -1096,3 +1105,57 @@ class PublicReceiptView(APIView):
             return Response({'detail': 'Receipt not found.'}, status=status.HTTP_404_NOT_FOUND)
         return Response(InvoiceSerializer(invoice, context={'request': request}).data)
 
+
+# ── Expense ViewSet ────────────────────────────────────────────────────────────
+
+class ExpenseViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for Expenses. Requires Admin or Manager.
+
+    Query params:
+      branch      — filter by branch id
+      category    — filter by category slug
+      status      — filter by status
+      search      — partial match on title or description
+      date_from   — ISO date YYYY-MM-DD (inclusive)
+      date_to     — ISO date YYYY-MM-DD (inclusive)
+    """
+    serializer_class   = ExpenseSerializer
+    permission_classes = [IsAdminOrManager]
+
+    def get_queryset(self):
+        qs = Expense.objects.select_related('branch').order_by('-date', '-created_at')
+
+        branch = self.request.query_params.get('branch')
+        if branch:
+            qs = qs.filter(branch_id=branch)
+
+        category = self.request.query_params.get('category')
+        if category:
+            qs = qs.filter(category=category)
+
+        exp_status = self.request.query_params.get('status')
+        if exp_status:
+            qs = qs.filter(status=exp_status)
+
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                Q(title__icontains=search) | Q(description__icontains=search)
+            )
+
+        date_from = self.request.query_params.get('date_from')
+        if date_from:
+            try:
+                qs = qs.filter(date__gte=date.fromisoformat(date_from))
+            except ValueError:
+                pass
+
+        date_to = self.request.query_params.get('date_to')
+        if date_to:
+            try:
+                qs = qs.filter(date__lte=date.fromisoformat(date_to))
+            except ValueError:
+                pass
+
+        return qs

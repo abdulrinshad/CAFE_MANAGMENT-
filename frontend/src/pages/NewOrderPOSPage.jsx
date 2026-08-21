@@ -131,6 +131,8 @@ export default function NewOrderPOSPage() {
 
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [customerName,  setCustomerName]  = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
 
   const handleSendOrder = async () => {
     if (cart.length === 0) return
@@ -142,10 +144,11 @@ export default function NewOrderPOSPage() {
     setSubmitError('')
     try {
       const orderPayload = {
-        table:         currentSelectedTable?.id ?? selectedTableId,
-        customer_name: '',
-        waiter_name:   currentWaiter?.name || '',
-        notes:         orderNotes,
+        table:            currentSelectedTable?.id ?? selectedTableId,
+        customer_name:    customerName.trim(),
+        whatsapp_number:  customerPhone.trim(),
+        waiter_name:      currentWaiter?.name || '',
+        notes:            orderNotes,
         items: cart.map((item) => ({
           product:    item.id,
           quantity:   item.qty,
@@ -282,6 +285,29 @@ export default function NewOrderPOSPage() {
                 <span>Select products from the menu to add items.</span>
               </div>
             )}
+          </div>
+
+          {/* Customer Details */}
+          <div className="pos-order-notes-wrap">
+            <label className="section-title">Customer Details</label>
+            <input
+              className="pos-notes-textarea"
+              style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--color-border)', fontSize: 13, background: 'var(--color-cream, #faf7f4)', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }}
+              id="pos-customer-name"
+              type="text"
+              placeholder="Customer Name (optional)"
+              value={customerName}
+              onChange={e => setCustomerName(e.target.value)}
+            />
+            <input
+              className="pos-notes-textarea"
+              style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--color-border)', fontSize: 13, background: 'var(--color-cream, #faf7f4)', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' }}
+              id="pos-customer-phone"
+              type="tel"
+              placeholder="Phone Number (optional)"
+              value={customerPhone}
+              onChange={e => setCustomerPhone(e.target.value)}
+            />
           </div>
 
           {/* Order Notes */}

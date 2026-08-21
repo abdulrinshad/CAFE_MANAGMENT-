@@ -321,3 +321,52 @@ class Payment(models.Model):
                 random.choices(string.digits, k=5)
             )
         super().save(*args, **kwargs)
+
+
+class Expense(models.Model):
+    """Operational expense logged by the owner/admin for a branch."""
+
+    CATEGORY_CHOICES = [
+        ('rent',         'Rent'),
+        ('utilities',    'Utilities'),
+        ('salaries',     'Salaries'),
+        ('supplies',     'Supplies'),
+        ('maintenance',  'Maintenance'),
+        ('marketing',    'Marketing'),
+        ('equipment',    'Equipment'),
+        ('food_cost',    'Food Cost'),
+        ('other',        'Other'),
+    ]
+
+    STATUS_CHOICES = [
+        ('approved', 'Approved'),
+        ('pending',  'Pending'),
+        ('rejected', 'Rejected'),
+    ]
+
+    branch = models.ForeignKey(
+        'accounts.Branch',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='expenses',
+    )
+
+    title       = models.CharField(max_length=200)
+    category    = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='other')
+    amount      = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    date        = models.DateField()
+    description = models.TextField(blank=True, default='')
+    status      = models.CharField(max_length=20, choices=STATUS_CHOICES, default='approved')
+
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name        = 'Expense'
+        verbose_name_plural = 'Expenses'
+        ordering            = ['-date', '-created_at']
+
+    def __str__(self):
+        branch_name = self.branch.name if self.branch else 'No Branch'
+        return f'{self.title} — ₹{self.amount} ({branch_name})'
+

@@ -68,7 +68,7 @@ function KPICard({ label, value, sub, badge, badgeType = 'green' }) {
 
 export default function OwnerDashboardPage() {
   const navigate = useNavigate()
-  const { currentUser, orders, tables, waiterRequestsState } = useApp()
+  const { currentUser, orders, tables, waiterRequests } = useApp()
   const [stats, setStats] = useState(null)
   const [chartData, setChartData] = useState([])
   const [chartPeriod, setChartPeriod] = useState('weekly')
@@ -102,11 +102,11 @@ export default function OwnerDashboardPage() {
     return () => { active = false }
   }, [chartPeriod])
 
-  const todaySales = stats?.today_sales ?? orders.filter(o => o.status === 'COMPLETED').reduce((sum, o) => sum + (o.amount || 0), 0)
-  const totalOrdersCount = stats?.today_orders ?? orders.length
-  const activeTablesCount = stats?.active_tables ?? tables.filter(t => t.status !== 'available').length
-  const totalTablesCount = stats?.total_tables ?? tables.length
-  const activeRequestsCount = stats?.active_requests ?? waiterRequestsState.filter(r => r.status === 'new' || r.status === 'in_progress').length
+  const todaySales = stats?.today_sales ?? (orders ?? []).filter(o => o.status === 'COMPLETED').reduce((sum, o) => sum + (o.amount || 0), 0)
+  const totalOrdersCount = stats?.today_orders ?? (orders ?? []).length
+  const activeTablesCount = stats?.active_tables ?? (tables ?? []).filter(t => t.status !== 'available').length
+  const totalTablesCount = stats?.total_tables ?? (tables ?? []).length
+  const activeRequestsCount = stats?.active_requests ?? (waiterRequests ?? []).filter(r => r.status === 'new' || r.status === 'in_progress').length
 
   const PERIODS = [
     { key: 'daily',   label: 'Daily' },
