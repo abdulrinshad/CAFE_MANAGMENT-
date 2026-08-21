@@ -25,21 +25,21 @@ export default function OwnerCustomersPage() {
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
 
-  // Build customer records keyed by phone number (or name if no phone)
+  // Build customer records.
+  // Key priority: phone number → customer name → 'walk-in-guest'
+  // On merge: always promote a better phone / real name from any order in the group.
   const customersList = useMemo(() => {
     const map = new Map()
     orders.forEach(o => {
       const phone = (o.whatsapp_number || '').trim()
       const name  = (o.customer_name  || '').trim()
-      // Use phone as primary key; fall back to name; then 'Walk-in Guest'
-      const key = phone || name.toLowerCase() || 'walk-in-guest'
-      const displayName = name || (phone ? `Customer (${phone})` : 'Walk-in Guest')
+      const key   = phone || name.toLowerCase() || 'walk-in-guest'
 
-      // Parse items
-      const rawItems = o.items || []
+      // Parse items (now returned by the list API)
+      const rawItems = Array.isArray(o.items) ? o.items : []
       const items = rawItems.map(item => ({
         name:     item.product_name || item.name || '—',
-        qty:      item.quantity      || 1,
+        qty:      item.quantity     || 1,
         price:    Number(item.unit_price || item.price || 0),
         subtotal: Number(item.subtotal   || 0),
       }))
@@ -55,15 +55,21 @@ export default function OwnerCustomersPage() {
       const statusStr  = (o.status || 'pending').toUpperCase()
 
       if (map.has(key)) {
-        const item = map.get(key)
-        item.ordersCount += 1
-        item.totalSpend  += amt
-        item.lastVisit    = dateStr
-        item.recentOrders.push({ id: o.id, orderId: o.order_number, table: tableLabel, date: dateStr, time: timeStr, amount: amt, status: statusStr, items })
+        const rec = map.get(key)
+        rec.ordersCount += 1
+        rec.totalSpend  += amt
+        rec.lastVisit    = dateStr   // orders are newest-first; this ends up being the oldest
+        // Promote phone if missing on the record
+        if (!rec.phone && phone) rec.phone = phone
+        // Promote real name if the record was created with a fallback
+        if (!rec.hasRealName && name) { rec.name = name; rec.hasRealName = true }
+        rec.recentOrders.push({ id: o.id, orderId: o.order_number, table: tableLabel, date: dateStr, time: timeStr, amount: amt, status: statusStr, items })
       } else {
+        const displayName = name || (phone ? `Customer (${phone})` : 'Walk-in Guest')
         map.set(key, {
           id:          key,
           name:        displayName,
+          hasRealName: !!name,
           phone,
           ordersCount: 1,
           totalSpend:  amt,
