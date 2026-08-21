@@ -124,6 +124,7 @@ class OrderListSerializer(serializers.ModelSerializer):
     table_label   = serializers.CharField(read_only=True)
     items_summary = serializers.CharField(read_only=True)
     item_count    = serializers.IntegerField(read_only=True)
+    items         = OrderItemSerializer(many=True, read_only=True)
     receipt_method = serializers.SerializerMethodField()
     receipt_status = serializers.SerializerMethodField()
 
@@ -131,9 +132,9 @@ class OrderListSerializer(serializers.ModelSerializer):
         model  = Order
         fields = [
             'id', 'order_number', 'table', 'table_label',
-            'customer_name', 'waiter_name',
+            'customer_name', 'waiter_name', 'whatsapp_number',
             'status', 'total', 'item_count', 'items_summary',
-            'created_at', 'completed_at',
+            'items', 'created_at', 'completed_at',
             'receipt_method', 'receipt_status',
         ]
         read_only_fields = fields
