@@ -76,6 +76,7 @@ export default function Sidebar({ isOpen, onClose }) {
   const items = currentRole === 'waiter' || !isOwner
     ? [
         { path: '/dashboard',     label: 'Dashboard',        icon: <DashboardIcon />, exact: true },
+        { path: '/menu',          label: 'View Menu',        icon: <MenuIcon /> },
         { path: '/tables',        label: 'My Tables',        icon: <TablesIcon /> },
         { path: '/orders',        label: 'My Orders',        icon: <OrdersIcon /> },
         { path: '/requests',      label: 'Pending Requests', icon: <RequestsIcon />, badge: activeRequestsCount > 0 ? activeRequestsCount : null },

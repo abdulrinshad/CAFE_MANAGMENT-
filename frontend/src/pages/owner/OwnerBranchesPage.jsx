@@ -2,33 +2,42 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../layouts/AdminLayout'
 import Modal from '../../components/Modal'
-import { OWNER_BRANCHES } from '../../data/ownerMockData'
+import { useApp } from '../../context/AppContext'
 import './owner.css'
 
+const DEFAULT_BRANCH = {
+  id: 1,
+  name: 'Artisan Brew — Main Branch',
+  location: 'MG Road, Main Market',
+  status: 'active',
+}
+
 const EMPTY_FORM = {
-  name: '', address: '', phone: '', gst: '', currency: 'INR',
-  opening: '08:00', closing: '22:00', tables: '', pos: '', status: 'active',
+  name: '', address: '', phone: '', status: 'active',
 }
 
 export default function OwnerBranchesPage() {
   const navigate = useNavigate()
-  const [branches, setBranches]   = useState(OWNER_BRANCHES)
+  const { tables, orders, products } = useApp()
+  const [branches, setBranches]   = useState([DEFAULT_BRANCH])
   const [search,   setSearch]     = useState('')
-  const [modal,    setModal]      = useState(false) // 'add' | 'edit' | false
+  const [modal,    setModal]      = useState(false)
   const [editing,  setEditing]    = useState(null)
   const [form,     setForm]       = useState(EMPTY_FORM)
 
+  const liveTableCount = tables.length
+  const liveOrderCount = orders.length
+  const liveSalesTotal = orders.filter(o => o.status === 'COMPLETED').reduce((s, o) => s + (o.amount || 0), 0)
+
   const filtered = branches.filter(b =>
     b.name.toLowerCase().includes(search.toLowerCase()) ||
-    b.location.toLowerCase().includes(search.toLowerCase())
+    (b.location && b.location.toLowerCase().includes(search.toLowerCase()))
   )
 
   const openAdd  = () => { setForm(EMPTY_FORM); setEditing(null); setModal('add') }
   const openEdit = (b) => {
     setForm({
-      name: b.name, address: b.location, phone: b.phone, gst: b.gst,
-      currency: b.currency, opening: b.opening, closing: b.closing,
-      tables: b.tables, pos: b.pos, status: b.status,
+      name: b.name, address: b.location || '', phone: b.phone || '', status: b.status || 'active',
     })
     setEditing(b.id)
     setModal('edit')
@@ -38,13 +47,10 @@ export default function OwnerBranchesPage() {
   const handleSave = () => {
     if (!form.name.trim()) return
     if (editing) {
-      setBranches(prev => prev.map(b => b.id === editing ? { ...b, ...form, location: form.address, tables: Number(form.tables), pos: Number(form.pos) } : b))
+      setBranches(prev => prev.map(b => b.id === editing ? { ...b, ...form, location: form.address } : b))
     } else {
       const newBranch = {
-        id: Date.now(), ...form, location: form.address,
-        tables: Number(form.tables), pos: Number(form.pos),
-        staff: 0, manager: '—', managerId: null,
-        todaySales: 0, monthSales: 0, orders: 0, pendingOrders: 0,
+        id: Date.now(), ...form, location: form.address, status: form.status || 'active',
       }
       setBranches(prev => [...prev, newBranch])
     }
@@ -65,7 +71,7 @@ export default function OwnerBranchesPage() {
         <div className="owner-page-header">
           <div className="owner-page-header__left">
             <h1 className="owner-page-header__title">Branches</h1>
-            <p className="owner-page-header__sub">Manage all your cafe branches from one place.</p>
+            <p className="owner-page-header__sub">Manage all your cafe branches connected to live database floor plans.</p>
           </div>
           <div className="owner-page-header__actions">
             <button className="btn-primary" id="btn-add-branch" onClick={openAdd}>+ Add Branch</button>
@@ -94,40 +100,37 @@ export default function OwnerBranchesPage() {
               <thead>
                 <tr>
                   <th>Branch Name</th>
-                  <th>Manager</th>
                   <th>Location</th>
-                  <th>Staff</th>
-                  <th>Tables</th>
-                  <th>POS</th>
-                  <th>Today's Sales</th>
+                  <th>DB Tables</th>
+                  <th>Live Orders</th>
+                  <th>Total Revenue</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={9}><div className="owner-empty"><div className="owner-empty__icon">🏪</div><div className="owner-empty__text">No branches found</div></div></td></tr>
+                  <tr><td colSpan={7}><div className="owner-empty"><div className="owner-empty__icon">🏪</div><div className="owner-empty__text">No branches found</div></div></td></tr>
                 ) : filtered.map(b => (
                   <tr key={b.id}>
                     <td className="td-name">{b.name}</td>
-                    <td>{b.manager}</td>
                     <td className="td-muted">{b.location}</td>
-                    <td>{b.staff}</td>
-                    <td>{b.tables}</td>
-                    <td>{b.pos}</td>
-                    <td style={{ fontWeight: 500 }}>₹{b.todaySales.toLocaleString('en-IN')}</td>
+                    <td>{liveTableCount} tables</td>
+                    <td>{liveOrderCount} orders</td>
+                    <td style={{ fontWeight: 600 }}>₹{Number(liveSalesTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                     <td>
                       <span className={`owner-badge owner-badge--${b.status}`}>{b.status.toUpperCase()}</span>
                     </td>
                     <td>
                       <div className="td-actions">
-                        <button className="owner-icon-btn" title="View" onClick={() => navigate(`/owner/branches/${b.id}`)}>👁</button>
                         <button className="owner-icon-btn" title="Edit" onClick={() => openEdit(b)}>✏️</button>
                         <button
                           className={`owner-icon-btn${b.status === 'active' ? ' owner-icon-btn--danger' : ''}`}
                           title={b.status === 'active' ? 'Deactivate' : 'Activate'}
                           onClick={() => toggleStatus(b.id)}
-                        >{b.status === 'active' ? '⏸' : '▶'}</button>
+                        >
+                          {b.status === 'active' ? '⏸' : '▶'}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -148,23 +151,11 @@ export default function OwnerBranchesPage() {
           </div>
           <div className="form-group owner-form-grid--full">
             <label className="form-label">Address</label>
-            <input className="form-input" placeholder="Full address" value={form.address} onChange={f('address')} id="inp-branch-address" />
+            <input className="form-input" placeholder="Branch address..." value={form.address} onChange={f('address')} id="inp-branch-address" />
           </div>
           <div className="form-group">
             <label className="form-label">Phone</label>
-            <input className="form-input" placeholder="+91 98765 XXXXX" value={form.phone} onChange={f('phone')} id="inp-branch-phone" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">GST / Tax ID</label>
-            <input className="form-input" placeholder="GSTIN" value={form.gst} onChange={f('gst')} id="inp-branch-gst" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Currency</label>
-            <select className="form-select" value={form.currency} onChange={f('currency')} id="sel-branch-currency">
-              <option value="INR">INR — Indian Rupee</option>
-              <option value="USD">USD — US Dollar</option>
-              <option value="EUR">EUR — Euro</option>
-            </select>
+            <input className="form-input" placeholder="+91 XXXXXXXXXX" value={form.phone} onChange={f('phone')} id="inp-branch-phone" />
           </div>
           <div className="form-group">
             <label className="form-label">Status</label>
@@ -173,28 +164,10 @@ export default function OwnerBranchesPage() {
               <option value="inactive">Inactive</option>
             </select>
           </div>
-          <div className="form-group">
-            <label className="form-label">Opening Time</label>
-            <input className="form-input" type="time" value={form.opening} onChange={f('opening')} id="inp-branch-opening" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Closing Time</label>
-            <input className="form-input" type="time" value={form.closing} onChange={f('closing')} id="inp-branch-closing" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Table Count</label>
-            <input className="form-input" type="number" min="0" placeholder="0" value={form.tables} onChange={f('tables')} id="inp-branch-tables" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">POS Terminal Count</label>
-            <input className="form-input" type="number" min="0" placeholder="0" value={form.pos} onChange={f('pos')} id="inp-branch-pos" />
-          </div>
         </div>
         <div className="owner-modal-footer">
           <button className="btn-outline" onClick={closeModal}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave} id="btn-save-branch">
-            {modal === 'edit' ? 'Save Changes' : 'Add Branch'}
-          </button>
+          <button className="btn-primary" onClick={handleSave} id="btn-save-branch">{modal === 'edit' ? 'Save Changes' : 'Add Branch'}</button>
         </div>
       </Modal>
     </AdminLayout>

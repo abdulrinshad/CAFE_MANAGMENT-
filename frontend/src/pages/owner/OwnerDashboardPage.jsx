@@ -1,17 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../layouts/AdminLayout'
 import { useApp } from '../../context/AppContext'
-import {
-  OWNER_DASHBOARD_STATS,
-  OWNER_BRANCHES,
-  OWNER_RECENT_ACTIVITY,
-  OWNER_CHART_DATA,
-} from '../../data/ownerMockData'
+import { dashboardApi, reportsApi } from '../../api'
 import '../DashboardPage.css'
 import './owner.css'
 
-/* ── Greeting helper ── */
 function getGreeting() {
   const h = new Date().getHours()
   if (h < 12) return 'Good morning'
@@ -19,11 +13,10 @@ function getGreeting() {
   return 'Good evening'
 }
 
-/* ── Mini bar chart (reuses DashboardPage pattern) ── */
 function OwnerSalesChart({ data }) {
   if (!data || data.length === 0) return (
     <div className="chart" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
-      No data available.
+      No data available in database.
     </div>
   )
   const values = data.map(d => d.value)
@@ -62,7 +55,6 @@ function OwnerSalesChart({ data }) {
   )
 }
 
-/* ── KPI Card ── */
 function KPICard({ label, value, sub, badge, badgeType = 'green' }) {
   return (
     <div className="owner-kpi-card">
@@ -74,157 +66,119 @@ function KPICard({ label, value, sub, badge, badgeType = 'green' }) {
   )
 }
 
-/* ── Main Page ── */
 export default function OwnerDashboardPage() {
   const navigate = useNavigate()
-  const { currentUser } = useApp()
-  const [chartPeriod, setChartPeriod] = useState('today')
+  const { currentUser, orders, tables, waiterRequestsState } = useApp()
+  const [stats, setStats] = useState(null)
+  const [chartData, setChartData] = useState([])
+  const [chartPeriod, setChartPeriod] = useState('weekly')
+  const [loading, setLoading] = useState(true)
 
-  const userName = currentUser?.name || currentUser?.username || 'Dilfa'
-  const s = OWNER_DASHBOARD_STATS
-  const chartData = OWNER_CHART_DATA[chartPeriod] || OWNER_CHART_DATA.today
+  const userName = currentUser?.name || currentUser?.username || 'Owner'
+
+  useEffect(() => {
+    let active = true
+    async function loadData() {
+      try {
+        setLoading(true)
+        const [statsRes, chartRes] = await Promise.all([
+          dashboardApi.stats().catch(() => null),
+          dashboardApi.salesChart(chartPeriod).catch(() => null),
+        ])
+        if (!active) return
+        setStats(statsRes)
+        if (Array.isArray(chartRes)) {
+          setChartData(chartRes.map(item => ({ label: item.day || item.date || item.label, value: item.sales || item.total || 0 })))
+        } else if (chartRes && Array.isArray(chartRes.data)) {
+          setChartData(chartRes.data)
+        }
+      } catch (err) {
+        console.error('Failed to load owner dashboard:', err)
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    loadData()
+    return () => { active = false }
+  }, [chartPeriod])
+
+  const todaySales = stats?.today_sales ?? orders.filter(o => o.status === 'COMPLETED').reduce((sum, o) => sum + (o.amount || 0), 0)
+  const totalOrdersCount = stats?.today_orders ?? orders.length
+  const activeTablesCount = stats?.active_tables ?? tables.filter(t => t.status !== 'available').length
+  const totalTablesCount = stats?.total_tables ?? tables.length
+  const activeRequestsCount = stats?.active_requests ?? waiterRequestsState.filter(r => r.status === 'new' || r.status === 'in_progress').length
 
   const PERIODS = [
-    { key: 'today',     label: 'Today' },
-    { key: 'yesterday', label: 'Yesterday' },
-    { key: 'week',      label: 'This Week' },
-    { key: 'month',     label: 'This Month' },
+    { key: 'daily',   label: 'Daily' },
+    { key: 'weekly',  label: 'Weekly' },
+    { key: 'monthly', label: 'Monthly' },
   ]
 
   return (
-    <AdminLayout searchPlaceholder="Search across branches...">
+    <AdminLayout searchPlaceholder="Search across business database...">
       <div className="owner-page">
 
         {/* Greeting */}
         <div>
           <h1 className="dashboard__greeting-title">{getGreeting()}, {userName} ☕</h1>
-          <p className="dashboard__greeting-sub">Here&apos;s what&apos;s happening across your business today.</p>
+          <p className="dashboard__greeting-sub">Live database overview for your cafe business.</p>
         </div>
 
         {/* KPI Row 1 */}
         <div className="owner-kpi-grid">
-          <KPICard label="Today's Sales"   value={`₹${s.todaySales.toLocaleString('en-IN')}`}  badge="+12% vs yesterday" badgeType="green" />
-          <KPICard label="Total Orders"    value={s.totalOrders}  sub="Across all branches" />
-          <KPICard label="Paid Bills"      value={s.paidBills}    badge="92% paid" badgeType="green" />
-          <KPICard label="Pending Bills"   value={s.pendingBills} badge="Action needed" badgeType="orange" />
+          <KPICard label="Today's Sales"   value={`₹${Number(todaySales).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`} badge="Live DB" badgeType="green" />
+          <KPICard label="Total Orders"    value={totalOrdersCount} sub="Live database orders" />
+          <KPICard label="Active Tables"   value={`${activeTablesCount} / ${totalTablesCount}`} badge="Floor State" badgeType="green" />
+          <KPICard label="Pending Requests" value={activeRequestsCount} badge="Table Service" badgeType="orange" />
         </div>
 
-        {/* KPI Row 2 */}
-        <div className="owner-kpi-grid">
-          <KPICard label="Today's Expenses"  value={`₹${s.todayExpenses.toLocaleString('en-IN')}`} sub="Approved + pending" />
-          <KPICard label="Net Sales"         value={`₹${s.netSales.toLocaleString('en-IN')}`}      badge="After expenses" badgeType="green" />
-          <KPICard label="Active Branches"   value={`${s.activeBranches} / 4`}                      sub="1 branch inactive" />
-          <KPICard label="Total Staff"       value={s.totalStaff}                                    sub="Across all branches" />
-        </div>
-
-        {/* Branch Performance + Activity */}
+        {/* Chart + Sales Detail */}
         <div className="owner-detail-grid">
-
-          {/* Branch Performance */}
           <div className="owner-section-card">
             <div className="owner-section-card__header">
-              <span className="owner-section-card__title">Branch Performance</span>
-              <button className="btn-outline" style={{ padding: '6px 14px', fontSize: 12 }} onClick={() => navigate('/owner/branches')}>
+              <span className="owner-section-card__title">Sales Analytics Trend</span>
+              <div className="owner-tab-bar" style={{ marginBottom: 0 }}>
+                {PERIODS.map(p => (
+                  <button
+                    key={p.key}
+                    className={`owner-tab${chartPeriod === p.key ? ' owner-tab--active' : ''}`}
+                    onClick={() => setChartPeriod(p.key)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="owner-section-card__body">
+              <OwnerSalesChart data={chartData} />
+            </div>
+          </div>
+
+          <div className="owner-section-card">
+            <div className="owner-section-card__header">
+              <span className="owner-section-card__title">Recent Database Orders</span>
+              <button className="btn-outline" style={{ padding: '6px 14px', fontSize: 12 }} onClick={() => navigate('/orders')}>
                 View All
               </button>
             </div>
             <div className="owner-section-card__body--no-pad">
-              <div className="branch-perf-list" style={{ padding: '0 20px' }}>
-                {OWNER_BRANCHES.map(b => (
-                  <div key={b.id} className="branch-perf-row">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 160 }}>
-                      <span className="branch-perf-name">{b.name.replace('Artisan Brew — ', '')}</span>
-                      <span className="owner-badge owner-badge--active" style={{ fontSize: 9 }}>{b.status.toUpperCase()}</span>
+              <div style={{ padding: '0 20px' }}>
+                {orders.slice(0, 5).map(o => (
+                  <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--color-border-subtle, #f0e6df)' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{o.orderId || `ORD-${o.id}`}</div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{o.table} &middot; {o.itemsSummary || `${o.item_count || 1} items`}</div>
                     </div>
-                    <div className="branch-perf-stats">
-                      <div className="branch-perf-stat">
-                        <span className="branch-perf-stat__label">Sales</span>
-                        <span className="branch-perf-stat__value">₹{(b.todaySales / 1000).toFixed(1)}k</span>
-                      </div>
-                      <div className="branch-perf-stat">
-                        <span className="branch-perf-stat__label">Orders</span>
-                        <span className="branch-perf-stat__value">{b.orders}</span>
-                      </div>
-                      <div className="branch-perf-stat">
-                        <span className="branch-perf-stat__label">Pending</span>
-                        <span className="branch-perf-stat__value">{b.pendingOrders}</span>
-                      </div>
-                    </div>
-                    <button
-                      className="owner-icon-btn"
-                      title="View Branch"
-                      onClick={() => navigate(`/owner/branches/${b.id}`)}
-                    >→</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="owner-section-card">
-            <div className="owner-section-card__header">
-              <span className="owner-section-card__title">Recent Business Activity</span>
-            </div>
-            <div className="owner-section-card__body--no-pad">
-              <div className="owner-activity-list" style={{ padding: '0 20px' }}>
-                {OWNER_RECENT_ACTIVITY.map(a => (
-                  <div key={a.id} className="owner-activity-item">
-                    <div className="owner-activity-icon">{a.icon}</div>
-                    <div className="owner-activity-body">
-                      <div className="owner-activity-title">{a.title}</div>
-                      <div className="owner-activity-time">{a.time}</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>₹{Number(o.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                      <span className="owner-badge owner-badge--active" style={{ fontSize: 10 }}>{o.status}</span>
                     </div>
                   </div>
                 ))}
+                {orders.length === 0 && (
+                  <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--color-text-muted)' }}>No live orders in database.</div>
+                )}
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Sales Overview Chart */}
-        <div className="owner-section-card">
-          <div className="owner-section-card__header">
-            <span className="owner-section-card__title">Sales Overview</span>
-            <div className="owner-chart-filters">
-              {PERIODS.map(p => (
-                <button
-                  key={p.key}
-                  className={`owner-chart-filter-btn${chartPeriod === p.key ? ' owner-chart-filter-btn--active' : ''}`}
-                  onClick={() => setChartPeriod(p.key)}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="owner-section-card__body">
-            <OwnerSalesChart data={chartData} />
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="owner-section-card">
-          <div className="owner-section-card__header">
-            <span className="owner-section-card__title">Quick Actions</span>
-          </div>
-          <div className="owner-section-card__body">
-            <div className="owner-quick-actions">
-              <button className="owner-qa-btn" id="qa-add-branch"   onClick={() => navigate('/owner/branches')}>
-                <span className="owner-qa-btn__icon">🏪</span> Add Branch
-              </button>
-              <button className="owner-qa-btn" id="qa-add-manager"  onClick={() => navigate('/owner/staff')}>
-                <span className="owner-qa-btn__icon">👤</span> Add Manager
-              </button>
-              <button className="owner-qa-btn" id="qa-add-staff"    onClick={() => navigate('/owner/staff')}>
-                <span className="owner-qa-btn__icon">👥</span> Add Staff
-              </button>
-              <button className="owner-qa-btn" id="qa-add-pos"      onClick={() => navigate('/owner/pos')}>
-                <span className="owner-qa-btn__icon">🖥️</span> Add POS Terminal
-              </button>
-              <button className="owner-qa-btn" id="qa-view-reports" onClick={() => navigate('/owner/reports')}>
-                <span className="owner-qa-btn__icon">📊</span> View Reports
-              </button>
             </div>
           </div>
         </div>

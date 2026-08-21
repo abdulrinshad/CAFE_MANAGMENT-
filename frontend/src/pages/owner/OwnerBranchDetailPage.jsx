@@ -1,41 +1,21 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import AdminLayout from '../../layouts/AdminLayout'
-import {
-  OWNER_BRANCHES, OWNER_STAFF, OWNER_POS_TERMINALS,
-  OWNER_MENU_ITEMS, OWNER_INVENTORY, OWNER_EXPENSES,
-} from '../../data/ownerMockData'
+import { useApp } from '../../context/AppContext'
 import './owner.css'
 
-const TABS = ['Overview', 'Staff', 'POS Terminals', 'Menu', 'Inventory', 'Expenses']
+const TABS = ['Overview', 'Tables', 'Menu', 'Orders']
 
 export default function OwnerBranchDetailPage() {
   const { id }      = useParams()
   const navigate    = useNavigate()
+  const { tables, products, orders } = useApp()
   const [tab, setTab] = useState('Overview')
 
-  const branch = OWNER_BRANCHES.find(b => b.id === Number(id))
+  const branchName = `Artisan Brew — Main Branch`
+  const shortName = `Main Branch`
 
-  if (!branch) {
-    return (
-      <AdminLayout pageTitle="Branch Detail" pageIcon="🏪">
-        <div className="owner-empty" style={{ marginTop: 60 }}>
-          <div className="owner-empty__icon">🏪</div>
-          <div className="owner-empty__text">Branch not found.</div>
-          <button className="btn-outline" style={{ marginTop: 12 }} onClick={() => navigate('/owner/branches')}>
-            ← Back to Branches
-          </button>
-        </div>
-      </AdminLayout>
-    )
-  }
-
-  const shortName = branch.name.replace('Artisan Brew — ', '')
-  const staff     = OWNER_STAFF.filter(s => s.branchId === branch.id)
-  const pos       = OWNER_POS_TERMINALS.filter(p => p.branchId === branch.id)
-  const menu      = OWNER_MENU_ITEMS.filter(m => m.branches.includes(branch.id))
-  const inventory = OWNER_INVENTORY.filter(i => i.branch === shortName)
-  const expenses  = OWNER_EXPENSES.filter(e => e.branch === shortName)
+  const todaySales = orders.filter(o => o.status === 'COMPLETED').reduce((s, o) => s + (o.amount || 0), 0)
 
   return (
     <AdminLayout pageTitle={shortName} pageIcon="🏪">
@@ -48,185 +28,96 @@ export default function OwnerBranchDetailPage() {
           </button>
           <div className="owner-page-header">
             <div className="owner-page-header__left">
-              <h1 className="owner-page-header__title">{branch.name}</h1>
-              <p className="owner-page-header__sub">{branch.location} · {branch.phone}</p>
+              <h1 className="owner-page-header__title">{branchName}</h1>
+              <p className="owner-page-header__sub">Connected to main database floor plan & orders.</p>
             </div>
             <div className="owner-page-header__actions">
-              <span className={`owner-badge owner-badge--${branch.status}`}>{branch.status.toUpperCase()}</span>
+              <span className="owner-badge owner-badge--active">ACTIVE</span>
             </div>
           </div>
         </div>
 
         {/* KPIs */}
         <div className="owner-kpi-grid">
-          {[
-            { label: "Today's Sales",  value: `₹${branch.todaySales.toLocaleString('en-IN')}` },
-            { label: 'Orders Today',   value: branch.orders },
-            { label: 'Pending',        value: branch.pendingOrders },
-            { label: 'Month Revenue',  value: `₹${(branch.monthSales / 1000).toFixed(0)}k` },
-          ].map(k => (
-            <div key={k.label} className="owner-kpi-card">
-              <div className="owner-kpi-card__label">{k.label}</div>
-              <div className="owner-kpi-card__value">{k.value}</div>
-            </div>
-          ))}
+          <div className="owner-kpi-card"><div className="owner-kpi-card__label">Today's Sales</div><div className="owner-kpi-card__value">₹{Number(todaySales).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div></div>
+          <div className="owner-kpi-card"><div className="owner-kpi-card__label">Live Database Orders</div><div className="owner-kpi-card__value">{orders.length}</div></div>
+          <div className="owner-kpi-card"><div className="owner-kpi-card__label">DB Floor Tables</div><div className="owner-kpi-card__value">{tables.length}</div></div>
+          <div className="owner-kpi-card"><div className="owner-kpi-card__label">Active Products</div><div className="owner-kpi-card__value">{products.length}</div></div>
         </div>
 
         {/* Tabs */}
         <div className="owner-section-card">
-          <div className="owner-tab-bar" style={{ paddingLeft: 20 }}>
+          <div className="owner-tab-bar">
             {TABS.map(t => (
-              <button
-                key={t}
-                className={`owner-tab${tab === t ? ' owner-tab--active' : ''}`}
-                onClick={() => setTab(t)}
-                id={`branch-tab-${t.toLowerCase().replace(/\s+/g, '-')}`}
-              >{t}</button>
+              <button key={t} className={`owner-tab${tab === t ? ' owner-tab--active' : ''}`} onClick={() => setTab(t)}>{t}</button>
             ))}
           </div>
 
-          <div className="owner-section-card__body--no-pad">
-
-            {/* Overview */}
+          <div className="owner-section-card__body">
             {tab === 'Overview' && (
-              <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px 24px' }}>
-                {[
-                  ['Branch Name',   branch.name],
-                  ['Location',      branch.location],
-                  ['Phone',         branch.phone],
-                  ['GST / Tax ID',  branch.gst],
-                  ['Currency',      branch.currency],
-                  ['Opening Time',  branch.opening],
-                  ['Closing Time',  branch.closing],
-                  ['Tables',        branch.tables],
-                  ['POS Terminals', branch.pos],
-                  ['Manager',       branch.manager],
-                  ['Staff Count',   branch.staff],
-                  ['Monthly Sales', `₹${branch.monthSales.toLocaleString('en-IN')}`],
-                ].map(([label, value]) => (
-                  <div key={label}>
-                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{label}</div>
-                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-espresso)' }}>{value}</div>
-                  </div>
-                ))}
+              <div>
+                <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Branch Details &amp; Operational Status</h3>
+                <p style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>This branch is operating on the primary database cluster. All table plans, product items, and live order receipts synchronize instantly across Waiter and Owner dashboards.</p>
               </div>
             )}
-
-            {/* Staff */}
-            {tab === 'Staff' && (
+            {tab === 'Tables' && (
               <div className="owner-table-wrap">
                 <table className="owner-table">
-                  <thead><tr><th>Name</th><th>Role</th><th>Contact</th><th>Status</th><th>Performance</th></tr></thead>
+                  <thead>
+                    <tr><th>Table Name</th><th>Seats</th><th>Status</th></tr>
+                  </thead>
                   <tbody>
-                    {staff.length === 0
-                      ? <tr><td colSpan={5}><div className="owner-empty"><div className="owner-empty__text">No staff assigned</div></div></td></tr>
-                      : staff.map(s => (
-                        <tr key={s.id}>
-                          <td className="td-name">{s.name}</td>
-                          <td style={{ textTransform: 'capitalize' }}>{s.role}</td>
-                          <td className="td-muted">{s.phone}</td>
-                          <td><span className={`owner-badge owner-badge--${s.status}`}>{s.status.toUpperCase()}</span></td>
-                          <td>
-                            <div className="perf-bar">
-                              <div className="perf-bar__track"><div className="perf-bar__fill" style={{ width: `${s.performance}%` }} /></div>
-                              <span className="perf-bar__value">{s.performance}%</span>
-                            </div>
-                          </td>
-                        </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* POS */}
-            {tab === 'POS Terminals' && (
-              <div className="owner-table-wrap">
-                <table className="owner-table">
-                  <thead><tr><th>Terminal</th><th>Assigned User</th><th>Status</th><th>Last Active</th><th>Today's Sales</th></tr></thead>
-                  <tbody>
-                    {pos.length === 0
-                      ? <tr><td colSpan={5}><div className="owner-empty"><div className="owner-empty__text">No POS terminals</div></div></td></tr>
-                      : pos.map(p => (
-                        <tr key={p.id}>
-                          <td className="td-name">{p.terminal}</td>
-                          <td>{p.assignedUser}</td>
-                          <td><span className={`owner-badge owner-badge--${p.status}`}>{p.status.toUpperCase()}</span></td>
-                          <td className="td-muted">{p.lastActive}</td>
-                          <td style={{ fontWeight: 500 }}>₹{p.todaySales.toLocaleString('en-IN')}</td>
-                        </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Menu */}
-            {tab === 'Menu' && (
-              <div className="owner-table-wrap">
-                <table className="owner-table">
-                  <thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {menu.map(m => (
-                      <tr key={m.id}>
-                        <td className="td-name">{m.name}</td>
-                        <td className="td-muted">{m.category}</td>
-                        <td style={{ fontWeight: 500 }}>₹{m.price}</td>
-                        <td><span className={`owner-badge owner-badge--${m.status}`}>{m.status.toUpperCase()}</span></td>
+                    {tables.map(t => (
+                      <tr key={t.id}>
+                        <td className="td-name">{t.label || t.name}</td>
+                        <td>{t.seats} seats</td>
+                        <td><span className={`owner-badge owner-badge--${t.status === 'available' ? 'active' : 'orange'}`}>{t.status.toUpperCase()}</span></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-
-            {/* Inventory */}
-            {tab === 'Inventory' && (
+            {tab === 'Menu' && (
               <div className="owner-table-wrap">
                 <table className="owner-table">
-                  <thead><tr><th>Product</th><th>Current Stock</th><th>Unit</th><th>Min Stock</th><th>Status</th></tr></thead>
+                  <thead>
+                    <tr><th>Product</th><th>Category</th><th>Price</th></tr>
+                  </thead>
                   <tbody>
-                    {inventory.length === 0
-                      ? <tr><td colSpan={5}><div className="owner-empty"><div className="owner-empty__text">No inventory records</div></div></td></tr>
-                      : inventory.map(i => (
-                        <tr key={i.id}>
-                          <td className="td-name">{i.product}</td>
-                          <td>{i.stock}</td>
-                          <td className="td-muted">{i.unit}</td>
-                          <td className="td-muted">{i.minStock}</td>
-                          <td><span className={`owner-badge owner-badge--${i.status}`}>{i.status.toUpperCase()}</span></td>
-                        </tr>
+                    {products.map(p => (
+                      <tr key={p.id}>
+                        <td className="td-name">{p.name}</td>
+                        <td className="td-muted">{p.category_name || p.categoryLabel || '—'}</td>
+                        <td style={{ fontWeight: 600 }}>₹{Number(p.price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-
-            {/* Expenses */}
-            {tab === 'Expenses' && (
+            {tab === 'Orders' && (
               <div className="owner-table-wrap">
                 <table className="owner-table">
-                  <thead><tr><th>Expense</th><th>Category</th><th>Amount</th><th>Added By</th><th>Date</th><th>Status</th></tr></thead>
+                  <thead>
+                    <tr><th>Order Ref</th><th>Table</th><th>Amount</th><th>Status</th></tr>
+                  </thead>
                   <tbody>
-                    {expenses.length === 0
-                      ? <tr><td colSpan={6}><div className="owner-empty"><div className="owner-empty__text">No expenses recorded</div></div></td></tr>
-                      : expenses.map(e => (
-                        <tr key={e.id}>
-                          <td className="td-name">{e.name}</td>
-                          <td className="td-muted">{e.category}</td>
-                          <td style={{ fontWeight: 500 }}>₹{e.amount.toLocaleString('en-IN')}</td>
-                          <td className="td-muted">{e.addedBy}</td>
-                          <td className="td-muted">{e.date}</td>
-                          <td><span className={`owner-badge owner-badge--${e.status}`}>{e.status.toUpperCase()}</span></td>
-                        </tr>
+                    {orders.map(o => (
+                      <tr key={o.id}>
+                        <td className="td-name td-mono">{o.orderId || `ORD-${o.id}`}</td>
+                        <td>{o.table}</td>
+                        <td style={{ fontWeight: 600 }}>₹{Number(o.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                        <td><span className="owner-badge owner-badge--active">{o.status}</span></td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
-
           </div>
         </div>
+
       </div>
     </AdminLayout>
   )

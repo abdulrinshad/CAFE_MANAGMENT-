@@ -156,9 +156,19 @@ export default function DashboardPage() {
                 <h3>Serve a Table</h3>
                 <p>Start a new order, add items, or process payment requests.</p>
               </div>
-              <button className="btn-primary" onClick={() => navigate('/orders/new')}>
-                Create New Order
-              </button>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <button
+                  className="btn-outline"
+                  onClick={() => navigate('/menu')}
+                  id="btn-view-menu-dashboard"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  ☕ View Menu
+                </button>
+                <button className="btn-primary" onClick={() => navigate('/orders/new')}>
+                  Create New Order
+                </button>
+              </div>
             </div>
           </div>
           <div className="dashboard__stats-grid">
