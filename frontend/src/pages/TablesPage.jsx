@@ -6,13 +6,13 @@ import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 import './TablesPage.css'
 
-const FILTER_TABS = ['All Tables', 'Available', 'Occupied', 'Needs Attention']
+const FILTER_TABS = ['All Tables', 'Assigned', 'Available', 'Occupied', 'Order In Progress', 'Bill Requested']
 
 export default function TablesPage() {
   const navigate = useNavigate()
   const {
     tables, addTable, updateTable, deleteTable, setTableStatus, setTableActive,
-    currentRole, orders, loading, apiError, fetchTables, fetchOrders,
+    currentRole, orders, loading, apiError, fetchTables, fetchOrders, currentWaiter
   } = useApp()
 
   useEffect(() => {
@@ -29,18 +29,22 @@ export default function TablesPage() {
   const [deleteTarget,   setDeleteTarget]   = useState(null)
 
   const countFor = (filter) => {
-    if (filter === 'All Tables')     return tables.length
-    if (filter === 'Available')      return tables.filter((t) => t.status === 'available').length
-    if (filter === 'Occupied')       return tables.filter((t) => t.status === 'occupied').length
-    if (filter === 'Needs Attention')return tables.filter((t) => t.status === 'needs_attention' || t.status === 'bill_requested').length
+    if (filter === 'All Tables')         return tables.length
+    if (filter === 'Assigned')           return tables.filter((t) => t.assigned_waiter === currentWaiter?.name || t.active).length
+    if (filter === 'Available')          return tables.filter((t) => t.status === 'available').length
+    if (filter === 'Occupied')           return tables.filter((t) => t.status === 'occupied').length
+    if (filter === 'Order In Progress')  return tables.filter((t) => t.status === 'occupied' || t.status === 'in_progress').length
+    if (filter === 'Bill Requested')     return tables.filter((t) => t.status === 'bill_requested' || t.status === 'needs_attention').length
     return 0
   }
 
   const filtered = tables.filter((t) => {
-    if (activeFilter === 'All Tables')      return true
-    if (activeFilter === 'Available')       return t.status === 'available'
-    if (activeFilter === 'Occupied')        return t.status === 'occupied'
-    if (activeFilter === 'Needs Attention') return t.status === 'needs_attention' || t.status === 'bill_requested'
+    if (activeFilter === 'All Tables')         return true
+    if (activeFilter === 'Assigned')           return t.assigned_waiter === currentWaiter?.name || t.active
+    if (activeFilter === 'Available')          return t.status === 'available'
+    if (activeFilter === 'Occupied')           return t.status === 'occupied'
+    if (activeFilter === 'Order In Progress')  return t.status === 'occupied' || t.status === 'in_progress'
+    if (activeFilter === 'Bill Requested')     return t.status === 'bill_requested' || t.status === 'needs_attention'
     return true
   })
 
@@ -191,7 +195,7 @@ export default function TablesPage() {
                             onClick={() => navigate(`/orders/new?table=${table.id}`)}
                             id={`start-order-table-${table.id}`}
                           >
-                            + Start Order
+                            + Create Order
                           </button>
                           {table.qrCodeId && (
                             <button
@@ -207,9 +211,25 @@ export default function TablesPage() {
                         </div>
                       )}
 
+                      {isBillReq && (
+                        <div className="waiter-table-card__actions">
+                          <button
+                            className="btn-primary btn-sm w-full"
+                            onClick={() => {
+                              if (activeOrd) {
+                                navigate(`/orders/${activeOrd.id}/invoice`)
+                              } else {
+                                navigate('/bill-requests')
+                              }
+                            }}
+                            id={`view-bill-table-${table.id}`}
+                          >
+                            View Bill
+                          </button>
+                        </div>
+                      )}
 
-
-                      {(isOccupied || isBillReq) && (
+                      {isOccupied && !isBillReq && (
                         <div className="waiter-table-card__actions">
                           <button
                             className="btn-outline btn-sm"
@@ -225,11 +245,7 @@ export default function TablesPage() {
                             className="btn-primary btn-sm"
                             onClick={() => {
                               if (activeOrd) {
-                                if (activeOrd.receipt_method) {
-                                  navigate(`/orders/${activeOrd.id}/invoice`)
-                                } else {
-                                  navigate(`/orders/${activeOrd.id}`)
-                                }
+                                navigate(`/orders/${activeOrd.id}`)
                               } else {
                                 navigate('/orders')
                               }

@@ -10,6 +10,7 @@ import OrdersPage           from './pages/OrdersPage'
 import OrderDetailPage      from './pages/OrderDetailPage'
 import TablesPage           from './pages/TablesPage'
 import RequestsPage         from './pages/RequestsPage'
+import BillRequestsPage     from './pages/BillRequestsPage'
 import ActiveOrderPage      from './pages/ActiveOrderPage'
 import NewOrderPOSPage      from './pages/NewOrderPOSPage'
 import AddItemsPage         from './pages/AddItemsPage'
@@ -211,6 +212,11 @@ export default function App() {
         <Route path="/requests"      element={
           <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
             <RequestsPage />
+          </ProtectedRoute>
+        } />
+        <Route path="/bill-requests" element={
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+            <BillRequestsPage />
           </ProtectedRoute>
         } />
 

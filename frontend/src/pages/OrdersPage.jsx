@@ -4,24 +4,26 @@ import AdminLayout from '../layouts/AdminLayout'
 import { orderApi } from '../api'
 import './OrdersPage.css'
 
-const STATUS_TABS = ['All', 'New', 'Accepted', 'Preparing', 'Ready', 'Completed']
+const STATUS_TABS = ['All', 'NEW', 'PREPARING', 'READY', 'SERVED', 'BILL REQUESTED']
 
 const STATUS_META = {
-  PENDING:   { label: 'NEW',    cls: 'badge--new',     dot: 'dot--new'   },
-  ACCEPTED:  { label: 'ACCEPT', cls: 'badge--accepted', dot: 'dot--accepted' },
-  PREPARING: { label: 'PREP',   cls: 'badge--prep',    dot: 'dot--prep'  },
-  READY:     { label: 'READY',  cls: 'badge--ready',   dot: 'dot--ready' },
-  COMPLETED: { label: 'DONE',   cls: 'badge--done',    dot: 'dot--done'  },
-  CANCELLED: { label: 'CANCEL', cls: '',               dot: ''           },
+  PENDING:        { label: 'NEW',            cls: 'badge--new',      dot: 'dot--new',      step: 1 },
+  NEW:            { label: 'NEW',            cls: 'badge--new',      dot: 'dot--new',      step: 1 },
+  ACCEPTED:       { label: 'PREPARING',      cls: 'badge--prep',     dot: 'dot--prep',     step: 2 },
+  PREPARING:      { label: 'PREPARING',      cls: 'badge--prep',     dot: 'dot--prep',     step: 2 },
+  READY:          { label: 'READY',          cls: 'badge--ready',    dot: 'dot--ready',    step: 3 },
+  COMPLETED:      { label: 'SERVED',         cls: 'badge--done',     dot: 'dot--done',     step: 4 },
+  SERVED:         { label: 'SERVED',         cls: 'badge--done',     dot: 'dot--done',     step: 4 },
+  BILL_REQUESTED: { label: 'BILL REQUESTED', cls: 'badge--accepted', dot: 'dot--accepted', step: 5 },
+  CANCELLED:      { label: 'CANCELLED',      cls: '',                dot: '',              step: 0 },
 }
 
-// Map display tab → API status value
 const TAB_TO_STATUS = {
-  New:       'pending',
-  Accepted:  'accepted',
-  Preparing: 'preparing',
-  Ready:     'ready',
-  Completed: 'completed',
+  NEW:              'pending',
+  PREPARING:        'preparing',
+  READY:            'ready',
+  SERVED:           'completed',
+  'BILL REQUESTED': 'bill_requested',
 }
 
 const PAGE_SIZE = 10

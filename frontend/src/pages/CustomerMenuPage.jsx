@@ -12,10 +12,10 @@ export default function CustomerMenuPage() {
   const { products, createWaiterRequest, tables } = useApp()
 
 
-  // Dynamic table parameter from URL (?table=T-12 or similar)
-  const tableParam = searchParams.get('table')
-  const tableLabel = tableParam ? tableParam.replace('T-', 'Table ') : 'Digital Menu'
-
+  // Dynamic parameters from URL (?branch=Main+Branch&table=T-12)
+  const branchParam = searchParams.get('branch') || 'Main Branch'
+  const tableParam  = searchParams.get('table')
+  const tableLabel  = tableParam ? (tableParam.startsWith('T-') ? tableParam.replace('T-', 'Table ') : tableParam) : 'Table 01'
 
   // View States: 'splash' | 'menu' | 'request_loading' | 'request_sent' | 'empty'
   const [viewState, setViewState] = useState('splash')
@@ -23,6 +23,7 @@ export default function CustomerMenuPage() {
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeRequest, setActiveRequest] = useState(null)
+  const [sentRequestMsg, setSentRequestMsg] = useState('')
   const [splashFinished, setSplashFinished] = useState(false)
   const [targetTableId, setTargetTableId] = useState(null)
 
@@ -30,7 +31,7 @@ export default function CustomerMenuPage() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setSplashFinished(true)
-    }, 1200)
+    }, 1000)
     return () => clearTimeout(timer)
   }, [])
 
@@ -92,8 +93,8 @@ export default function CustomerMenuPage() {
     return productCat === activeCat
   }) : []
 
-  // Call Waiter Request Handler
-  const handleCallWaiter = async () => {
+  // Request handlers for Call Waiter, Request Assistance, Request Bill
+  const sendRequest = async (requestType, customMessage) => {
     if (activeRequest) {
       setViewState('request_sent')
       return
@@ -108,15 +109,16 @@ export default function CustomerMenuPage() {
       if (createWaiterRequest && resolvedTableId) {
         const created = await createWaiterRequest({
           table: resolvedTableId,
-          request_type: 'Call Waiter',
-          message: `Customer requested assistance at table ${tableLabel}`,
+          request_type: requestType,
+          message: customMessage || `Customer sent ${requestType} from ${branchParam} • ${tableLabel}`,
           status: 'new',
         })
         setActiveRequest(created)
       }
+      setSentRequestMsg(requestType)
       setViewState('request_sent')
     } catch (err) {
-      console.error('Call waiter error:', err)
+      console.error('Request error:', err)
       setViewState('request_sent')
     }
   }
@@ -186,15 +188,15 @@ export default function CustomerMenuPage() {
       {/* Menu Header */}
       <header className="qr-header">
         <div className="header-left-group">
-          <span className="hamburger-menu-icon">☰</span>
-          <span className="header-cafe-name">L&apos;Essence Café &middot; {tableLabel}</span>
+          <span className="hamburger-menu-icon">☕</span>
+          <span className="header-cafe-name">{branchParam} &middot; {tableLabel}</span>
         </div>
         {activeRequest ? (
           <button className="btn-primary btn-sm call-waiter-btn requested" disabled>
-            ✓ Waiter Requested
+            ✓ Request Active
           </button>
         ) : (
-          <button className="btn-primary btn-sm call-waiter-btn" onClick={handleCallWaiter}>
+          <button className="btn-primary btn-sm call-waiter-btn" onClick={() => sendRequest('Call Waiter')}>
             Call Waiter
           </button>
         )}
@@ -206,9 +208,37 @@ export default function CustomerMenuPage() {
         <section className="cafe-branding-area">
           <div className="cafe-branding-logo">☕</div>
           <h2 className="cafe-branding-name">Artisan Brew</h2>
-          <p className="cafe-branding-desc">A premium boutique coffee experience.</p>
+          <p className="cafe-branding-desc">{branchParam} &middot; {tableLabel}</p>
           <span className="cafe-branding-table-badge">{tableLabel}</span>
         </section>
+
+        {/* Quick Customer Action Buttons */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, margin: '12px 16px 16px' }}>
+          <button
+            className="btn-outline"
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 4px', fontSize: 12, fontWeight: 600 }}
+            onClick={() => sendRequest('Call Waiter')}
+          >
+            <span>🛎️</span>
+            <span>Call Waiter</span>
+          </button>
+          <button
+            className="btn-outline"
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 4px', fontSize: 12, fontWeight: 600 }}
+            onClick={() => sendRequest('Request Assistance')}
+          >
+            <span>🙋</span>
+            <span>Assistance</span>
+          </button>
+          <button
+            className="btn-primary"
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '10px 4px', fontSize: 12, fontWeight: 600, background: 'var(--color-espresso)' }}
+            onClick={() => sendRequest('Request Bill')}
+          >
+            <span>🧾</span>
+            <span>Request Bill</span>
+          </button>
+        </div>
 
         {/* Horizontal Category Navigation */}
         <div className="qr-categories-bar">
@@ -238,7 +268,6 @@ export default function CustomerMenuPage() {
         {filteredProducts.length > 0 ? (
           <div className="qr-product-grid">
             {filteredProducts.map((p) => {
-              // Simulate product unavailable state for Matcha Latte (soldOut: true)
               const isUnavailable = p.soldOut || !p.available
 
               return (
@@ -257,7 +286,7 @@ export default function CustomerMenuPage() {
                   <div className="qr-card-body">
                     <div className="qr-card-top-row">
                       <h3 className="qr-card-title">{p.name}</h3>
-                      <span className="qr-card-price">₹{p.price.toLocaleString()}</span>
+                      <span className="qr-card-price">₹{p.price.toLocaleString('en-IN')}</span>
                     </div>
                     <p className="qr-card-desc">{p.description}</p>
                     <span className={`qr-card-stock-status ${isUnavailable ? 'out-of-stock' : 'in-stock'}`}>
@@ -289,20 +318,17 @@ export default function CustomerMenuPage() {
           <span className="nav-icon">📖</span>
           <span className="nav-label">Menu</span>
         </button>
-        <button className="nav-item" onClick={() => alert('Favorites section coming soon!')}>
-          <span className="nav-icon">♡</span>
-          <span className="nav-label">Favorites</span>
+        <button className="nav-item" onClick={() => sendRequest('Call Waiter')}>
+          <span className="nav-icon">🛎️</span>
+          <span className="nav-label">Waiter</span>
         </button>
-        <button 
-          className={`nav-item ${activeRequest ? 'requested' : ''}`} 
-          onClick={activeRequest ? () => setViewState('request_sent') : handleCallWaiter}
-        >
-          <span className="nav-icon">{activeRequest ? '✓' : '🛎️'}</span>
-          <span className="nav-label">{activeRequest ? 'Waiter Called' : 'Staff'}</span>
+        <button className="nav-item" onClick={() => sendRequest('Request Assistance')}>
+          <span className="nav-icon">🙋</span>
+          <span className="nav-label">Assistance</span>
         </button>
-        <button className="nav-item" onClick={() => alert('Artisan Brew Boutique Cafe\nOpen: 8:00 AM - 10:00 PM')}>
-          <span className="nav-icon">ℹ️</span>
-          <span className="nav-label">Info</span>
+        <button className="nav-item" onClick={() => sendRequest('Request Bill')}>
+          <span className="nav-icon">🧾</span>
+          <span className="nav-label">Bill</span>
         </button>
       </nav>
 
