@@ -43,6 +43,19 @@ import OwnerCustomersPage    from './pages/owner/OwnerCustomersPage'
 import OwnerReportsPage      from './pages/owner/OwnerReportsPage'
 import OwnerSettingsPage     from './pages/owner/OwnerSettingsPage'
 
+// ── Branch Manager Module ───────────────────────────────────────────
+import BranchDashboard   from './pages/branch-manager/BranchDashboard'
+import Staff             from './pages/branch-manager/Staff'
+import Tables            from './pages/branch-manager/Tables'
+import Orders            from './pages/branch-manager/Orders'
+import Kitchen           from './pages/branch-manager/Kitchen'
+import BranchMenu        from './pages/branch-manager/BranchMenu'
+import Inventory         from './pages/branch-manager/Inventory'
+import Expenses          from './pages/branch-manager/Expenses'
+import Customers         from './pages/branch-manager/Customers'
+import Reports           from './pages/branch-manager/Reports'
+import BranchSettings    from './pages/branch-manager/BranchSettings'
+
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { currentUser, authLoading, currentRole } = useApp()
@@ -351,6 +364,63 @@ export default function App() {
         <Route path="/owner/settings" element={
           <ProtectedRoute allowedRoles={['owner', 'admin']}>
             <OwnerSettingsPage />
+          </ProtectedRoute>
+        } />
+
+        {/* ── Branch Manager Routes ── */}
+        <Route path="/branch/dashboard" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <BranchDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/staff" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <Staff />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/tables" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <Tables />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/orders" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <Orders />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/kitchen" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <Kitchen />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/menu" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <BranchMenu />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/inventory" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <Inventory />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/expenses" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <Expenses />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/customers" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <Customers />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/reports" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <Reports />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/settings" element={
+          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+            <BranchSettings />
           </ProtectedRoute>
         } />
       </Routes>
