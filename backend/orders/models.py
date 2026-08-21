@@ -35,6 +35,12 @@ class Order(models.Model):
     order_number  = models.CharField(max_length=20, unique=True, blank=True)
 
     # Links
+    branch = models.ForeignKey(
+        'accounts.Branch',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='orders',
+    )
     table = models.ForeignKey(
         'menu.Table',
         on_delete=models.SET_NULL,

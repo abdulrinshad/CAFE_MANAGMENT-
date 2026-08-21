@@ -41,6 +41,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     items       = OrderItemSerializer(many=True, required=False)
     table_label = serializers.CharField(read_only=True)
+    branch_name = serializers.CharField(source='branch.name', read_only=True, default='Artisan Brew')
+    branch_code = serializers.CharField(source='branch.code', read_only=True, default='BRANCH-001')
     item_count  = serializers.IntegerField(read_only=True)
     items_summary = serializers.CharField(read_only=True)
     receipt_method = serializers.SerializerMethodField()
@@ -49,7 +51,7 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Order
         fields = [
-            'id', 'order_number', 'table', 'table_label',
+            'id', 'order_number', 'branch', 'branch_name', 'branch_code', 'table', 'table_label',
             'customer_name', 'waiter_name', 'notes', 'whatsapp_number',
             'status', 'subtotal', 'tax_amount', 'total',
             'item_count', 'items_summary',
@@ -57,7 +59,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'receipt_method', 'receipt_status',
         ]
         read_only_fields = [
-            'id', 'order_number', 'table_label', 'item_count', 'items_summary',
+            'id', 'order_number', 'branch_name', 'branch_code', 'table_label', 'item_count', 'items_summary',
             'subtotal', 'tax_amount', 'total',
             'created_at', 'updated_at', 'completed_at',
             'receipt_method', 'receipt_status',
@@ -158,6 +160,8 @@ class OrderStatusSerializer(serializers.ModelSerializer):
 
 class InvoiceSerializer(serializers.ModelSerializer):
     order_number = serializers.CharField(source='order.order_number', read_only=True)
+    branch_name  = serializers.CharField(source='order.branch.name', read_only=True, default='Artisan Brew')
+    branch_code  = serializers.CharField(source='order.branch.code', read_only=True, default='BRANCH-001')
     table_label  = serializers.CharField(source='order.table_label', read_only=True)
     table_id     = serializers.IntegerField(source='order.table_id', read_only=True, allow_null=True)
     receipt_url  = serializers.SerializerMethodField()
@@ -170,7 +174,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
         model  = Invoice
         fields = [
             'id', 'invoice_number', 'token',
-            'order', 'order_number', 'table_label', 'table_id', 'order_status',
+            'order', 'order_number', 'branch_name', 'branch_code', 'table_label', 'table_id', 'order_status',
             'whatsapp_number', 'status',
             'receipt_status',
             'subtotal', 'tax_amount', 'total',

@@ -140,8 +140,6 @@ export default function InvoicePreviewPage() {
     }
   }
 
-  const handleGoToPayment = () => navigate(`/orders/${id}/checkout`)
-  
   const handlePrint = async () => {
     window.print()
     try {
@@ -371,15 +369,6 @@ export default function InvoicePreviewPage() {
                   🖨 Print Bill
                 </button>
               )}
-
-              <button
-                className="btn-primary py-3 px-6"
-                onClick={handleGoToPayment}
-                id="go-to-payment-btn"
-                style={{ background: 'var(--color-espresso)' }}
-              >
-                Proceed to Payment →
-              </button>
             </>
           )}
         </div>

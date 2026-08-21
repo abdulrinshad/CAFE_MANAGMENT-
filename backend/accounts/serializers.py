@@ -2,14 +2,20 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Waiter
+from .models import Waiter, Branch
+
+class BranchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Branch
+        fields = ('id', 'name', 'code', 'address', 'phone', 'active')
 
 class UserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
+    branch = BranchSerializer(source='profile.branch', read_only=True)
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'role', 'is_staff', 'is_superuser')
+        fields = ('id', 'username', 'email', 'role', 'branch', 'is_staff', 'is_superuser')
 
     def get_role(self, obj):
         if hasattr(obj, 'profile'):
@@ -78,17 +84,20 @@ class ChangePasswordSerializer(serializers.Serializer):
     new_password = serializers.CharField(required=True)
 
 class WaiterSafeSerializer(serializers.ModelSerializer):
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
+
     class Meta:
         model = Waiter
-        fields = ('id', 'name', 'photo', 'section', 'is_active')
+        fields = ('id', 'name', 'photo', 'section', 'branch', 'branch_name', 'is_active')
 
 class WaiterSerializer(serializers.ModelSerializer):
     pin = serializers.CharField(write_only=True, required=False)
     confirm_pin = serializers.CharField(write_only=True, required=False)
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
 
     class Meta:
         model = Waiter
-        fields = ('id', 'name', 'photo', 'section', 'is_active', 'created_at', 'updated_at', 'pin', 'confirm_pin')
+        fields = ('id', 'name', 'photo', 'section', 'branch', 'branch_name', 'is_active', 'created_at', 'updated_at', 'pin', 'confirm_pin')
 
     def validate(self, attrs):
         pin = attrs.get('pin')
