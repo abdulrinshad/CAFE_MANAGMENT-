@@ -4,6 +4,7 @@ import './Sidebar.css'
 
 const NAV_ITEMS = [
   { path: '/dashboard',       label: 'Dashboard',  icon: <DashboardIcon />, exact: true },
+  { path: '/pos/dashboard',   label: 'POS Dashboard', icon: <POSIcon /> },
   { path: '/menu',            label: 'Menu',        icon: <MenuIcon /> },
   { path: '/categories',      label: 'Categories',  icon: <CategoriesIcon /> },
   { path: '/orders',          label: 'Orders',      icon: <OrdersIcon /> },
@@ -76,6 +77,7 @@ export default function Sidebar({ isOpen, onClose }) {
   const items = currentRole === 'waiter' || !isOwner
     ? [
         { path: '/dashboard',     label: 'Dashboard',        icon: <DashboardIcon />, exact: true },
+        { path: '/pos/dashboard', label: 'POS Dashboard',    icon: <POSIcon /> },
         { path: '/tables',        label: 'My Tables',        icon: <TablesIcon /> },
         { path: '/orders',        label: 'My Orders',        icon: <OrdersIcon /> },
         { path: '/requests',      label: 'Pending Requests', icon: <RequestsIcon />, badge: activeRequestsCount > 0 ? activeRequestsCount : null },

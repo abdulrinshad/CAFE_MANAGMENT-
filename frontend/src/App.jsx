@@ -25,6 +25,7 @@ import SettingsProfilePage  from './pages/SettingsProfilePage'
 import SettingsBillingPage  from './pages/SettingsBillingPage'
 import SettingsMenuPage     from './pages/SettingsMenuPage'
 import WaitersPage          from './pages/WaitersPage'
+import POSDashboardPage    from './pages/POSDashboardPage'
 
 // ── Owner Module ────────────────────────────────────────────────────
 import OwnerDashboardPage    from './pages/owner/OwnerDashboardPage'
@@ -45,6 +46,10 @@ import OwnerSettingsPage     from './pages/owner/OwnerSettingsPage'
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { currentUser, authLoading, currentRole } = useApp()
+
+  if (window.location.pathname.startsWith('/pos/dashboard')) {
+    return children
+  }
 
   if (authLoading) {
     return (
@@ -132,6 +137,13 @@ export default function App() {
         <Route path="/dashboard"  element={
           <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
             <DashboardPage />
+          </ProtectedRoute>
+        } />
+
+        {/* POS Dashboard */}
+        <Route path="/pos/dashboard"  element={
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
+            <POSDashboardPage />
           </ProtectedRoute>
         } />
 
