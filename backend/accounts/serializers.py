@@ -2,16 +2,96 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Waiter, Branch
+from .models import Waiter, Branch, BranchManager
+
+
+# ── Branch Serializers ─────────────────────────────────────────────────────────
+
+class BranchManagerInlineSerializer(serializers.ModelSerializer):
+    """Lightweight manager info embedded inside Branch responses."""
+    class Meta:
+        model = BranchManager
+        fields = ('id', 'name', 'manager_id', 'is_active')
+
 
 class BranchSerializer(serializers.ModelSerializer):
+    """Full Branch serializer with nested manager info (read-only)."""
+    manager = BranchManagerInlineSerializer(read_only=True)
+
+    class Meta:
+        model = Branch
+        fields = ('id', 'name', 'code', 'address', 'phone', 'active', 'created_at', 'updated_at', 'manager')
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+
+class BranchWriteSerializer(serializers.ModelSerializer):
+    """Serializer used only for create / update operations on Branch."""
+    class Meta:
+        model = Branch
+        fields = ('name', 'code', 'address', 'phone', 'active')
+
+    def validate_code(self, value):
+        qs = Branch.objects.filter(code=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A branch with this code already exists.")
+        return value
+
+
+# ── BranchManager Serializers ─────────────────────────────────────────────────
+
+class BranchManagerSerializer(serializers.ModelSerializer):
+    """Full BranchManager serializer for create / update."""
+    pin = serializers.CharField(write_only=True, required=False)
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
+
+    class Meta:
+        model = BranchManager
+        fields = (
+            'id', 'name', 'manager_id', 'branch', 'branch_name',
+            'is_active', 'created_at', 'updated_at', 'pin',
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at', 'branch_name')
+
+    def validate_manager_id(self, value):
+        qs = BranchManager.objects.filter(manager_id=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("This Manager ID is already in use.")
+        return value
+
+    def create(self, validated_data):
+        pin = validated_data.pop('pin', None)
+        manager = BranchManager(**validated_data)
+        if pin:
+            manager.set_pin(pin)
+        manager.save()
+        return manager
+
+    def update(self, instance, validated_data):
+        pin = validated_data.pop('pin', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if pin:
+            instance.set_pin(pin)
+        instance.save()
+        return instance
+
+
+# ── User / Auth Serializers ───────────────────────────────────────────────────
+
+class BranchMinimalSerializer(serializers.ModelSerializer):
+    """Compact branch info used inside user tokens."""
     class Meta:
         model = Branch
         fields = ('id', 'name', 'code', 'address', 'phone', 'active')
 
+
 class UserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
-    branch = BranchSerializer(source='profile.branch', read_only=True)
+    branch = BranchMinimalSerializer(source='profile.branch', read_only=True)
 
     class Meta:
         model = User
@@ -21,6 +101,7 @@ class UserSerializer(serializers.ModelSerializer):
         if hasattr(obj, 'profile'):
             return obj.profile.role
         return 'STAFF'
+
 
 class CustomTokenObtainPairSerializer(serializers.Serializer):
     email = serializers.CharField(required=True)
@@ -35,13 +116,12 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
         if not users.exists():
             raise serializers.ValidationError("Invalid email or password.")
 
-
         if all(not u.is_active for u in users):
             raise serializers.ValidationError("Your account is inactive. Please contact an administrator.")
 
         from django.contrib.auth import authenticate
         authenticated_user = None
-        
+
         # Authenticate users matching the email.
         # Prioritize users with ADMIN or MANAGER privileges.
         for u in users:
@@ -79,9 +159,11 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             }
         }
 
+
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(required=True)
     new_password = serializers.CharField(required=True)
+
 
 class WaiterSafeSerializer(serializers.ModelSerializer):
     branch_name = serializers.CharField(source='branch.name', read_only=True)
@@ -89,6 +171,7 @@ class WaiterSafeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Waiter
         fields = ('id', 'name', 'photo', 'section', 'branch', 'branch_name', 'is_active')
+
 
 class WaiterSerializer(serializers.ModelSerializer):
     pin = serializers.CharField(write_only=True, required=False)
@@ -129,4 +212,3 @@ class WaiterSerializer(serializers.ModelSerializer):
             instance.set_pin(pin)
         instance.save()
         return instance
-

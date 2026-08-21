@@ -42,6 +42,8 @@ import OwnerExpensesPage     from './pages/owner/OwnerExpensesPage'
 import OwnerCustomersPage    from './pages/owner/OwnerCustomersPage'
 import OwnerReportsPage      from './pages/owner/OwnerReportsPage'
 import OwnerSettingsPage     from './pages/owner/OwnerSettingsPage'
+import BranchManagerLoginPage     from './pages/BranchManagerLoginPage'
+import BranchManagerDashboardPage from './pages/BranchManagerDashboardPage'
 
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -129,6 +131,15 @@ export default function App() {
 
         {/* Auth */}
         <Route path="/login"      element={<LoginPage />} />
+
+        {/* ── Branch Manager Portal ── */}
+        <Route path="/branch-manager/login"     element={<BranchManagerLoginPage />} />
+        <Route path="/branch-manager/dashboard" element={
+          (() => {
+            const bm = (() => { try { return localStorage.getItem('artisan_bm') } catch { return null } })()
+            return bm ? <BranchManagerDashboardPage /> : <Navigate to="/login" replace />
+          })()
+        } />
 
         {/* Customer QR Digital Menu - Public */}
         <Route path="/customer/menu" element={<CustomerMenuPage />} />

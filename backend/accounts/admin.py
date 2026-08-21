@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.forms.models import BaseInlineFormSet
-from .models import UserProfile, Waiter
+from .models import UserProfile, Waiter, Branch, BranchManager
 from django import forms
 from django.core.exceptions import ValidationError
 
@@ -87,3 +87,54 @@ class WaiterAdmin(admin.ModelAdmin):
 admin.site.unregister(User)
 admin.site.register(User, UserAdmin)
 admin.site.register(Waiter, WaiterAdmin)
+
+
+@admin.register(Branch)
+class BranchAdmin(admin.ModelAdmin):
+    list_display = ('name', 'code', 'address', 'phone', 'active', 'created_at')
+    list_filter = ('active',)
+    search_fields = ('name', 'code')
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(BranchManager)
+class BranchManagerAdmin(admin.ModelAdmin):
+    list_display = ('name', 'manager_id', 'branch', 'is_active', 'created_at')
+    list_filter = ('is_active', 'branch')
+    search_fields = ('name', 'manager_id')
+    readonly_fields = ('created_at', 'updated_at', 'pin_display')
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'manager_id', 'branch', 'is_active')
+        }),
+        ('PIN', {
+            'fields': ('pin_display', 'new_pin'),
+            'description': 'Enter a new PIN to set/reset the manager PIN.'
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+    def pin_display(self, obj):
+        return '********' if (obj and obj.pin_hash) else '(No PIN set)'
+    pin_display.short_description = 'PIN Status'
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.base_fields['new_pin'] = forms.CharField(
+            max_length=128,
+            required=False,
+            widget=forms.PasswordInput(render_value=False),
+            label='New PIN',
+            help_text='Leave blank to keep existing PIN.'
+        )
+        return form
+
+    def save_model(self, request, obj, form, change):
+        new_pin = form.cleaned_data.get('new_pin')
+        if new_pin:
+            obj.set_pin(new_pin)
+        elif not change and not new_pin:
+            raise ValidationError('PIN is required for new branch managers.')
+        super().save_model(request, obj, form, change)

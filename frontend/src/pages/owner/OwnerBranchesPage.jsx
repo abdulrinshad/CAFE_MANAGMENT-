@@ -1,67 +1,188 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../layouts/AdminLayout'
 import Modal from '../../components/Modal'
-import { useApp } from '../../context/AppContext'
+import { branchApi, branchManagerApi } from '../../api'
 import './owner.css'
 
-const DEFAULT_BRANCH = {
-  id: 1,
-  name: 'Artisan Brew — Main Branch',
-  location: 'MG Road, Main Market',
-  status: 'active',
-}
-
-const EMPTY_FORM = {
-  name: '', address: '', phone: '', status: 'active',
-}
+// ── Empty form shapes ──────────────────────────────────────────────────────────
+const EMPTY_BRANCH_FORM = { name: '', code: '', address: '', phone: '', active: true }
+const EMPTY_MGR_FORM    = { name: '', manager_id: '', pin: '' }
 
 export default function OwnerBranchesPage() {
   const navigate = useNavigate()
-  const { tables, orders, products } = useApp()
-  const [branches, setBranches]   = useState([DEFAULT_BRANCH])
-  const [search,   setSearch]     = useState('')
-  const [modal,    setModal]      = useState(false)
-  const [editing,  setEditing]    = useState(null)
-  const [form,     setForm]       = useState(EMPTY_FORM)
 
-  const liveTableCount = tables.length
-  const liveOrderCount = orders.length
-  const liveSalesTotal = orders.filter(o => o.status === 'COMPLETED').reduce((s, o) => s + (o.amount || 0), 0)
+  // ── Data state ────────────────────────────────────────────────────────────
+  const [branches,  setBranches]  = useState([])
+  const [loading,   setLoading]   = useState(true)
+  const [apiError,  setApiError]  = useState('')
+  const [search,    setSearch]    = useState('')
 
+  // ── Modal state ───────────────────────────────────────────────────────────
+  // modal: false | 'add' | 'edit' | 'manager'
+  const [modal,     setModal]     = useState(false)
+  const [saving,    setSaving]    = useState(false)
+  const [saveError, setSaveError] = useState('')
+
+  // ── Branch form ───────────────────────────────────────────────────────────
+  const [editingId,   setEditingId]   = useState(null)
+  const [branchForm,  setBranchForm]  = useState(EMPTY_BRANCH_FORM)
+
+  // ── Manager form (shown inside Add Branch modal or standalone) ────────────
+  const [mgrForm,     setMgrForm]     = useState(EMPTY_MGR_FORM)
+  const [addManager,  setAddManager]  = useState(false) // toggle inside 'add' modal
+  const [mgrBranchId, setMgrBranchId] = useState(null) // for standalone 'manager' modal
+
+  // ── Fetch branches ────────────────────────────────────────────────────────
+  const fetchBranches = useCallback(async () => {
+    setLoading(true)
+    setApiError('')
+    try {
+      const data = await branchApi.list()
+      setBranches(Array.isArray(data) ? data : (data.results ?? []))
+    } catch (err) {
+      setApiError(err.message || 'Failed to load branches.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchBranches() }, [fetchBranches])
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
   const filtered = branches.filter(b =>
     b.name.toLowerCase().includes(search.toLowerCase()) ||
-    (b.location && b.location.toLowerCase().includes(search.toLowerCase()))
+    (b.address && b.address.toLowerCase().includes(search.toLowerCase()))
   )
 
-  const openAdd  = () => { setForm(EMPTY_FORM); setEditing(null); setModal('add') }
+  const bf = (key) => (e) => setBranchForm(prev => ({ ...prev, [key]: e.target.value }))
+  const mf = (key) => (e) => setMgrForm(prev => ({ ...prev, [key]: e.target.value }))
+
+  // ── Open modals ───────────────────────────────────────────────────────────
+  const openAdd = () => {
+    setBranchForm(EMPTY_BRANCH_FORM)
+    setMgrForm(EMPTY_MGR_FORM)
+    setAddManager(false)
+    setEditingId(null)
+    setSaveError('')
+    setModal('add')
+  }
+
   const openEdit = (b) => {
-    setForm({
-      name: b.name, address: b.location || '', phone: b.phone || '', status: b.status || 'active',
+    setBranchForm({
+      name:    b.name    || '',
+      code:    b.code    || '',
+      address: b.address || '',
+      phone:   b.phone   || '',
+      active:  b.active  ?? true,
     })
-    setEditing(b.id)
+    setEditingId(b.id)
+    setSaveError('')
     setModal('edit')
   }
-  const closeModal = () => { setModal(false); setEditing(null) }
 
-  const handleSave = () => {
-    if (!form.name.trim()) return
-    if (editing) {
-      setBranches(prev => prev.map(b => b.id === editing ? { ...b, ...form, location: form.address } : b))
-    } else {
-      const newBranch = {
-        id: Date.now(), ...form, location: form.address, status: form.status || 'active',
+  const openManagerModal = (branchId) => {
+    const branch = branches.find(b => b.id === branchId)
+    const existingMgr = branch?.manager
+    setMgrForm(existingMgr
+      ? { name: existingMgr.name, manager_id: existingMgr.manager_id, pin: '' }
+      : EMPTY_MGR_FORM
+    )
+    setMgrBranchId(branchId)
+    setSaveError('')
+    setModal('manager')
+  }
+
+  const closeModal = () => {
+    setModal(false)
+    setEditingId(null)
+    setMgrBranchId(null)
+    setSaveError('')
+  }
+
+  // ── Save branch (create or update) ───────────────────────────────────────
+  const handleSaveBranch = async () => {
+    if (!branchForm.name.trim()) { setSaveError('Branch name is required.'); return }
+    if (!branchForm.code.trim()) { setSaveError('Branch code is required.'); return }
+    setSaving(true); setSaveError('')
+    try {
+      let savedBranch
+      if (editingId) {
+        savedBranch = await branchApi.patch(editingId, branchForm)
+      } else {
+        savedBranch = await branchApi.create(branchForm)
       }
-      setBranches(prev => [...prev, newBranch])
+
+      // If user also wants to create a manager for this new branch
+      if (!editingId && addManager && mgrForm.name.trim() && mgrForm.manager_id.trim() && mgrForm.pin.trim()) {
+        await branchManagerApi.create({
+          name:       mgrForm.name,
+          manager_id: mgrForm.manager_id,
+          pin:        mgrForm.pin,
+          branch:     savedBranch.id,
+        })
+      }
+
+      await fetchBranches()
+      closeModal()
+    } catch (err) {
+      const data = err.data
+      if (data && typeof data === 'object') {
+        const msgs = Object.entries(data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v[0] : v}`)
+        setSaveError(msgs.join(' | '))
+      } else {
+        setSaveError(err.message || 'Failed to save branch.')
+      }
+    } finally {
+      setSaving(false)
     }
-    closeModal()
   }
 
-  const toggleStatus = (id) => {
-    setBranches(prev => prev.map(b => b.id === id ? { ...b, status: b.status === 'active' ? 'inactive' : 'active' } : b))
+  // ── Save manager (standalone edit/create for existing branch) ─────────────
+  const handleSaveManager = async () => {
+    if (!mgrForm.name.trim())       { setSaveError('Manager name is required.');  return }
+    if (!mgrForm.manager_id.trim()) { setSaveError('Manager ID is required.');    return }
+    setSaving(true); setSaveError('')
+    try {
+      const branch = branches.find(b => b.id === mgrBranchId)
+      const existingMgr = branch?.manager
+      if (existingMgr) {
+        const payload = { name: mgrForm.name, manager_id: mgrForm.manager_id }
+        if (mgrForm.pin.trim()) payload.pin = mgrForm.pin
+        await branchManagerApi.update(existingMgr.id, payload)
+      } else {
+        if (!mgrForm.pin.trim()) { setSaveError('PIN is required for a new manager.'); setSaving(false); return }
+        await branchManagerApi.create({
+          name:       mgrForm.name,
+          manager_id: mgrForm.manager_id,
+          pin:        mgrForm.pin,
+          branch:     mgrBranchId,
+        })
+      }
+      await fetchBranches()
+      closeModal()
+    } catch (err) {
+      const data = err.data
+      if (data && typeof data === 'object') {
+        const msgs = Object.entries(data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v[0] : v}`)
+        setSaveError(msgs.join(' | '))
+      } else {
+        setSaveError(err.message || 'Failed to save manager.')
+      }
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const f = (key) => (e) => setForm(prev => ({ ...prev, [key]: e.target.value }))
+  // ── Toggle branch active/inactive ─────────────────────────────────────────
+  const toggleStatus = async (b) => {
+    try {
+      const updated = await branchApi.setActive(b.id, !b.active)
+      setBranches(prev => prev.map(br => br.id === b.id ? { ...br, ...updated } : br))
+    } catch (err) {
+      alert(err.message || 'Failed to update branch status.')
+    }
+  }
 
   return (
     <AdminLayout pageTitle="Branches" pageIcon="🏪">
@@ -71,65 +192,105 @@ export default function OwnerBranchesPage() {
         <div className="owner-page-header">
           <div className="owner-page-header__left">
             <h1 className="owner-page-header__title">Branches</h1>
-            <p className="owner-page-header__sub">Manage all your cafe branches connected to live database floor plans.</p>
+            <p className="owner-page-header__sub">Manage all your cafe branches and their branch managers.</p>
           </div>
           <div className="owner-page-header__actions">
             <button className="btn-primary" id="btn-add-branch" onClick={openAdd}>+ Add Branch</button>
           </div>
         </div>
 
-        {/* Filter */}
+        {/* API error banner */}
+        {apiError && (
+          <div style={{ padding: '12px 16px', background: 'var(--color-danger-light, #fee)', color: 'var(--color-danger, #c00)', borderRadius: 8, fontSize: 13 }}>
+            {apiError}
+            <button onClick={fetchBranches} style={{ marginLeft: 12, textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}>Retry</button>
+          </div>
+        )}
+
+        {/* Table card */}
         <div className="owner-section-card">
           <div className="owner-section-card__header">
             <div className="owner-filter-bar">
               <input
                 className="form-input"
-                placeholder="Search branches..."
+                placeholder="Search branches…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 style={{ minWidth: 240, fontSize: 13, padding: '8px 14px' }}
                 id="search-branches"
               />
             </div>
-            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{filtered.length} branches</span>
+            <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+              {loading ? 'Loading…' : `${filtered.length} branch${filtered.length !== 1 ? 'es' : ''}`}
+            </span>
           </div>
 
-          {/* Table */}
           <div className="owner-table-wrap">
             <table className="owner-table">
               <thead>
                 <tr>
                   <th>Branch Name</th>
+                  <th>Code</th>
                   <th>Location</th>
-                  <th>DB Tables</th>
-                  <th>Live Orders</th>
-                  <th>Total Revenue</th>
+                  <th>Branch Manager</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
-                  <tr><td colSpan={7}><div className="owner-empty"><div className="owner-empty__icon">🏪</div><div className="owner-empty__text">No branches found</div></div></td></tr>
+                {loading ? (
+                  <tr><td colSpan={6}><div className="owner-empty"><div className="owner-empty__text">Loading branches…</div></div></td></tr>
+                ) : filtered.length === 0 ? (
+                  <tr><td colSpan={6}><div className="owner-empty"><div className="owner-empty__icon">🏪</div><div className="owner-empty__text">No branches found</div></div></td></tr>
                 ) : filtered.map(b => (
                   <tr key={b.id}>
-                    <td className="td-name">{b.name}</td>
-                    <td className="td-muted">{b.location}</td>
-                    <td>{liveTableCount} tables</td>
-                    <td>{liveOrderCount} orders</td>
-                    <td style={{ fontWeight: 600 }}>₹{Number(liveSalesTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td className="td-name">
+                      <button
+                        onClick={() => navigate(`/owner/branches/${b.id}`)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontWeight: 600, textAlign: 'left', padding: 0 }}
+                      >
+                        {b.name}
+                      </button>
+                    </td>
+                    <td className="td-mono td-muted">{b.code}</td>
+                    <td className="td-muted">{b.address || '—'}</td>
                     <td>
-                      <span className={`owner-badge owner-badge--${b.status}`}>{b.status.toUpperCase()}</span>
+                      {b.manager ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13 }}>{b.manager.name}</span>
+                          <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>({b.manager.manager_id})</span>
+                          <button
+                            className="owner-icon-btn"
+                            title="Edit Manager"
+                            onClick={() => openManagerModal(b.id)}
+                            style={{ fontSize: 12 }}
+                          >✏️</button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn-outline"
+                          onClick={() => openManagerModal(b.id)}
+                          style={{ fontSize: 12, padding: '4px 10px' }}
+                          id={`btn-add-manager-${b.id}`}
+                        >
+                          + Add Manager
+                        </button>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`owner-badge owner-badge--${b.active ? 'active' : 'inactive'}`}>
+                        {b.active ? 'ACTIVE' : 'INACTIVE'}
+                      </span>
                     </td>
                     <td>
                       <div className="td-actions">
-                        <button className="owner-icon-btn" title="Edit" onClick={() => openEdit(b)}>✏️</button>
+                        <button className="owner-icon-btn" title="Edit Branch" onClick={() => openEdit(b)}>✏️</button>
                         <button
-                          className={`owner-icon-btn${b.status === 'active' ? ' owner-icon-btn--danger' : ''}`}
-                          title={b.status === 'active' ? 'Deactivate' : 'Activate'}
-                          onClick={() => toggleStatus(b.id)}
+                          className={`owner-icon-btn${b.active ? ' owner-icon-btn--danger' : ''}`}
+                          title={b.active ? 'Deactivate' : 'Activate'}
+                          onClick={() => toggleStatus(b)}
                         >
-                          {b.status === 'active' ? '⏸' : '▶'}
+                          {b.active ? '⏸' : '▶'}
                         </button>
                       </div>
                     </td>
@@ -139,36 +300,163 @@ export default function OwnerBranchesPage() {
             </table>
           </div>
         </div>
-
       </div>
 
-      {/* Add / Edit Modal */}
-      <Modal open={!!modal} onClose={closeModal} title={modal === 'edit' ? 'Edit Branch' : 'Add Branch'}>
+      {/* ── Add Branch Modal ── */}
+      <Modal open={modal === 'add'} onClose={closeModal} title="Add Branch">
         <div className="owner-form-grid">
           <div className="form-group owner-form-grid--full">
             <label className="form-label">Branch Name <span>*</span></label>
-            <input className="form-input" placeholder="e.g. Artisan Brew — MG Road" value={form.name} onChange={f('name')} id="inp-branch-name" />
+            <input className="form-input" placeholder="e.g. Artisan Brew — MG Road" value={branchForm.name} onChange={bf('name')} id="inp-branch-name" />
           </div>
-          <div className="form-group owner-form-grid--full">
-            <label className="form-label">Address</label>
-            <input className="form-input" placeholder="Branch address..." value={form.address} onChange={f('address')} id="inp-branch-address" />
+          <div className="form-group">
+            <label className="form-label">Branch Code <span>*</span></label>
+            <input className="form-input" placeholder="e.g. BR-002" value={branchForm.code} onChange={bf('code')} id="inp-branch-code" />
           </div>
           <div className="form-group">
             <label className="form-label">Phone</label>
-            <input className="form-input" placeholder="+91 XXXXXXXXXX" value={form.phone} onChange={f('phone')} id="inp-branch-phone" />
+            <input className="form-input" placeholder="+91 XXXXXXXXXX" value={branchForm.phone} onChange={bf('phone')} id="inp-branch-phone" />
+          </div>
+          <div className="form-group owner-form-grid--full">
+            <label className="form-label">Address</label>
+            <input className="form-input" placeholder="Branch address…" value={branchForm.address} onChange={bf('address')} id="inp-branch-address" />
           </div>
           <div className="form-group">
             <label className="form-label">Status</label>
-            <select className="form-select" value={form.status} onChange={f('status')} id="sel-branch-status">
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+            <select className="form-select" value={branchForm.active ? 'true' : 'false'} onChange={e => setBranchForm(p => ({ ...p, active: e.target.value === 'true' }))} id="sel-branch-status">
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </div>
+
+          {/* Manager section toggle */}
+          <div className="form-group owner-form-grid--full">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--color-espresso)' }}>
+              <input type="checkbox" checked={addManager} onChange={e => setAddManager(e.target.checked)} id="chk-add-manager" />
+              Also create a Branch Manager for this branch
+            </label>
+          </div>
+
+          {addManager && (
+            <>
+              <div className="form-group owner-form-grid--full" style={{ borderTop: '1px dashed var(--color-border)', paddingTop: 12 }}>
+                <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 10 }}>Branch Manager Details</p>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Manager Name <span>*</span></label>
+                <input className="form-input" placeholder="e.g. Rahul Sharma" value={mgrForm.name} onChange={mf('name')} id="inp-mgr-name" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Manager ID <span>*</span></label>
+                <input className="form-input" placeholder="e.g. MGR-001" value={mgrForm.manager_id} onChange={mf('manager_id')} id="inp-mgr-id" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">PIN / Password <span>*</span></label>
+                <input className="form-input" type="password" placeholder="Set a login PIN" value={mgrForm.pin} onChange={mf('pin')} id="inp-mgr-pin" />
+              </div>
+            </>
+          )}
+        </div>
+
+        {saveError && (
+          <p style={{ color: 'var(--color-danger, #c00)', fontSize: 12, marginTop: 8 }}>{saveError}</p>
+        )}
+
+        <div className="owner-modal-footer">
+          <button className="btn-outline" onClick={closeModal} disabled={saving}>Cancel</button>
+          <button className="btn-primary" onClick={handleSaveBranch} disabled={saving} id="btn-save-branch">
+            {saving ? 'Saving…' : 'Add Branch'}
+          </button>
+        </div>
+      </Modal>
+
+      {/* ── Edit Branch Modal ── */}
+      <Modal open={modal === 'edit'} onClose={closeModal} title="Edit Branch">
+        <div className="owner-form-grid">
+          <div className="form-group owner-form-grid--full">
+            <label className="form-label">Branch Name <span>*</span></label>
+            <input className="form-input" placeholder="Branch name" value={branchForm.name} onChange={bf('name')} id="inp-edit-branch-name" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Branch Code <span>*</span></label>
+            <input className="form-input" placeholder="e.g. BR-001" value={branchForm.code} onChange={bf('code')} id="inp-edit-branch-code" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Phone</label>
+            <input className="form-input" placeholder="+91 XXXXXXXXXX" value={branchForm.phone} onChange={bf('phone')} id="inp-edit-branch-phone" />
+          </div>
+          <div className="form-group owner-form-grid--full">
+            <label className="form-label">Address</label>
+            <input className="form-input" placeholder="Branch address…" value={branchForm.address} onChange={bf('address')} id="inp-edit-branch-address" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Status</label>
+            <select className="form-select" value={branchForm.active ? 'true' : 'false'} onChange={e => setBranchForm(p => ({ ...p, active: e.target.value === 'true' }))} id="sel-edit-branch-status">
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
             </select>
           </div>
         </div>
+
+        {saveError && (
+          <p style={{ color: 'var(--color-danger, #c00)', fontSize: 12, marginTop: 8 }}>{saveError}</p>
+        )}
+
         <div className="owner-modal-footer">
-          <button className="btn-outline" onClick={closeModal}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave} id="btn-save-branch">{modal === 'edit' ? 'Save Changes' : 'Add Branch'}</button>
+          <button className="btn-outline" onClick={closeModal} disabled={saving}>Cancel</button>
+          <button className="btn-primary" onClick={handleSaveBranch} disabled={saving} id="btn-update-branch">
+            {saving ? 'Saving…' : 'Save Changes'}
+          </button>
         </div>
+      </Modal>
+
+      {/* ── Add / Edit Manager Modal ── */}
+      <Modal
+        open={modal === 'manager'}
+        onClose={closeModal}
+        title={branches.find(b => b.id === mgrBranchId)?.manager ? 'Edit Branch Manager' : 'Add Branch Manager'}
+      >
+        {(() => {
+          const branch = branches.find(b => b.id === mgrBranchId)
+          const hasManager = !!branch?.manager
+          return (
+            <>
+              {branch && (
+                <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 14 }}>
+                  Branch: <strong>{branch.name}</strong> ({branch.code})
+                </p>
+              )}
+              <div className="owner-form-grid">
+                <div className="form-group">
+                  <label className="form-label">Manager Name <span>*</span></label>
+                  <input className="form-input" placeholder="e.g. Rahul Sharma" value={mgrForm.name} onChange={mf('name')} id="inp-modal-mgr-name" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Manager ID <span>*</span></label>
+                  <input className="form-input" placeholder="e.g. MGR-001" value={mgrForm.manager_id} onChange={mf('manager_id')} id="inp-modal-mgr-id" />
+                </div>
+                <div className="form-group owner-form-grid--full">
+                  <label className="form-label">
+                    PIN / Password {!hasManager && <span>*</span>}
+                    {hasManager && <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}> (leave blank to keep existing)</span>}
+                  </label>
+                  <input className="form-input" type="password" placeholder={hasManager ? '(unchanged)' : 'Set a login PIN'} value={mgrForm.pin} onChange={mf('pin')} id="inp-modal-mgr-pin" />
+                </div>
+              </div>
+
+              {saveError && (
+                <p style={{ color: 'var(--color-danger, #c00)', fontSize: 12, marginTop: 8 }}>{saveError}</p>
+              )}
+
+              <div className="owner-modal-footer">
+                <button className="btn-outline" onClick={closeModal} disabled={saving}>Cancel</button>
+                <button className="btn-primary" onClick={handleSaveManager} disabled={saving} id="btn-save-manager">
+                  {saving ? 'Saving…' : hasManager ? 'Save Changes' : 'Add Manager'}
+                </button>
+              </div>
+            </>
+          )
+        })()}
       </Modal>
     </AdminLayout>
   )

@@ -9,7 +9,7 @@ InvoiceSerializer         — full Invoice (returned after generate_bill)
 PaymentSerializer         — full Payment (returned after complete_order)
 """
 from rest_framework import serializers
-from .models import Order, OrderItem, Invoice, Payment
+from .models import Order, OrderItem, Invoice, Payment, Expense
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -248,3 +248,22 @@ class PaymentSerializer(serializers.ModelSerializer):
             'id', 'order_number', 'invoice_number',
             'transaction_ref', 'created_at',
         ]
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    branch_name     = serializers.CharField(source='branch.name', read_only=True, default='')
+    branch_address  = serializers.CharField(source='branch.address', read_only=True, default='')
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display  = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model  = Expense
+        fields = [
+            'id', 'title', 'category', 'category_display',
+            'amount', 'date', 'description',
+            'status', 'status_display',
+            'branch', 'branch_name', 'branch_address',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at',
+                            'branch_name', 'branch_address',
+                            'category_display', 'status_display']
