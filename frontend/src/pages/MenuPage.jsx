@@ -8,7 +8,7 @@ import './MenuPage.css'
 
 
 /* ── Product Card ── */
-function ProductCard({ item, onToggle, onEdit, toggling }) {
+function ProductCard({ item, onToggle, onEdit, toggling, isWaiter }) {
   // image: prefer image_url (Django media), fall back to image field
   const imgSrc = item.image_url || item.image || null
   const catLabel = item.category_label || item.categoryLabel || item.category_name || ''
@@ -38,26 +38,28 @@ function ProductCard({ item, onToggle, onEdit, toggling }) {
             <span className="product-card__status-dot" />
             {item.soldOut ? 'Sold Out' : 'Available'}
           </span>
-          <div className="product-card__actions">
-            <button
-              className="product-card__action-btn"
-              title="Edit"
-              id={`edit-product-${item.id}`}
-              onClick={() => onEdit(item)}
-            >
-              <EditIcon />
-            </button>
-            <button
-              className="product-card__action-btn"
-              title={item.available ? 'Deactivate' : 'Activate'}
-              id={`toggle-product-${item.id}`}
-              onClick={() => onToggle(item.id)}
-              disabled={toggling}
-              style={{ opacity: toggling ? 0.5 : 1 }}
-            >
-              {item.available ? <DeactivateIcon /> : <ActivateIcon />}
-            </button>
-          </div>
+          {!isWaiter && (
+            <div className="product-card__actions">
+              <button
+                className="product-card__action-btn"
+                title="Edit"
+                id={`edit-product-${item.id}`}
+                onClick={() => onEdit(item)}
+              >
+                <EditIcon />
+              </button>
+              <button
+                className="product-card__action-btn"
+                title={item.available ? 'Deactivate' : 'Activate'}
+                id={`toggle-product-${item.id}`}
+                onClick={() => onToggle(item.id)}
+                disabled={toggling}
+                style={{ opacity: toggling ? 0.5 : 1 }}
+              >
+                {item.available ? <DeactivateIcon /> : <ActivateIcon />}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -67,7 +69,9 @@ function ProductCard({ item, onToggle, onEdit, toggling }) {
 /* ── Menu Page ── */
 export default function MenuPage() {
   const navigate = useNavigate()
-  const { products, categories, loading, apiError, fetchProducts } = useApp()
+  const { products, categories, loading, apiError, fetchProducts, currentRole } = useApp()
+
+  const isWaiter = currentRole === 'waiter'
 
   const [search, setSearch]                 = useState('')
   const [filterCategory, setFilterCategory] = useState('all')
@@ -98,10 +102,11 @@ export default function MenuPage() {
 
   /* ── Filter logic ── */
   const filtered = products.filter((it) => {
-    const matchSearch  = it.name.toLowerCase().includes(search.toLowerCase())
-    // category is FK id from API; match by category_name
-    const catName = getCategoryName(it.category || it.category_name).toLowerCase()
-    const matchCat     = filterCategory === 'all' || catName === filterCategory.toLowerCase()
+    const matchSearch  = !search || it.name.toLowerCase().includes(search.toLowerCase())
+    const matchCat     =
+      filterCategory === 'all' ||
+      (it.category_name && it.category_name.toLowerCase() === filterCategory.toLowerCase()) ||
+      (it.categoryLabel && it.categoryLabel.toLowerCase() === filterCategory.toLowerCase())
 
     const matchAvail   =
       filterAvail === 'all' ||
@@ -118,7 +123,9 @@ export default function MenuPage() {
         <div className="menu-page__header">
           <div className="menu-page__title-block">
             <h1 className="menu-page__title">Menu Items</h1>
-            <p className="menu-page__sub">Manage your luxury cafe offerings and availability.</p>
+            <p className="menu-page__sub">
+              {isWaiter ? 'Browse digital menu offerings and live product details.' : 'Manage your luxury cafe offerings and availability.'}
+            </p>
           </div>
 
           <div className="menu-page__controls">
@@ -167,13 +174,15 @@ export default function MenuPage() {
               </button>
             </div>
 
-            <button
-              className="btn-add-product"
-              id="btn-add-product"
-              onClick={() => navigate('/menu/add')}
-            >
-              + Add Product
-            </button>
+            {!isWaiter && (
+              <button
+                className="btn-add-product"
+                id="btn-add-product"
+                onClick={() => navigate('/menu/add')}
+              >
+                + Add Product
+              </button>
+            )}
           </div>
         </div>
 
@@ -196,6 +205,7 @@ export default function MenuPage() {
                 onToggle={handleToggle}
                 onEdit={handleEdit}
                 toggling={togglingId === item.id}
+                isWaiter={isWaiter}
               />
             ))}
           </div>

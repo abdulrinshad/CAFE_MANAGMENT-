@@ -1,56 +1,108 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
 import Modal from '../../components/Modal'
-import { OWNER_MENU_ITEMS, OWNER_MENU_CATEGORIES, OWNER_BRANCHES } from '../../data/ownerMockData'
+import { useApp } from '../../context/AppContext'
 import './owner.css'
 
-const EMPTY_FORM = { name: '', category: 'Hot Coffee', price: '', branches: [], status: 'active' }
+const EMPTY_FORM = { name: '', categoryId: '', price: '', description: '', status: 'active' }
 
 export default function OwnerMenuPage() {
-  const [items,     setItems]   = useState(OWNER_MENU_ITEMS)
+  const { products, categories, addProduct, updateProduct, fetchProducts } = useApp()
   const [catFilter, setCat]     = useState('All')
   const [search,    setSearch]  = useState('')
   const [modal,     setModal]   = useState(false)
   const [editing,   setEditing] = useState(null)
   const [form,      setForm]    = useState(EMPTY_FORM)
+  const [saving,    setSaving]  = useState(false)
+  const [error,     setError]   = useState(null)
 
-  const allCats = ['All', ...OWNER_MENU_CATEGORIES]
+  useEffect(() => {
+    fetchProducts()
+  }, [fetchProducts])
 
-  const filtered = items.filter(i => {
-    const matchCat    = catFilter === 'All' || i.category === catFilter
+  const allCats = ['All', ...categories.map(c => c.name)]
+
+  const filtered = products.filter(i => {
+    const matchCat    = catFilter === 'All' || (i.category_name && i.category_name.toLowerCase() === catFilter.toLowerCase()) || (i.categoryLabel && i.categoryLabel.toLowerCase() === catFilter.toLowerCase())
     const matchSearch = !search || i.name.toLowerCase().includes(search.toLowerCase())
     return matchCat && matchSearch
   })
 
-  const openAdd  = () => { setForm(EMPTY_FORM); setEditing(null); setModal(true) }
-  const openEdit = (item) => {
-    setForm({ name: item.name, category: item.category, price: item.price, branches: item.branches, status: item.status })
-    setEditing(item.id)
+  const openAdd = () => {
+    setForm({ ...EMPTY_FORM, categoryId: categories[0]?.id || '' })
+    setEditing(null)
+    setError(null)
     setModal(true)
   }
-  const closeModal = () => { setModal(false); setEditing(null) }
 
-  const handleSave = () => {
-    if (!form.name.trim() || !form.price) return
-    if (editing) {
-      setItems(prev => prev.map(i => i.id === editing ? { ...i, ...form, price: Number(form.price) } : i))
-    } else {
-      setItems(prev => [...prev, { id: Date.now(), ...form, price: Number(form.price) }])
-    }
-    closeModal()
+  const openEdit = (item) => {
+    setForm({
+      name: item.name,
+      categoryId: item.category || categories[0]?.id || '',
+      price: item.price,
+      description: item.description || '',
+      status: item.available ? 'active' : 'inactive',
+    })
+    setEditing(item.id)
+    setError(null)
+    setModal(true)
   }
 
-  const toggleItemStatus = (id) => setItems(prev =>
-    prev.map(i => i.id === id ? { ...i, status: i.status === 'active' ? 'inactive' : 'active' } : i)
-  )
+  const closeModal = () => {
+    setModal(false)
+    setEditing(null)
+    setError(null)
+  }
 
-  const toggleBranch = (branchId) => {
-    setForm(prev => ({
-      ...prev,
-      branches: prev.branches.includes(branchId)
-        ? prev.branches.filter(b => b !== branchId)
-        : [...prev.branches, branchId],
-    }))
+  const handleSave = async () => {
+    if (!form.name.trim() || !form.price) {
+      setError('Product name and price are required.')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      if (editing) {
+        await updateProduct(editing, {
+          name: form.name.trim(),
+          category: form.categoryId || undefined,
+          price: Number(form.price),
+          description: form.description,
+          available: form.status === 'active',
+          sold_out: form.status !== 'active',
+        })
+      } else {
+        await addProduct({
+          name: form.name.trim(),
+          category: form.categoryId || (categories[0]?.id || undefined),
+          price: Number(form.price),
+          description: form.description,
+          available: form.status === 'active',
+          available_on_pos: true,
+          available_on_qr: true,
+          sold_out: false,
+        })
+      }
+      await fetchProducts()
+      closeModal()
+    } catch (err) {
+      console.error('Save product error:', err)
+      setError(err.message || 'Failed to save product to database.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const toggleItemStatus = async (item) => {
+    try {
+      await updateProduct(item.id, {
+        available: !item.available,
+        sold_out: item.available,
+      })
+      await fetchProducts()
+    } catch (err) {
+      console.error('Toggle product error:', err)
+    }
   }
 
   const f = (key) => (e) => setForm(prev => ({ ...prev, [key]: e.target.value }))
@@ -63,7 +115,7 @@ export default function OwnerMenuPage() {
         <div className="owner-page-header">
           <div className="owner-page-header__left">
             <h1 className="owner-page-header__title">Menu</h1>
-            <p className="owner-page-header__sub">Manage products, pricing, and branch availability.</p>
+            <p className="owner-page-header__sub">Manage live products, pricing, and branch availability.</p>
           </div>
           <div className="owner-page-header__actions">
             <button className="btn-primary" id="btn-add-menu-item" onClick={openAdd}>+ Add Product</button>
@@ -74,13 +126,27 @@ export default function OwnerMenuPage() {
         <div className="owner-section-card">
           <div className="owner-tab-bar">
             {allCats.map(c => (
-              <button key={c} className={`owner-tab${catFilter === c ? ' owner-tab--active' : ''}`} onClick={() => setCat(c)} id={`menu-cat-${c.toLowerCase().replace(/\s/g,'-')}`}>{c}</button>
+              <button
+                key={c}
+                className={`owner-tab${catFilter === c ? ' owner-tab--active' : ''}`}
+                onClick={() => setCat(c)}
+                id={`menu-cat-${c.toLowerCase().replace(/\s/g,'-')}`}
+              >
+                {c}
+              </button>
             ))}
           </div>
 
           <div className="owner-section-card__header" style={{ borderBottom: 'none' }}>
             <div className="owner-filter-bar">
-              <input className="form-input" placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)} style={{ minWidth: 220, fontSize: 13, padding: '8px 14px' }} id="search-menu" />
+              <input
+                className="form-input"
+                placeholder="Search products..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ minWidth: 220, fontSize: 13, padding: '8px 14px' }}
+                id="search-menu"
+              />
             </div>
             <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{filtered.length} products</span>
           </div>
@@ -92,39 +158,43 @@ export default function OwnerMenuPage() {
                   <th>Product</th>
                   <th>Category</th>
                   <th>Price</th>
-                  <th>Branch Availability</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0
-                  ? <tr><td colSpan={6}><div className="owner-empty"><div className="owner-empty__icon">☕</div><div className="owner-empty__text">No products found</div></div></td></tr>
-                  : filtered.map(item => (
-                    <tr key={item.id}>
-                      <td className="td-name">{item.name}</td>
-                      <td className="td-muted">{item.category}</td>
-                      <td style={{ fontWeight: 500 }}>₹{item.price}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          {item.branches.map(bid => {
-                            const b = OWNER_BRANCHES.find(br => br.id === bid)
-                            return b ? <span key={bid} className="owner-badge owner-badge--idle" style={{ fontSize: 9 }}>{b.name.replace('Artisan Brew — ', '')}</span> : null
-                          })}
-                        </div>
-                      </td>
-                      <td><span className={`owner-badge owner-badge--${item.status}`}>{item.status.toUpperCase()}</span></td>
-                      <td>
-                        <div className="td-actions">
-                          <button className="owner-icon-btn" title="Edit" onClick={() => openEdit(item)}>✏️</button>
-                          <button
-                            className={`owner-icon-btn${item.status === 'active' ? ' owner-icon-btn--danger' : ' owner-icon-btn--primary'}`}
-                            title={item.status === 'active' ? 'Disable' : 'Enable'}
-                            onClick={() => toggleItemStatus(item.id)}
-                          >{item.status === 'active' ? '⏸' : '▶'}</button>
-                        </div>
-                      </td>
-                    </tr>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={5}>
+                      <div className="owner-empty">
+                        <div className="owner-empty__icon">☕</div>
+                        <div className="owner-empty__text">No products found in database</div>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filtered.map(item => (
+                  <tr key={item.id}>
+                    <td className="td-name">{item.name}</td>
+                    <td className="td-muted">{item.category_name || item.categoryLabel || 'Default'}</td>
+                    <td style={{ fontWeight: 500 }}>₹{Number(item.price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td>
+                      <span className={`owner-badge owner-badge--${item.available ? 'active' : 'inactive'}`}>
+                        {item.available ? 'ACTIVE' : 'INACTIVE'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="td-actions">
+                        <button className="owner-icon-btn" title="Edit" onClick={() => openEdit(item)}>✏️</button>
+                        <button
+                          className={`owner-icon-btn${item.available ? ' owner-icon-btn--danger' : ' owner-icon-btn--primary'}`}
+                          title={item.available ? 'Disable' : 'Enable'}
+                          onClick={() => toggleItemStatus(item)}
+                        >
+                          {item.available ? '⏸' : '▶'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -135,6 +205,11 @@ export default function OwnerMenuPage() {
 
       {/* Modal */}
       <Modal open={modal} onClose={closeModal} title={editing ? 'Edit Product' : 'Add Product'}>
+        {error && (
+          <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, padding: '8px 12px', color: '#991b1b', fontSize: 13, marginBottom: 14 }}>
+            {error}
+          </div>
+        )}
         <div className="owner-form-grid">
           <div className="form-group owner-form-grid--full">
             <label className="form-label">Product Name <span>*</span></label>
@@ -142,36 +217,31 @@ export default function OwnerMenuPage() {
           </div>
           <div className="form-group">
             <label className="form-label">Category</label>
-            <select className="form-select" value={form.category} onChange={f('category')} id="sel-menu-category">
-              {OWNER_MENU_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            <select className="form-select" value={form.categoryId} onChange={f('categoryId')} id="sel-menu-category">
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div className="form-group">
             <label className="form-label">Price (₹) <span>*</span></label>
             <input className="form-input" type="number" min="0" placeholder="0" value={form.price} onChange={f('price')} id="inp-menu-price" />
           </div>
-          <div className="form-group">
+          <div className="form-group owner-form-grid--full">
+            <label className="form-label">Description</label>
+            <textarea className="form-input" rows={2} placeholder="Product details..." value={form.description} onChange={f('description')} />
+          </div>
+          <div className="form-group owner-form-grid--full">
             <label className="form-label">Status</label>
             <select className="form-select" value={form.status} onChange={f('status')} id="sel-menu-status">
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
             </select>
           </div>
-          <div className="form-group owner-form-grid--full">
-            <label className="form-label">Branch Availability</label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
-              {OWNER_BRANCHES.map(b => (
-                <label key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={form.branches.includes(b.id)} onChange={() => toggleBranch(b.id)} />
-                  {b.name.replace('Artisan Brew — ', '')}
-                </label>
-              ))}
-            </div>
-          </div>
         </div>
         <div className="owner-modal-footer">
           <button className="btn-outline" onClick={closeModal}>Cancel</button>
-          <button className="btn-primary" onClick={handleSave} id="btn-save-menu">{editing ? 'Save Changes' : 'Add Product'}</button>
+          <button className="btn-primary" onClick={handleSave} id="btn-save-menu" disabled={saving}>
+            {saving ? 'Saving…' : (editing ? 'Save Changes' : 'Add Product')}
+          </button>
         </div>
       </Modal>
     </AdminLayout>

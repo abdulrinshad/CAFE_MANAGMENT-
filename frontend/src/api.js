@@ -429,4 +429,77 @@ export const waiterApi = {
   delete: (id) => request('DELETE', `/waiters/${id}/`),
 }
 
+// ── Branch API ────────────────────────────────────────────────────────────────
 
+export const branchApi = {
+  /** GET /branches/ — list all branches */
+  list: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/branches/${qs ? `?${qs}` : ''}`)
+  },
+
+  /** GET /branches/{id}/ — get single branch */
+  get: (id) => request('GET', `/branches/${id}/`),
+
+  /** POST /branches/ — create a new branch */
+  create: (data) => request('POST', '/branches/', data),
+
+  /** PUT /branches/{id}/ — full update */
+  update: (id, data) => request('PUT', `/branches/${id}/`, data),
+
+  /** PATCH /branches/{id}/ — partial update */
+  patch: (id, data) => request('PATCH', `/branches/${id}/`, data),
+
+  /** DELETE /branches/{id}/ — delete a branch */
+  delete: (id) => request('DELETE', `/branches/${id}/`),
+
+  /** PATCH /branches/{id}/set_active/ — toggle active status */
+  setActive: (id, active) => request('PATCH', `/branches/${id}/set_active/`, { active }),
+}
+
+// ── Branch Manager API ────────────────────────────────────────────────────────
+
+export const branchManagerApi = {
+  /** GET /branch-managers/ — list branch managers */
+  list: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/branch-managers/${qs ? `?${qs}` : ''}`)
+  },
+
+  /** GET /branch-managers/{id}/ */
+  get: (id) => request('GET', `/branch-managers/${id}/`),
+
+  /** POST /branch-managers/ — create a branch manager */
+  create: (data) => request('POST', '/branch-managers/', data),
+
+  /** PATCH /branch-managers/{id}/ — update branch manager */
+  update: (id, data) => request('PATCH', `/branch-managers/${id}/`, data),
+
+  /** DELETE /branch-managers/{id}/ */
+  delete: (id) => request('DELETE', `/branch-managers/${id}/`),
+
+  /** POST /auth/branch-manager-login/ — authenticate a branch manager */
+  login: (data) => request('POST', '/auth/branch-manager-login/', data),
+}
+
+// ── Expense API ───────────────────────────────────────────────────────────────
+
+export const expenseApi = {
+  /** GET /expenses/ — list expenses with optional filters */
+  list: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/expenses/${qs ? `?${qs}` : ''}`)
+  },
+
+  /** GET /expenses/{id}/ */
+  get: (id) => request('GET', `/expenses/${id}/`),
+
+  /** POST /expenses/ — create an expense */
+  create: (data) => request('POST', '/expenses/', data),
+
+  /** PATCH /expenses/{id}/ — partial update */
+  update: (id, data) => request('PATCH', `/expenses/${id}/`, data),
+
+  /** DELETE /expenses/{id}/ */
+  delete: (id) => request('DELETE', `/expenses/${id}/`),
+}

@@ -42,10 +42,12 @@ from .views import (
     ReportsTopCategoriesView,
     InvoiceByOrderView,
     PublicReceiptView,
+    ExpenseViewSet,
 )
 
 router = DefaultRouter()
 router.register(r'orders', OrderViewSet, basename='order')
+router.register(r'expenses', ExpenseViewSet, basename='expense')
 
 urlpatterns = [
     # Orders CRUD + actions

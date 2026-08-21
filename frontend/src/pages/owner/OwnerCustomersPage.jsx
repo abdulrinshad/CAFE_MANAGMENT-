@@ -1,23 +1,97 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
-import { OWNER_CUSTOMERS, OWNER_BRANCHES } from '../../data/ownerMockData'
+import { orderApi } from '../../api'
 import './owner.css'
 
 export default function OwnerCustomersPage() {
-  const [branchFil,  setBranch]  = useState('all')
-  const [search,     setSearch]  = useState('')
-  const [selected,   setSelected] = useState(null)
+  const [orders,  setOrders]  = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState('')
+  const [selectedKey, setSelectedKey] = useState(null)
 
-  const filtered = OWNER_CUSTOMERS.filter(c => {
-    const matchBranch = branchFil === 'all' || c.branch === OWNER_BRANCHES.find(b => b.id === Number(branchFil))?.name.replace('Artisan Brew — ', '')
-    const matchSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search)
-    return matchBranch && matchSearch
-  })
+  // Fetch all orders from real API
+  const fetchOrders = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await orderApi.list({ ordering: '-created_at', page_size: 500 })
+      const list = Array.isArray(data) ? data : (data.results ?? [])
+      setOrders(list)
+    } catch (err) {
+      console.error('fetchOrders error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const totalCustomers = OWNER_CUSTOMERS.length
-  const totalSpend     = OWNER_CUSTOMERS.reduce((a, c) => a + c.spending, 0)
-  const avgSpend       = Math.round(totalSpend / (totalCustomers || 1))
-  const topCustomer    = [...OWNER_CUSTOMERS].sort((a, b) => b.spending - a.spending)[0]
+  useEffect(() => { fetchOrders() }, [fetchOrders])
+
+  // Build customer records.
+  // Key priority: phone number → customer name → 'walk-in-guest'
+  // On merge: always promote a better phone / real name from any order in the group.
+  const customersList = useMemo(() => {
+    const map = new Map()
+    orders.forEach(o => {
+      const phone = (o.whatsapp_number || '').trim()
+      const name  = (o.customer_name  || '').trim()
+      const key   = phone || name.toLowerCase() || 'walk-in-guest'
+
+      // Parse items (now returned by the list API)
+      const rawItems = Array.isArray(o.items) ? o.items : []
+      const items = rawItems.map(item => ({
+        name:     item.product_name || item.name || '—',
+        qty:      item.quantity     || 1,
+        price:    Number(item.unit_price || item.price || 0),
+        subtotal: Number(item.subtotal   || 0),
+      }))
+
+      const amt      = Number(o.total ?? 0)
+      const dateStr  = o.created_at
+        ? new Date(o.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+        : 'Recent'
+      const timeStr  = o.created_at
+        ? new Date(o.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        : ''
+      const tableLabel = o.table_label || o.table || 'Takeaway'
+      const statusStr  = (o.status || 'pending').toUpperCase()
+
+      if (map.has(key)) {
+        const rec = map.get(key)
+        rec.ordersCount += 1
+        rec.totalSpend  += amt
+        rec.lastVisit    = dateStr   // orders are newest-first; this ends up being the oldest
+        // Promote phone if missing on the record
+        if (!rec.phone && phone) rec.phone = phone
+        // Promote real name if the record was created with a fallback
+        if (!rec.hasRealName && name) { rec.name = name; rec.hasRealName = true }
+        rec.recentOrders.push({ id: o.id, orderId: o.order_number, table: tableLabel, date: dateStr, time: timeStr, amount: amt, status: statusStr, items })
+      } else {
+        const displayName = name || (phone ? `Customer (${phone})` : 'Walk-in Guest')
+        map.set(key, {
+          id:          key,
+          name:        displayName,
+          hasRealName: !!name,
+          phone,
+          ordersCount: 1,
+          totalSpend:  amt,
+          lastVisit:   dateStr,
+          recentOrders: [{ id: o.id, orderId: o.order_number, table: tableLabel, date: dateStr, time: timeStr, amount: amt, status: statusStr, items }],
+        })
+      }
+    })
+    return Array.from(map.values())
+  }, [orders])
+
+  const filtered = customersList.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.phone.includes(search)
+  )
+
+  const totalCustomers = customersList.length
+  const totalSpend     = customersList.reduce((a, c) => a + c.totalSpend, 0)
+  const avgSpend       = totalCustomers > 0 ? totalSpend / totalCustomers : 0
+  const topCustomer    = [...customersList].sort((a, b) => b.totalSpend - a.totalSpend)[0]
+
+  const selectedCustomer = selectedKey ? customersList.find(c => c.id === selectedKey) : null
 
   return (
     <AdminLayout pageTitle="Customers" pageIcon="👥">
@@ -26,61 +100,91 @@ export default function OwnerCustomersPage() {
         <div className="owner-page-header">
           <div className="owner-page-header__left">
             <h1 className="owner-page-header__title">Customers</h1>
-            <p className="owner-page-header__sub">Customer profiles, order history, and spending across branches.</p>
+            <p className="owner-page-header__sub">Customer order history generated from real database orders.</p>
           </div>
         </div>
 
         {/* KPIs */}
         <div className="owner-kpi-grid">
-          <div className="owner-kpi-card"><div className="owner-kpi-card__label">Total Customers</div><div className="owner-kpi-card__value">{totalCustomers}</div></div>
-          <div className="owner-kpi-card"><div className="owner-kpi-card__label">Total Spending</div><div className="owner-kpi-card__value">₹{(totalSpend/1000).toFixed(1)}k</div></div>
-          <div className="owner-kpi-card"><div className="owner-kpi-card__label">Avg. Spend / Customer</div><div className="owner-kpi-card__value">₹{avgSpend.toLocaleString('en-IN')}</div></div>
-          <div className="owner-kpi-card"><div className="owner-kpi-card__label">Top Spender</div><div className="owner-kpi-card__value" style={{ fontSize: 17 }}>{topCustomer?.name}</div><div className="owner-kpi-card__sub">₹{topCustomer?.spending.toLocaleString('en-IN')}</div></div>
+          <div className="owner-kpi-card">
+            <div className="owner-kpi-card__label">Total Customers</div>
+            <div className="owner-kpi-card__value">{loading ? '…' : totalCustomers}</div>
+          </div>
+          <div className="owner-kpi-card">
+            <div className="owner-kpi-card__label">Total Spending</div>
+            <div className="owner-kpi-card__value">
+              {loading ? '…' : `₹${Number(totalSpend).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+            </div>
+          </div>
+          <div className="owner-kpi-card">
+            <div className="owner-kpi-card__label">Avg. Spend / Customer</div>
+            <div className="owner-kpi-card__value">
+              {loading ? '…' : `₹${Number(avgSpend).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+            </div>
+          </div>
+          <div className="owner-kpi-card">
+            <div className="owner-kpi-card__label">Top Spender</div>
+            <div className="owner-kpi-card__value" style={{ fontSize: 16 }}>{loading ? '…' : (topCustomer?.name || '—')}</div>
+            {topCustomer && <div className="owner-kpi-card__sub">₹{Number(topCustomer.totalSpend).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>}
+          </div>
         </div>
 
         <div className="owner-detail-grid">
+
           {/* Customer List */}
-          <div className="owner-section-card" style={{ gridColumn: selected ? 'auto' : '1 / -1' }}>
+          <div className="owner-section-card" style={{ gridColumn: selectedCustomer ? 'auto' : '1 / -1' }}>
             <div className="owner-section-card__header" style={{ flexWrap: 'wrap', gap: 8 }}>
-              <span className="owner-section-card__title">Customer List</span>
+              <span className="owner-section-card__title">Customer Records</span>
               <div className="owner-filter-bar">
-                <input className="form-input" placeholder="Search name, phone..." value={search} onChange={e => setSearch(e.target.value)} style={{ minWidth: 200, fontSize: 13, padding: '8px 14px' }} id="search-customers" />
-                <select className="form-select" value={branchFil} onChange={e => setBranch(e.target.value)} id="filter-cust-branch">
-                  <option value="all">All Branches</option>
-                  {OWNER_BRANCHES.map(b => <option key={b.id} value={b.id}>{b.name.replace('Artisan Brew — ', '')}</option>)}
-                </select>
+                <input
+                  className="form-input"
+                  placeholder="Search by name or phone…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  style={{ minWidth: 220, fontSize: 13, padding: '8px 14px' }}
+                  id="search-customers"
+                />
               </div>
             </div>
             <div className="owner-table-wrap">
               <table className="owner-table">
                 <thead>
                   <tr>
-                    <th>Customer</th>
-                    <th>Phone</th>
-                    <th>WhatsApp</th>
+                    <th>Customer Name</th>
+                    <th>Phone Number</th>
                     <th>Orders</th>
-                    <th>Total Spending</th>
+                    <th>Total Spent</th>
                     <th>Last Visit</th>
-                    <th>Favourite</th>
-                    <th>Branch</th>
-                    <th>Details</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.length === 0
-                    ? <tr><td colSpan={9}><div className="owner-empty"><div className="owner-empty__icon">👥</div><div className="owner-empty__text">No customers found</div></div></td></tr>
-                    : filtered.map(c => (
-                      <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(c.id === selected ? null : c.id)}>
-                        <td className="td-name">{c.name}</td>
-                        <td className="td-muted">{c.phone}</td>
-                        <td style={{ textAlign: 'center' }}>{c.whatsapp ? '✅' : '—'}</td>
-                        <td>{c.orders}</td>
-                        <td style={{ fontWeight: 500 }}>₹{c.spending.toLocaleString('en-IN')}</td>
-                        <td className="td-muted">{c.lastVisit}</td>
-                        <td className="td-muted">{c.favourites[0]}</td>
-                        <td className="td-muted">{c.branch}</td>
-                        <td><button className="owner-icon-btn" title="View Details" onClick={e => { e.stopPropagation(); setSelected(c.id === selected ? null : c.id) }}>👁</button></td>
-                      </tr>
+                  {loading ? (
+                    <tr><td colSpan={6}>
+                      <div className="owner-empty"><div className="owner-empty__text">Loading customers…</div></div>
+                    </td></tr>
+                  ) : filtered.length === 0 ? (
+                    <tr><td colSpan={6}>
+                      <div className="owner-empty">
+                        <div className="owner-empty__icon">👥</div>
+                        <div className="owner-empty__text">No customer records found</div>
+                      </div>
+                    </td></tr>
+                  ) : filtered.map(c => (
+                    <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => setSelectedKey(c.id === selectedKey ? null : c.id)}>
+                      <td className="td-name">{c.name}</td>
+                      <td className="td-muted">{c.phone || '—'}</td>
+                      <td>{c.ordersCount}</td>
+                      <td style={{ fontWeight: 600 }}>₹{Number(c.totalSpend).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td className="td-muted">{c.lastVisit}</td>
+                      <td>
+                        <button
+                          className="owner-icon-btn"
+                          title="View Profile"
+                          onClick={e => { e.stopPropagation(); setSelectedKey(c.id === selectedKey ? null : c.id) }}
+                        >👁</button>
+                      </td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -88,54 +192,78 @@ export default function OwnerCustomersPage() {
           </div>
 
           {/* Customer Detail Panel */}
-          {selected && (() => {
-            const c = OWNER_CUSTOMERS.find(x => x.id === selected)
-            if (!c) return null
-            return (
-              <div className="owner-section-card">
-                <div className="owner-section-card__header">
-                  <span className="owner-section-card__title">Customer Profile</span>
-                  <button className="owner-icon-btn" onClick={() => setSelected(null)} title="Close">✕</button>
+          {selectedCustomer && (
+            <div className="owner-section-card">
+              <div className="owner-section-card__header">
+                <span className="owner-section-card__title">Customer Profile</span>
+                <button className="owner-icon-btn" onClick={() => setSelectedKey(null)} title="Close">✕</button>
+              </div>
+              <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* Identity */}
+                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--color-espresso)' }}>{selectedCustomer.name}</div>
+                {selectedCustomer.phone && (
+                  <div style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>📞 {selectedCustomer.phone}</div>
+                )}
+
+                {/* Stats */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, margin: '4px 0' }}>
+                  <div style={{ background: 'var(--color-cream, #faf7f0)', padding: 10, borderRadius: 8 }}>
+                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Orders</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-espresso)' }}>{selectedCustomer.ordersCount}</div>
+                  </div>
+                  <div style={{ background: 'var(--color-cream, #faf7f0)', padding: 10, borderRadius: 8 }}>
+                    <div style={{ fontSize: 10, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total Spent</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-espresso)' }}>₹{Number(selectedCustomer.totalSpend).toLocaleString('en-IN', { minimumFractionDigits: 0 })}</div>
+                  </div>
                 </div>
-                <div className="owner-customer-detail">
-                  <div className="owner-customer-info">
-                    <div className="owner-customer-avatar">{c.name[0]}</div>
-                    <div>
-                      <div className="owner-customer-name">{c.name}</div>
-                      <div className="owner-customer-meta">
-                        <span className="owner-customer-meta-item">📞 {c.phone}</span>
-                        <span className="owner-customer-meta-item">{c.whatsapp ? '✅ WhatsApp' : '—'}</span>
-                        <span className="owner-customer-meta-item">📍 {c.branch}</span>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    {[
-                      ['Total Orders',    c.orders],
-                      ['Total Spending',  `₹${c.spending.toLocaleString('en-IN')}`],
-                      ['Avg Order Value', `₹${Math.round(c.spending / (c.orders || 1)).toLocaleString('en-IN')}`],
-                      ['Last Visit',      c.lastVisit],
-                    ].map(([label, value]) => (
-                      <div key={label} className="owner-kpi-card" style={{ padding: '12px 14px' }}>
-                        <div className="owner-kpi-card__label">{label}</div>
-                        <div className="owner-kpi-card__value" style={{ fontSize: 18 }}>{value}</div>
+                {/* Order History */}
+                <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 4 }}>Order History</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 420, overflowY: 'auto' }}>
+                  {selectedCustomer.recentOrders.map(o => (
+                    <div key={o.id} style={{ border: '1px solid var(--color-border-light)', borderRadius: 8, overflow: 'hidden' }}>
+                      {/* Order header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--color-bg-alt, #f9f6f0)', borderBottom: '1px solid var(--color-border-light)' }}>
+                        <div>
+                          <span style={{ fontWeight: 600, fontSize: 12 }}>{o.orderId || `#${o.id}`}</span>
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: 11, marginLeft: 6 }}>{o.table}</span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: 700, fontSize: 13 }}>₹{Number(o.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                          <div style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>{o.date} {o.time}</div>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Favourite Items</div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {c.favourites.map(fav => (
-                        <span key={fav} className="owner-badge owner-badge--idle" style={{ fontSize: 11, padding: '4px 10px' }}>{fav}</span>
-                      ))}
+                      {/* Items */}
+                      {o.items.length > 0 && (
+                        <div style={{ padding: '8px 12px' }}>
+                          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ color: 'var(--color-text-muted)' }}>
+                                <th style={{ textAlign: 'left', padding: '2px 0', fontWeight: 500 }}>Item</th>
+                                <th style={{ textAlign: 'center', padding: '2px 6px', fontWeight: 500 }}>Qty</th>
+                                <th style={{ textAlign: 'right', padding: '2px 0', fontWeight: 500 }}>Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {o.items.map((item, idx) => (
+                                <tr key={idx}>
+                                  <td style={{ padding: '3px 0', color: 'var(--color-text-primary)' }}>{item.name}</td>
+                                  <td style={{ textAlign: 'center', padding: '3px 6px', color: 'var(--color-text-muted)' }}>×{item.qty}</td>
+                                  <td style={{ textAlign: 'right', padding: '3px 0', fontWeight: 600 }}>
+                                    ₹{Number(item.subtotal || item.price * item.qty).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  ))}
                 </div>
               </div>
-            )
-          })()}
+            </div>
+          )}
         </div>
 
       </div>

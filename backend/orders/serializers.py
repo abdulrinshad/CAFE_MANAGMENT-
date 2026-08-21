@@ -9,7 +9,7 @@ InvoiceSerializer         — full Invoice (returned after generate_bill)
 PaymentSerializer         — full Payment (returned after complete_order)
 """
 from rest_framework import serializers
-from .models import Order, OrderItem, Invoice, Payment
+from .models import Order, OrderItem, Invoice, Payment, Expense
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -124,6 +124,7 @@ class OrderListSerializer(serializers.ModelSerializer):
     table_label   = serializers.CharField(read_only=True)
     items_summary = serializers.CharField(read_only=True)
     item_count    = serializers.IntegerField(read_only=True)
+    items         = OrderItemSerializer(many=True, read_only=True)
     receipt_method = serializers.SerializerMethodField()
     receipt_status = serializers.SerializerMethodField()
 
@@ -131,9 +132,9 @@ class OrderListSerializer(serializers.ModelSerializer):
         model  = Order
         fields = [
             'id', 'order_number', 'table', 'table_label',
-            'customer_name', 'waiter_name',
+            'customer_name', 'waiter_name', 'whatsapp_number',
             'status', 'total', 'item_count', 'items_summary',
-            'created_at', 'completed_at',
+            'items', 'created_at', 'completed_at',
             'receipt_method', 'receipt_status',
         ]
         read_only_fields = fields
@@ -248,3 +249,22 @@ class PaymentSerializer(serializers.ModelSerializer):
             'id', 'order_number', 'invoice_number',
             'transaction_ref', 'created_at',
         ]
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    branch_name     = serializers.CharField(source='branch.name', read_only=True, default='')
+    branch_address  = serializers.CharField(source='branch.address', read_only=True, default='')
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display  = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model  = Expense
+        fields = [
+            'id', 'title', 'category', 'category_display',
+            'amount', 'date', 'description',
+            'status', 'status_display',
+            'branch', 'branch_name', 'branch_address',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at',
+                            'branch_name', 'branch_address',
+                            'category_display', 'status_display']

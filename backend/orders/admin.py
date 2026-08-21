@@ -2,7 +2,7 @@
 Admin registration for the orders app.
 """
 from django.contrib import admin
-from .models import Order, OrderItem, Invoice, Payment
+from .models import Order, OrderItem, Invoice, Payment, Expense
 
 
 class OrderItemInline(admin.TabularInline):
@@ -50,3 +50,12 @@ class PaymentAdmin(admin.ModelAdmin):
     search_fields = ['order__order_number', 'transaction_ref']
     readonly_fields = ['transaction_ref', 'created_at', 'paid_at']
     ordering = ['-created_at']
+
+
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    list_display  = ['title', 'category', 'amount', 'date', 'branch', 'status', 'created_at']
+    list_filter   = ['category', 'status', 'branch', 'date']
+    search_fields = ['title', 'description', 'branch__name']
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['-date', '-created_at']
