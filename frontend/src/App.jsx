@@ -149,7 +149,7 @@ export default function App() {
 
         {/* Menu */}
         <Route path="/menu"          element={
-          <ProtectedRoute allowedRoles={['admin', 'manager']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
             <MenuPage />
           </ProtectedRoute>
         } />

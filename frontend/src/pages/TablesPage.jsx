@@ -105,10 +105,20 @@ export default function TablesPage() {
               <h2>Main Dining Room</h2>
               <p>Manage tables, guests, and instant table actions.</p>
             </div>
-            <div className="floor-plan__legend">
-              <div className="legend-item"><span className="legend-dot legend-dot--available" /><span>Available</span></div>
-              <div className="legend-item"><span className="legend-dot legend-dot--occupied" /><span>Occupied</span></div>
-              <div className="legend-item"><span className="legend-dot legend-dot--action" /><span>Action Needed</span></div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <button
+                className="btn-primary"
+                id="btn-add-table-waiter"
+                onClick={() => setAddTableOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', fontSize: 13 }}
+              >
+                + Create Table
+              </button>
+              <div className="floor-plan__legend">
+                <div className="legend-item"><span className="legend-dot legend-dot--available" /><span>Available</span></div>
+                <div className="legend-item"><span className="legend-dot legend-dot--occupied" /><span>Occupied</span></div>
+                <div className="legend-item"><span className="legend-dot legend-dot--action" /><span>Action Needed</span></div>
+              </div>
             </div>
           </div>
 
@@ -281,6 +291,59 @@ export default function TablesPage() {
           confirmLabel="Process Payment"
           cancelLabel="Cancel"
         />
+
+        {/* Add Table Modal */}
+        <Modal
+          open={addTableOpen}
+          onClose={() => { setAddTableOpen(false); setAddErr(null) }}
+          title="Create Table"
+          subtitle="Add a new dining table to the database floor plan"
+          size="sm"
+          footer={
+            <>
+              <button className="btn-outline" onClick={() => { setAddTableOpen(false); setAddErr(null) }}>Cancel</button>
+              <button className="btn-primary" onClick={handleAddTable} id="confirm-add-table-waiter" disabled={addSaving}>
+                {addSaving ? 'Adding…' : 'Create Table'}
+              </button>
+            </>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {addErr && (
+              <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, padding: '8px 12px', color: '#991b1b', fontSize: 13 }}>
+                {addErr}
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="table-id-waiter">Table Name / Number <span>*</span></label>
+              <input
+                id="table-id-waiter"
+                className="form-input"
+                placeholder="e.g. T-09 or Bar-2"
+                value={newTable.id}
+                onChange={(e) => setNewTable((prev) => ({ ...prev, id: e.target.value }))}
+                autoFocus
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="table-seats-waiter">Seat Capacity</label>
+              <select
+                id="table-seats-waiter"
+                className="form-select"
+                value={newTable.seats}
+                onChange={(e) => setNewTable((prev) => ({ ...prev, seats: Number(e.target.value) }))}
+              >
+                <option value={2}>2 Seats (Small)</option>
+                <option value={4}>4 Seats (Standard)</option>
+                <option value={6}>6 Seats (Medium)</option>
+                <option value={8}>8 Seats (Large)</option>
+                <option value={10}>10 Seats (Banquet)</option>
+              </select>
+            </div>
+          </div>
+        </Modal>
       </AdminLayout>
     )
   }
