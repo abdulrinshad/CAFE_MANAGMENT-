@@ -17,19 +17,21 @@ import { orderApi } from '../api'
 import './OrderDetailPage.css'
 
 // ── Status config ──────────────────────────────────────────────────────────────
-const STATUS_STEPS  = ['PENDING', 'PREPARING', 'READY', 'COMPLETED']
+const STATUS_STEPS  = ['PENDING', 'PREPARING', 'READY', 'COMPLETED', 'BILL_REQUESTED']
 const STEP_LABELS   = {
-  PENDING:   'New',
-  PREPARING: 'Preparing',
-  READY:     'Ready',
-  COMPLETED: 'Completed',
+  PENDING:        'NEW',
+  PREPARING:      'PREPARING',
+  READY:          'READY',
+  COMPLETED:      'SERVED',
+  BILL_REQUESTED: 'BILL REQUESTED',
 }
 
 // next step to advance to (from current)
 const NEXT_STATUS = {
-  PENDING:   { api: 'preparing', label: 'Mark Preparing' },
-  PREPARING: { api: 'ready',     label: 'Mark Ready'     },
-  READY:     { api: 'completed', label: 'Mark Completed'  },
+  PENDING:   { api: 'preparing',      label: 'Mark Preparing' },
+  PREPARING: { api: 'ready',          label: 'Mark Ready'     },
+  READY:     { api: 'completed',      label: 'Mark Served'  },
+  COMPLETED: { api: 'bill_requested', label: 'Request Bill'  },
 }
 
 function stepIndex(s) {

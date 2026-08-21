@@ -173,7 +173,7 @@ export default function DashboardPage() {
               <span className="waiter-stat-card__icon text-red">🛎️</span>
               <div className="waiter-stat-card__details">
                 <span className="waiter-stat-card__val">{activeRequestsCount}</span>
-                <span className="waiter-stat-card__lbl">Active Requests</span>
+                <span className="waiter-stat-card__lbl">Pending Requests</span>
               </div>
             </div>
             <div className="waiter-stat-card">

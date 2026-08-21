@@ -80,20 +80,28 @@ export default function RequestsPage() {
   const [attendingId, setAttendingId] = useState(null)
   const [toast, setToast] = useState(null)
 
-  // Map backend WaiterRequests
-  const requests = (waiterRequests || []).map((wr) => ({
-    id: wr.id,
-    rawId: wr.id,
-    type: 'table_attention',
-    title: `Table ${wr.table_name || wr.table_id || wr.table}`,
-    message: wr.message || `Customer requested assistance at table Table ${wr.table_name || wr.table_id}`,
-    tableId: wr.table_name || (wr.table ? `T-${wr.table}` : '—'),
-    time: relativeTime(wr.created_at),
-    rawTime: wr.created_at,
-    status: wr.status === 'in_progress' ? 'in_progress' : wr.status === 'completed' ? 'completed' : 'new',
-    assignedWaiter: wr.assigned_waiter || '',
-    isWaiterRequest: true,
-  }))
+  // Map backend WaiterRequests (customer assistance only)
+  const requests = (waiterRequests || [])
+    .filter(
+      (wr) =>
+        wr.request_type !== 'Bill Request' &&
+        wr.request_type !== 'Request Bill' &&
+        wr.type !== 'Bill Request' &&
+        !(wr.message && wr.message.toLowerCase().includes('bill'))
+    )
+    .map((wr) => ({
+      id: wr.id,
+      rawId: wr.id,
+      type: wr.request_type || 'table_attention',
+      title: `Table ${wr.table_name || wr.table_id || wr.table}`,
+      message: wr.message || `Customer requested assistance at table Table ${wr.table_name || wr.table_id}`,
+      tableId: wr.table_name || (wr.table ? `T-${wr.table}` : '—'),
+      time: relativeTime(wr.created_at),
+      rawTime: wr.created_at,
+      status: wr.status === 'in_progress' ? 'in_progress' : wr.status === 'completed' ? 'completed' : 'new',
+      assignedWaiter: wr.assigned_waiter || '',
+      isWaiterRequest: true,
+    }))
 
   const [activeTab, setActiveTab] = useState('All Requests')
 

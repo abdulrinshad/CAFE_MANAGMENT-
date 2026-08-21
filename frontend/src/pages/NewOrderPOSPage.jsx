@@ -52,16 +52,18 @@ export default function NewOrderPOSPage() {
   const [searchParams] = useSearchParams()
   const { products, tables, createOrder, currentWaiter } = useApp()
 
-  // Resolve table from URL param — prefer matching by id or name
-  const tableParam = searchParams.get('table')  // may be id (e.g. "9") or name (e.g. "T-01")
-  const matchedTable = tables?.find(
-    (t) => String(t.id) === String(tableParam) || t.name === tableParam
-  ) || null
-  const tableLabel = matchedTable
-    ? matchedTable.name
-    : tableParam
-    ? tableParam.replace('T-', 'Table ')
-    : 'Table 08'
+  // Table Selection state
+  const tableParam = searchParams.get('table')
+  const [selectedTableId, setSelectedTableId] = useState(() => {
+    if (tableParam) {
+      const found = tables?.find((t) => String(t.id) === String(tableParam) || t.name === tableParam)
+      if (found) return found.id
+    }
+    return tables && tables.length > 0 ? tables[0].id : ''
+  })
+
+  const currentSelectedTable = tables?.find((t) => String(t.id) === String(selectedTableId)) || null
+  const tableLabel = currentSelectedTable ? currentSelectedTable.name : 'Select Table'
 
   const [activeCategory, setActiveCategory] = useState('All')
   const [cart, setCart] = useState([])
@@ -72,7 +74,6 @@ export default function NewOrderPOSPage() {
     if (activeCategory === 'All') return true
     const productCat = getCategoryName(p).toLowerCase()
     const activeCat  = activeCategory.toLowerCase()
-    // Alias plurals / short forms used in the sidebar
     if (activeCat === 'pastries')       return productCat.includes('pastry') || productCat.includes('pastri')
     if (activeCat === 'cold beverages') return productCat.includes('cold')   || productCat.includes('beverage')
     if (activeCat === 'desserts')       return productCat.includes('dessert')
@@ -81,6 +82,7 @@ export default function NewOrderPOSPage() {
   }) : []
 
   const addToCart = (product) => {
+    if (product.soldOut || product.available === false) return
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id)
       if (existing) {
@@ -130,13 +132,17 @@ export default function NewOrderPOSPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
-  const handleGenerateBill = async () => {
+  const handleSendOrder = async () => {
     if (cart.length === 0) return
+    if (!selectedTableId) {
+      setSubmitError('Please select a table first.')
+      return
+    }
     setSubmitting(true)
     setSubmitError('')
     try {
       const orderPayload = {
-        table:         matchedTable?.id ?? null,
+        table:         currentSelectedTable?.id ?? selectedTableId,
         customer_name: '',
         waiter_name:   currentWaiter?.name || '',
         notes:         orderNotes,
@@ -149,7 +155,7 @@ export default function NewOrderPOSPage() {
       navigate(`/orders/${created.id}`)
     } catch (err) {
       console.error('createOrder failed:', err)
-      setSubmitError('Failed to save order. Please try again.')
+      setSubmitError('Failed to send order to kitchen. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -158,7 +164,7 @@ export default function NewOrderPOSPage() {
   return (
     <AdminLayout
       searchPlaceholder="Search menu..."
-      pageTitle="New Order"
+      pageTitle="New Order (POS)"
       pageIcon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>}
     >
       <div className="pos-layout-container">
@@ -178,25 +184,30 @@ export default function NewOrderPOSPage() {
         {/* Center Product Menu Grid */}
         <div className="pos-menu-grid-wrap">
           <div className="pos-products-grid">
-            {filteredProducts.map((product) => (
-              <button
-                key={product.id}
-                type="button"
-                className="pos-product-card"
-                onClick={() => addToCart(product)}
-              >
-                {product.popular && <span className="popular-badge">POPULAR</span>}
-                <div className="pos-product-image-container">
-                  <div className="product-image-placeholder">
-                    {getCategoryIcon(product)}
+            {filteredProducts.map((product) => {
+              const isUnavailable = product.soldOut || product.available === false
+              return (
+                <button
+                  key={product.id}
+                  type="button"
+                  className={`pos-product-card ${isUnavailable ? 'unavailable' : ''}`}
+                  onClick={() => addToCart(product)}
+                  disabled={isUnavailable}
+                >
+                  {product.popular && <span className="popular-badge">POPULAR</span>}
+                  {isUnavailable && <span className="popular-badge" style={{ background: '#6b7280' }}>SOLD OUT</span>}
+                  <div className="pos-product-image-container">
+                    <div className="product-image-placeholder">
+                      {getCategoryIcon(product)}
+                    </div>
                   </div>
-                </div>
-                <div className="pos-product-details">
-                  <h3 className="pos-product-name">{product.name}</h3>
-                  <span className="pos-product-price">₹{product.price.toLocaleString()}</span>
-                </div>
-              </button>
-            ))}
+                  <div className="pos-product-details">
+                    <h3 className="pos-product-name">{product.name}</h3>
+                    <span className="pos-product-price">₹{Number(product.price).toLocaleString('en-IN')}</span>
+                  </div>
+                </button>
+              )
+            })}
             {filteredProducts.length === 0 && (
               <div className="pos-empty-products">No items found in this category.</div>
             )}
@@ -207,12 +218,32 @@ export default function NewOrderPOSPage() {
         <div className="pos-active-order-panel">
           <div className="pos-order-header">
             <div>
-              <h2 className="pos-order-table">{tableLabel}</h2>
-              <span className="pos-order-dine-in">Dine-in</span>
+              <label htmlFor="pos-table-select" style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-muted)', display: 'block' }}>SELECT TABLE</label>
+              <select
+                id="pos-table-select"
+                value={selectedTableId}
+                onChange={(e) => setSelectedTableId(e.target.value)}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  border: '1px solid var(--color-border)',
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  color: 'var(--color-espresso)',
+                  background: 'var(--color-cream)',
+                  cursor: 'pointer'
+                }}
+              >
+                {tables && tables.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t.seats} Seats) - {t.status}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="pos-order-meta">
-              <span>Order #4092</span>
-              <span>Server: {currentWaiter?.name || 'Alex'}</span>
+              <span>Server: {currentWaiter?.name || 'Waiter'}</span>
             </div>
           </div>
 
@@ -224,7 +255,7 @@ export default function NewOrderPOSPage() {
               <div key={item.id} className="pos-cart-row">
                 <div className="pos-cart-item-info">
                   <span className="pos-cart-item-name">{item.name}</span>
-                  <span className="pos-cart-item-unit-price">₹{item.unitPrice.toLocaleString()}</span>
+                  <span className="pos-cart-item-unit-price">₹{item.unitPrice.toLocaleString('en-IN')}</span>
                 </div>
                 <div className="pos-cart-qty-wrap">
                   <div className="item-qty-controls">
@@ -233,7 +264,7 @@ export default function NewOrderPOSPage() {
                     <button className="qty-btn" onClick={() => updateQty(item.id, 1)}>+</button>
                   </div>
                 </div>
-                <span className="pos-cart-item-total">₹{item.total.toLocaleString()}</span>
+                <span className="pos-cart-item-total">₹{item.total.toLocaleString('en-IN')}</span>
                 <button
                   type="button"
                   className="pos-cart-delete-btn"
@@ -247,19 +278,19 @@ export default function NewOrderPOSPage() {
             {cart.length === 0 && (
               <div className="pos-cart-empty">
                 <div className="empty-cart-icon">🛒</div>
-                <p>Order is empty</p>
-                <span>Select products to add them to the order.</span>
+                <p>Order Cart is empty</p>
+                <span>Select products from the menu to add items.</span>
               </div>
             )}
           </div>
 
           {/* Order Notes */}
           <div className="pos-order-notes-wrap">
-            <label className="section-title" htmlFor="pos-notes-input">Order Notes</label>
+            <label className="section-title" htmlFor="pos-notes-input">Add Notes</label>
             <textarea
               id="pos-notes-input"
               className="pos-notes-textarea"
-              placeholder="Add note (e.g. Extra hot)"
+              placeholder="Special instructions for kitchen (e.g. Extra hot, no sugar)"
               value={orderNotes}
               onChange={(e) => setOrderNotes(e.target.value)}
             />
@@ -269,16 +300,16 @@ export default function NewOrderPOSPage() {
           <div className="pos-totals-summary">
             <div className="pos-summary-row">
               <span>Subtotal</span>
-              <span>₹{subtotal.toLocaleString()}</span>
+              <span>₹{subtotal.toLocaleString('en-IN')}</span>
             </div>
             <div className="pos-summary-row">
-              <span>Tax (5%)</span>
-              <span>₹{tax.toLocaleString()}</span>
+              <span>Tax (5% GST)</span>
+              <span>₹{tax.toLocaleString('en-IN')}</span>
             </div>
             <hr className="pos-summary-divider" />
             <div className="pos-summary-row pos-grand-total">
-              <span>Total</span>
-              <span>₹{total.toLocaleString()}</span>
+              <span>Cart Total</span>
+              <span>₹{total.toLocaleString('en-IN')}</span>
             </div>
           </div>
 
@@ -295,15 +326,15 @@ export default function NewOrderPOSPage() {
               onClick={() => navigate('/tables')}
               disabled={submitting}
             >
-              Review Order
+              Cancel
             </button>
             <button
               type="button"
               className="btn-primary pos-action-btn"
-              onClick={handleGenerateBill}
+              onClick={handleSendOrder}
               disabled={cart.length === 0 || submitting}
             >
-              {submitting ? 'Saving…' : 'Generate Bill'}
+              {submitting ? 'Sending…' : 'Send Order to Kitchen'}
             </button>
           </div>
         </div>

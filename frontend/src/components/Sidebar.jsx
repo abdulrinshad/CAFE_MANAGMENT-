@@ -65,16 +65,23 @@ export default function Sidebar({ isOpen, onClose }) {
     navigate('/login')
   }
 
-  const activeRequestsCount = waiterRequests ? waiterRequests.filter(r => r.status === 'new').length : 0
+  const customerRequests = waiterRequests ? waiterRequests.filter(r => r.type !== 'Bill Request' && r.request_type !== 'Bill Request' && r.request_type !== 'Request Bill') : []
+  const billRequests = waiterRequests ? waiterRequests.filter(r => r.type === 'Bill Request' || r.request_type === 'Bill Request' || r.request_type === 'Request Bill') : []
+
+  const activeRequestsCount = customerRequests.filter(r => r.status === 'new').length
+  const activeBillRequestsCount = billRequests.filter(r => r.status === 'new' || r.status === 'requested').length
 
   const isOwner = currentRole === 'owner' || currentRole === 'admin'
 
-  const items = currentRole === 'waiter'
+  const items = currentRole === 'waiter' || !isOwner
     ? [
-        { path: '/dashboard', label: 'Dashboard', icon: <DashboardIcon />, exact: true },
-        { path: '/tables',    label: 'Tables',    icon: <TablesIcon /> },
-        { path: '/requests',  label: 'Requests',  icon: <RequestsIcon />, badge: activeRequestsCount > 0 ? activeRequestsCount : null },
-        { path: '/qr-codes',  label: 'QR Codes',  icon: <QRIcon /> },
+        { path: '/dashboard',     label: 'Dashboard',        icon: <DashboardIcon />, exact: true },
+        { path: '/tables',        label: 'My Tables',        icon: <TablesIcon /> },
+        { path: '/orders',        label: 'My Orders',        icon: <OrdersIcon /> },
+        { path: '/requests',      label: 'Pending Requests', icon: <RequestsIcon />, badge: activeRequestsCount > 0 ? activeRequestsCount : null },
+        { path: '/orders/new',    label: 'New Order',        icon: <PlusIcon />, isPrimaryCta: true },
+        { path: '/bill-requests', label: 'Bill Requests',    icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
+        { path: '/qr-codes',      label: 'QR Codes',         icon: <QRIcon /> },
       ]
     : NAV_ITEMS
 
@@ -357,6 +364,14 @@ function ExpensesIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="1" x2="12" y2="23"/>
       <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </svg>
+  )
+}
+function PlusIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
     </svg>
   )
 }
