@@ -64,8 +64,9 @@ export default function POSDashboardPage() {
         break
       case 'transactions':
         triggerToast('Opening Transactions History...')
-        // In the future this navigates to transactions
+        navigate('/cashier/transactions')
         break
+
       default:
         break
     }

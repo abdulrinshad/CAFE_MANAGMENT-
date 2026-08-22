@@ -1,0 +1,180 @@
+/* POSTransactionsPage.css — Styling matching dark artisan theme */
+.pos-transactions-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 40px;
+}
+
+/* Stat Cards Row */
+.pos-transactions-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.pos-tx-stat-card {
+  background: var(--color-surface, #1e2535);
+  border: 1px solid var(--color-border, #2d3748);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pos-tx-stat-card__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary, #9ca3af);
+  text-transform: uppercase;
+}
+
+.pos-tx-stat-card__value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-text-primary, #f3f4f6);
+}
+
+.pos-tx-stat-card__sub {
+  font-size: 11px;
+  color: var(--color-text-muted, #6b7280);
+}
+
+/* Filter Bar */
+.pos-transactions-filters {
+  background: var(--color-surface, #1e2535);
+  border: 1px solid var(--color-border, #2d3748);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.pos-transactions-filters__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.pos-filter-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pos-filter-control label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #9ca3af);
+  white-space: nowrap;
+}
+
+.pos-filter-select,
+.pos-search-input {
+  background: var(--color-bg-dark, #111315);
+  border: 1px solid var(--color-border, #2d3748);
+  border-radius: 6px;
+  color: var(--color-text-primary, #f3f4f6);
+  padding: 8px 12px;
+  font-size: 13px;
+  outline: none;
+}
+
+.pos-filter-select:focus,
+.pos-search-input:focus {
+  border-color: var(--color-accent, #f3c623);
+}
+
+.pos-search-input {
+  min-width: 240px;
+}
+
+/* Transactions Table */
+.pos-transactions-table-wrap {
+  background: var(--color-surface, #1e2535);
+  border: 1px solid var(--color-border, #2d3748);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.pos-tx-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.pos-tx-table th {
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--color-text-secondary, #9ca3af);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border, #2d3748);
+}
+
+.pos-tx-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--color-text-primary, #f3f4f6);
+}
+
+.pos-tx-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Badges */
+.pos-channel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.pos-channel-badge--dine-in { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+.pos-channel-badge--takeaway { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+.pos-channel-badge--swiggy   { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+.pos-channel-badge--zomato   { background: rgba(220, 38, 38, 0.15); color: #ef4444; border: 1px solid rgba(220, 38, 38, 0.3); }
+
+.pos-method-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d1d5db;
+}
+
+.pos-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pos-status-badge--completed { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+.pos-status-badge--pending   { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+.pos-tx-empty {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--color-text-secondary, #9ca3af);
+}

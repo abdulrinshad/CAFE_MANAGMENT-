@@ -73,9 +73,12 @@ export default function LoginPage() {
       const user = await login(email, password)
       if (user.role === 'ADMIN' || user.role === 'MANAGER' || user.role === 'STAFF') {
         navigate('/dashboard')
+      } else if (user.role === 'CASHIER' || user.role === 'POS') {
+        navigate('/pos/dashboard')
       } else {
         setError('Unauthorized role.')
       }
+
     } catch (err) {
       console.error(err)
       setError(err.message || 'Invalid email or password.')

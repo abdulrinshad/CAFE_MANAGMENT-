@@ -72,21 +72,31 @@ export default function Sidebar({ isOpen, onClose }) {
   const activeBillRequestsCount = billRequests.filter(r => r.status === 'new' || r.status === 'requested').length
 
   const isOwner = currentRole === 'owner' || currentRole === 'admin'
+  const isCashier = currentRole === 'cashier' || currentRole === 'pos'
 
-  const items = currentRole === 'waiter' || !isOwner
-    ? [
-        { path: '/dashboard',     label: 'Dashboard',        icon: <DashboardIcon />, exact: true },
-        { path: '/menu',          label: 'View Menu',        icon: <MenuIcon /> },
-        { path: '/tables',        label: 'My Tables',        icon: <TablesIcon /> },
-        { path: '/orders',        label: 'My Orders',        icon: <OrdersIcon /> },
-        { path: '/requests',      label: 'Pending Requests', icon: <RequestsIcon />, badge: activeRequestsCount > 0 ? activeRequestsCount : null },
-        { path: '/orders/new',    label: 'New Order',        icon: <PlusIcon />, isPrimaryCta: true },
-        { path: '/bill-requests', label: 'Bill Requests',    icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
-        { path: '/qr-codes',      label: 'QR Codes',         icon: <QRIcon /> },
-      ]
-    : NAV_ITEMS
+  const cashierItems = [
+    { path: '/pos/dashboard',        label: 'POS Dashboard',     icon: <DashboardIcon />, exact: true },
+    { path: '/cashier/tables',       label: 'Active Tables',     icon: <TablesIcon /> },
+    { path: '/cashier/bill-requests',label: 'Bill Requests',    icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
+    { path: '/orders/new',           label: 'New POS Order',     icon: <PlusIcon />, isPrimaryCta: true },
+    { path: '/orders',               label: 'Orders',            icon: <OrdersIcon /> },
+    { path: '/cashier/transactions', label: 'Transactions',     icon: <PaymentsIcon /> },
+  ]
 
-
+  const items = isCashier
+    ? cashierItems
+    : (currentRole === 'waiter' || !isOwner
+      ? [
+          { path: '/dashboard',     label: 'Dashboard',        icon: <DashboardIcon />, exact: true },
+          { path: '/menu',          label: 'View Menu',        icon: <MenuIcon /> },
+          { path: '/tables',        label: 'My Tables',        icon: <TablesIcon /> },
+          { path: '/orders',        label: 'My Orders',        icon: <OrdersIcon /> },
+          { path: '/requests',      label: 'Pending Requests', icon: <RequestsIcon />, badge: activeRequestsCount > 0 ? activeRequestsCount : null },
+          { path: '/orders/new',    label: 'New Order',        icon: <PlusIcon />, isPrimaryCta: true },
+          { path: '/bill-requests', label: 'Bill Requests',    icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
+          { path: '/qr-codes',      label: 'QR Codes',         icon: <QRIcon /> },
+        ]
+      : NAV_ITEMS)
 
   return (
     <aside className={`sidebar ${isOpen ? 'sidebar--open' : ''}`}>
@@ -105,13 +115,14 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
         <div className="sidebar__brand-text">
           <span className="sidebar__brand-name">
-            {currentRole === 'waiter' ? 'Artisan POS' : 'Artisan Brew'}
+            {isCashier ? 'Artisan POS' : currentRole === 'waiter' ? 'Artisan POS' : 'Artisan Brew'}
           </span>
           <span className="sidebar__brand-sub">
-            {currentRole === 'waiter' ? 'Waiter Terminal' : 'Management Suite'}
+            {isCashier ? 'Cashier Terminal' : currentRole === 'waiter' ? 'Waiter Terminal' : 'Management Suite'}
           </span>
         </div>
       </div>
+
 
       {/* Waiter Details & Profile Badge (if logged in as waiter) */}
       {currentRole === 'waiter' && currentWaiter && (

@@ -25,7 +25,9 @@ import SettingsProfilePage  from './pages/SettingsProfilePage'
 import SettingsBillingPage  from './pages/SettingsBillingPage'
 import SettingsMenuPage     from './pages/SettingsMenuPage'
 import WaitersPage          from './pages/WaitersPage'
-import POSDashboardPage    from './pages/POSDashboardPage'
+import POSDashboardPage     from './pages/POSDashboardPage'
+import POSTransactionsPage  from './pages/POSTransactionsPage'
+
 
 // ── Owner Module ────────────────────────────────────────────────────
 import OwnerDashboardPage    from './pages/owner/OwnerDashboardPage'
@@ -165,16 +167,19 @@ export default function App() {
           </ProtectedRoute>
         } />
 
-        {/* POS Dashboard */}
-        <Route path="/pos/dashboard"  element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}>
-            <POSDashboardPage />
-          </ProtectedRoute>
-        } />
+        {/* POS & Cashier Module */}
+        <Route path="/pos/dashboard"      element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}><POSDashboardPage /></ProtectedRoute>} />
+        <Route path="/cashier/dashboard"  element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}><POSDashboardPage /></ProtectedRoute>} />
+        <Route path="/cashier/tables"     element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><TablesPage /></ProtectedRoute>} />
+        <Route path="/cashier/bill-requests" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><BillRequestsPage /></ProtectedRoute>} />
+        <Route path="/cashier/billing/:id" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><InvoicePreviewPage /></ProtectedRoute>} />
+        <Route path="/cashier/payment/:id" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><CheckoutPage /></ProtectedRoute>} />
+        <Route path="/cashier/success/:id" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><SuccessPage /></ProtectedRoute>} />
+        <Route path="/cashier/transactions" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}><POSTransactionsPage /></ProtectedRoute>} />
 
         {/* Menu */}
         <Route path="/menu"          element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <MenuPage />
           </ProtectedRoute>
         } />
@@ -198,76 +203,77 @@ export default function App() {
 
         {/* Orders */}
         <Route path="/orders"        element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <OrdersPage />
           </ProtectedRoute>
         } />
         <Route path="/orders/new"    element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <NewOrderPOSPage />
           </ProtectedRoute>
         } />
         <Route path="/orders/:id"    element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <OrderDetailPage />
           </ProtectedRoute>
         } />
         <Route path="/orders/:id/add-items"  element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <AddItemsPage />
           </ProtectedRoute>
         } />
         <Route path="/orders/:id/active"   element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <ActiveOrderPage />
           </ProtectedRoute>
         } />
         <Route path="/orders/:id/invoice"  element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <InvoicePreviewPage />
           </ProtectedRoute>
         } />
         <Route path="/orders/:id/checkout" element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <CheckoutPage />
           </ProtectedRoute>
         } />
         <Route path="/orders/:id/success"  element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <SuccessPage />
           </ProtectedRoute>
         } />
 
         {/* Tables */}
         <Route path="/tables"        element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <TablesPage />
           </ProtectedRoute>
         } />
 
         {/* Requests */}
         <Route path="/requests"      element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <RequestsPage />
           </ProtectedRoute>
         } />
         <Route path="/bill-requests" element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <BillRequestsPage />
           </ProtectedRoute>
         } />
 
         {/* QR Codes */}
         <Route path="/qr-codes"      element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <QRCodesPage />
           </ProtectedRoute>
         } />
         <Route path="/qr-codes/:id"  element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <QRPreviewPage />
           </ProtectedRoute>
         } />
+
 
 
         {/* Waiters */}
