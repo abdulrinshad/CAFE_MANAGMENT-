@@ -8,7 +8,7 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const { login, loginWaiter, loginBranchManager } = useApp()
 
-  // 'admin' | 'waiter' | 'branch_manager'
+  // 'admin' | 'waiter' | 'branch_manager' | 'cashier'
   const [loginMode, setLoginMode] = useState('admin')
 
   // ── Admin credentials ──────────────────────────────────────────────────────
@@ -32,6 +32,12 @@ export default function LoginPage() {
   const [bmPin,     setBmPin]     = useState('')
   const [bmError,   setBmError]   = useState('')
   const [bmLoading, setBmLoading] = useState(false)
+
+  // ── Cashier / POS credentials ──────────────────────────────────────────────
+  const [cashierEmail,    setCashierEmail]    = useState('')
+  const [cashierPassword, setCashierPassword] = useState('')
+  const [cashierError,    setCashierError]    = useState('')
+  const [cashierLoading,  setCashierLoading]  = useState(false)
 
   // Load waiters when waiter tab is active
   useEffect(() => {
@@ -57,9 +63,12 @@ export default function LoginPage() {
     setError('')
     setPinError('')
     setBmError('')
+    setCashierError('')
     setPin('')
     setBmId('')
     setBmPin('')
+    setCashierEmail('')
+    setCashierPassword('')
   }
 
   // ── Admin login ────────────────────────────────────────────────────────────
@@ -128,17 +137,36 @@ export default function LoginPage() {
     }
   }
 
+  // ── Cashier / POS login ────────────────────────────────────────────────────
+  const handleCashierLogin = async (e) => {
+    e.preventDefault()
+    if (!cashierEmail.trim() || !cashierPassword.trim()) { setCashierError('Please enter both email/username and password.'); return }
+    setCashierError('')
+    setCashierLoading(true)
+    try {
+      try { localStorage.removeItem('artisan_waiter') } catch {}
+      const user = await login(cashierEmail.trim(), cashierPassword.trim())
+      navigate('/pos/dashboard')
+    } catch (err) {
+      console.error(err)
+      setCashierError(err.message || 'Invalid cashier credentials.')
+    } finally {
+      setCashierLoading(false)
+    }
+  }
+
   const subtitleMap = {
     admin:          'Admin Portal',
     waiter:         'Waiter PIN Login',
     branch_manager: 'Branch Manager Portal',
+    cashier:        'Cashier & POS Desk',
   }
 
   return (
     <div className="login-bg">
       <div className="login-card">
 
-        {/* ── Tab bar (3 tabs) ── */}
+        {/* ── Tab bar (4 tabs) ── */}
         <div className="login-toggle-tabs">
           <button
             type="button"
@@ -146,7 +174,7 @@ export default function LoginPage() {
             onClick={() => switchMode('admin')}
             id="tab-admin"
           >
-            Admin Portal
+            Admin
           </button>
           <button
             type="button"
@@ -154,7 +182,7 @@ export default function LoginPage() {
             onClick={() => switchMode('waiter')}
             id="tab-waiter"
           >
-            Waiter PIN
+            Waiter
           </button>
           <button
             type="button"
@@ -162,7 +190,15 @@ export default function LoginPage() {
             onClick={() => switchMode('branch_manager')}
             id="tab-branch-manager"
           >
-            Branch Manager
+            Manager
+          </button>
+          <button
+            type="button"
+            className={`login-toggle-tab ${loginMode === 'cashier' ? 'active' : ''}`}
+            onClick={() => switchMode('cashier')}
+            id="tab-cashier"
+          >
+            Cashier / POS
           </button>
         </div>
 
@@ -284,9 +320,9 @@ export default function LoginPage() {
               type="button"
               className="login-form__submit waiter-submit-btn"
               onClick={handleWaiterLogin}
-              disabled={pin.length < 4 || waiterLoginLoading}
+              disabled={waiterLoginLoading || pin.length !== 4}
             >
-              {waiterLoginLoading ? 'Verifying PIN...' : `Login as ${selectedWaiter?.name || ''}`}
+              {waiterLoginLoading ? 'Verifying PIN...' : 'Access Waiter Terminal'}
               <span className="login-form__submit-arrow">→</span>
             </button>
           </div>
@@ -322,6 +358,41 @@ export default function LoginPage() {
             {bmError && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{bmError}</div>}
             <button type="submit" className="login-form__submit" id="btn-bm-login" disabled={bmLoading}>
               {bmLoading ? 'Logging in...' : 'Login as Branch Manager'}
+              <span className="login-form__submit-arrow">→</span>
+            </button>
+          </form>
+        )}
+
+        {/* ── Cashier / POS form ── */}
+        {loginMode === 'cashier' && (
+          <form className="login-card__form" onSubmit={handleCashierLogin} id="cashier-login-form">
+            <div className="login-form__field">
+              <label className="login-form__label" htmlFor="cashier-email">Email / Username</label>
+              <input
+                id="cashier-email"
+                type="text"
+                className="login-form__input"
+                placeholder="cashier@artisanbrew.com"
+                value={cashierEmail}
+                onChange={e => setCashierEmail(e.target.value)}
+                autoComplete="username"
+              />
+            </div>
+            <div className="login-form__field">
+              <label className="login-form__label" htmlFor="cashier-password">Password</label>
+              <input
+                id="cashier-password"
+                type="password"
+                className="login-form__input"
+                placeholder="••••••••"
+                value={cashierPassword}
+                onChange={e => setCashierPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+            </div>
+            {cashierError && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{cashierError}</div>}
+            <button type="submit" className="login-form__submit" id="btn-cashier-login" disabled={cashierLoading}>
+              {cashierLoading ? 'Signing into POS...' : 'Login to POS'}
               <span className="login-form__submit-arrow">→</span>
             </button>
           </form>

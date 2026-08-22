@@ -79,7 +79,7 @@ export default function Sidebar({ isOpen, onClose }) {
     { path: '/cashier/tables',       label: 'Active Tables',     icon: <TablesIcon /> },
     { path: '/cashier/bill-requests',label: 'Bill Requests',    icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
     { path: '/orders/new',           label: 'New POS Order',     icon: <PlusIcon />, isPrimaryCta: true },
-    { path: '/orders',               label: 'Orders',            icon: <OrdersIcon /> },
+    { path: '/cashier/orders',       label: 'Orders',            icon: <OrdersIcon /> },
     { path: '/cashier/transactions', label: 'Transactions',     icon: <PaymentsIcon /> },
   ]
 
