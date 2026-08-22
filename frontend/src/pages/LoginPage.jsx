@@ -116,7 +116,7 @@ export default function LoginPage() {
     setBmLoading(true)
     try {
       await loginBranchManager(bmId.trim(), bmPin.trim())
-      navigate('/branch-manager/dashboard')
+      navigate('/branch/dashboard')
     } catch (err) {
       console.error(err)
       setBmError(err.message || 'Invalid Manager ID or PIN.')

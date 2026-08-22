@@ -104,23 +104,26 @@ export default function OwnerBranchesPage() {
   const handleSaveBranch = async () => {
     if (!branchForm.name.trim()) { setSaveError('Branch name is required.'); return }
     if (!branchForm.code.trim()) { setSaveError('Branch code is required.'); return }
+    
+    if (!editingId && addManager) {
+      if (!mgrForm.name.trim())       { setSaveError('Manager name is required.'); return }
+      if (!mgrForm.manager_id.trim()) { setSaveError('Manager ID is required.'); return }
+      if (!mgrForm.pin.trim())        { setSaveError('PIN / Password is required.'); return }
+    }
+
     setSaving(true); setSaveError('')
     try {
-      let savedBranch
       if (editingId) {
-        savedBranch = await branchApi.patch(editingId, branchForm)
+        await branchApi.patch(editingId, branchForm)
       } else {
-        savedBranch = await branchApi.create(branchForm)
-      }
-
-      // If user also wants to create a manager for this new branch
-      if (!editingId && addManager && mgrForm.name.trim() && mgrForm.manager_id.trim() && mgrForm.pin.trim()) {
-        await branchManagerApi.create({
-          name:       mgrForm.name,
-          manager_id: mgrForm.manager_id,
-          pin:        mgrForm.pin,
-          branch:     savedBranch.id,
-        })
+        const payload = { ...branchForm }
+        if (addManager) {
+          payload.create_manager = true
+          payload.manager_name = mgrForm.name
+          payload.manager_id = mgrForm.manager_id
+          payload.manager_pin = mgrForm.pin
+        }
+        await branchApi.create(payload)
       }
 
       await fetchBranches()

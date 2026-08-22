@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import BranchManagerLayout from '../../layouts/BranchManagerLayout';
 import { branchManagerService } from '../../services/branchManagerService';
+import { useApp } from '../../context/AppContext';
 import '../DashboardPage.css';
 import '../owner/owner.css';
 
@@ -68,6 +69,7 @@ function StatCard({ label, value, sub, badge, badgeType = 'green', isLarge = fal
 
 export default function BranchDashboard() {
   const navigate = useNavigate();
+  const { currentBranchManager, currentBranch } = useApp();
   const [chartPeriod, setChartPeriod] = useState('daily');
   const [activities, setActivities] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -139,11 +141,11 @@ export default function BranchDashboard() {
         {/* Header Greeting */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h1 className="dashboard__greeting-title">{getGreeting()}, Manager ☕</h1>
-            <p className="dashboard__greeting-sub">Manage and monitor everything happening at Kochi Branch.</p>
+            <h1 className="dashboard__greeting-title">{getGreeting()}, {currentBranchManager?.name || 'Manager'} ☕</h1>
+            <p className="dashboard__greeting-sub">Manage and monitor everything happening at {currentBranch?.name || 'Kochi Branch'}.</p>
           </div>
           <span className="owner-badge owner-badge--active" style={{ fontSize: '12px', padding: '6px 12px' }}>
-            Kochi Branch • Active
+            {currentBranch?.name || 'Kochi Branch'} • Active
           </span>
         </div>
 

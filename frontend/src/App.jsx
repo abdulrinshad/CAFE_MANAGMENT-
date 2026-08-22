@@ -114,7 +114,13 @@ function ProtectedRoute({ children, allowedRoles }) {
         <h1 style={{ fontSize: '3rem', marginBottom: '1rem' }}>403 - Access Denied</h1>
         <p style={{ color: '#aaa', marginBottom: '2rem' }}>You do not have permission to access this page.</p>
         <button
-          onClick={() => window.location.href = '/dashboard'}
+          onClick={() => {
+            if (currentRole === 'branch_manager') {
+              window.location.href = '/branch/dashboard'
+            } else {
+              window.location.href = '/dashboard'
+            }
+          }}
           style={{
             padding: '0.75rem 1.5rem',
             background: '#f3c623',
@@ -147,12 +153,7 @@ export default function App() {
 
         {/* ── Branch Manager Portal ── */}
         <Route path="/branch-manager/login"     element={<BranchManagerLoginPage />} />
-        <Route path="/branch-manager/dashboard" element={
-          (() => {
-            const bm = (() => { try { return localStorage.getItem('artisan_bm') } catch { return null } })()
-            return bm ? <BranchManagerDashboardPage /> : <Navigate to="/login" replace />
-          })()
-        } />
+        <Route path="/branch-manager/dashboard" element={<Navigate to="/branch/dashboard" replace />} />
 
         {/* Customer QR Digital Menu - Public */}
         <Route path="/customer/menu" element={<CustomerMenuPage />} />
@@ -380,57 +381,57 @@ export default function App() {
 
         {/* ── Branch Manager Routes ── */}
         <Route path="/branch/dashboard" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <BranchDashboard />
           </ProtectedRoute>
         } />
         <Route path="/branch/staff" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <Staff />
           </ProtectedRoute>
         } />
         <Route path="/branch/tables" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <Tables />
           </ProtectedRoute>
         } />
         <Route path="/branch/orders" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <Orders />
           </ProtectedRoute>
         } />
         <Route path="/branch/kitchen" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <Kitchen />
           </ProtectedRoute>
         } />
         <Route path="/branch/menu" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <BranchMenu />
           </ProtectedRoute>
         } />
         <Route path="/branch/inventory" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <Inventory />
           </ProtectedRoute>
         } />
         <Route path="/branch/expenses" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <Expenses />
           </ProtectedRoute>
         } />
         <Route path="/branch/customers" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <Customers />
           </ProtectedRoute>
         } />
         <Route path="/branch/reports" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <Reports />
           </ProtectedRoute>
         } />
         <Route path="/branch/settings" element={
-          <ProtectedRoute allowedRoles={['manager', 'owner', 'admin']}>
+          <ProtectedRoute allowedRoles={['branch_manager']}>
             <BranchSettings />
           </ProtectedRoute>
         } />

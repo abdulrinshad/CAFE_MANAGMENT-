@@ -30,7 +30,7 @@ export default function BranchManagerLoginPage() {
     setLoading(true)
     try {
       await loginBranchManager(managerId.trim(), pin.trim())
-      navigate('/branch-manager/dashboard')
+      navigate('/branch/dashboard')
     } catch (err) {
       setError(err.message || 'Invalid Manager ID or PIN.')
     } finally {

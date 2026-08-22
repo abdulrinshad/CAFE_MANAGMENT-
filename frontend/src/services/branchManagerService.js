@@ -20,6 +20,23 @@ const initStorage = (key, initialData) => {
 
 export const branchManagerService = {
   getBranchInfo() {
+    try {
+      const bmBranchStr = localStorage.getItem('artisan_bm_branch');
+      if (bmBranchStr) {
+        const bmBranch = JSON.parse(bmBranchStr);
+        return {
+          ...BRANCH_INFO,
+          id: bmBranch.id,
+          name: bmBranch.name,
+          city: bmBranch.name.split('—').pop().trim() || bmBranch.name,
+          address: bmBranch.address || '',
+          phone: bmBranch.phone || '',
+          code: bmBranch.code || ''
+        };
+      }
+    } catch (e) {
+      console.warn("Failed to parse bm branch info:", e);
+    }
     return initStorage('kochi_branch_info', BRANCH_INFO);
   },
 

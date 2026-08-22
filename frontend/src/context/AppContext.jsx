@@ -90,9 +90,13 @@ export function AppProvider({ children }) {
     localStorage.removeItem('artisan_user')
     localStorage.removeItem('artisan_role')
     localStorage.removeItem('artisan_waiter')
+    localStorage.removeItem('artisan_bm')
+    localStorage.removeItem('artisan_bm_branch')
     setCurrentUser(null)
     setCurrentRoleRaw('admin')
     setCurrentWaiterRaw(null)
+    setCurrentBranchManagerRaw(null)
+    setCurrentBranchRaw(null)
   }, [])
 
   const setCurrentBranchManager = (mgr) => {
@@ -113,19 +117,26 @@ export function AppProvider({ children }) {
 
   const loginBranchManager = async (managerId, pin) => {
     const res = await branchManagerApi.login({ manager_id: managerId, pin })
-    // Branch manager gets its own token set — separate from admin/waiter tokens
-    localStorage.setItem('artisan_bm_access', res.access)
-    localStorage.setItem('artisan_bm_refresh', res.refresh)
+    localStorage.setItem('artisan_access', res.access)
+    localStorage.setItem('artisan_refresh', res.refresh)
+    localStorage.setItem('artisan_user', JSON.stringify(res.user))
+    localStorage.setItem('artisan_role', 'branch_manager')
+    setCurrentUser(res.user)
+    setCurrentRole('branch_manager')
     setCurrentBranchManager(res.manager)
     setCurrentBranch(res.branch)
     return res
   }
 
   const branchManagerLogout = useCallback(() => {
-    localStorage.removeItem('artisan_bm_access')
-    localStorage.removeItem('artisan_bm_refresh')
+    localStorage.removeItem('artisan_access')
+    localStorage.removeItem('artisan_refresh')
+    localStorage.removeItem('artisan_user')
+    localStorage.removeItem('artisan_role')
     localStorage.removeItem('artisan_bm')
     localStorage.removeItem('artisan_bm_branch')
+    setCurrentUser(null)
+    setCurrentRoleRaw('admin')
     setCurrentBranchManagerRaw(null)
     setCurrentBranchRaw(null)
   }, [])

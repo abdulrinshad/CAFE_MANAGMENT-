@@ -26,9 +26,14 @@ class BranchSerializer(serializers.ModelSerializer):
 
 class BranchWriteSerializer(serializers.ModelSerializer):
     """Serializer used only for create / update operations on Branch."""
+    create_manager = serializers.BooleanField(write_only=True, default=False)
+    manager_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    manager_id = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    manager_pin = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
     class Meta:
         model = Branch
-        fields = ('name', 'code', 'address', 'phone', 'active')
+        fields = ('name', 'code', 'address', 'phone', 'active', 'create_manager', 'manager_name', 'manager_id', 'manager_pin')
 
     def validate_code(self, value):
         qs = Branch.objects.filter(code=value)
@@ -37,6 +42,43 @@ class BranchWriteSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError("A branch with this code already exists.")
         return value
+
+    def validate(self, attrs):
+        create_manager = attrs.get('create_manager', False)
+        if create_manager:
+            manager_name = attrs.get('manager_name')
+            manager_id = attrs.get('manager_id')
+            manager_pin = attrs.get('manager_pin')
+
+            if not manager_name:
+                raise serializers.ValidationError({"manager_name": "Manager name is required when creating a manager."})
+            if not manager_id:
+                raise serializers.ValidationError({"manager_id": "Manager ID is required when creating a manager."})
+            if not manager_pin:
+                raise serializers.ValidationError({"manager_pin": "Manager PIN is required when creating a manager."})
+
+            if BranchManager.objects.filter(manager_id=manager_id).exists():
+                raise serializers.ValidationError({"manager_id": "This Manager ID is already in use."})
+        return attrs
+
+    def create(self, validated_data):
+        from django.db import transaction
+        create_manager = validated_data.pop('create_manager', False)
+        manager_name = validated_data.pop('manager_name', None)
+        manager_id = validated_data.pop('manager_id', None)
+        manager_pin = validated_data.pop('manager_pin', None)
+
+        with transaction.atomic():
+            branch = super().create(validated_data)
+            if create_manager:
+                manager = BranchManager(
+                    name=manager_name,
+                    manager_id=manager_id,
+                    branch=branch
+                )
+                manager.set_pin(manager_pin)
+                manager.save()
+            return branch
 
 
 # ── BranchManager Serializers ─────────────────────────────────────────────────
@@ -98,7 +140,11 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ('id', 'username', 'email', 'role', 'branch', 'is_staff', 'is_superuser')
 
     def get_role(self, obj):
+        if obj.username.startswith('bm_'):
+            return 'branch_manager'
         if hasattr(obj, 'profile'):
+            if obj.profile.role == 'MANAGER':
+                return 'branch_manager'
             return obj.profile.role
         return 'STAFF'
 
