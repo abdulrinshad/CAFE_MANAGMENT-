@@ -176,7 +176,7 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             auth_user = authenticate(username=u.username, password=password)
             if auth_user:
                 role = auth_user.profile.role if hasattr(auth_user, 'profile') else 'STAFF'
-                if role.upper() in ['ADMIN', 'MANAGER']:
+                if role.upper() in ['ADMIN', 'MANAGER', 'CASHIER', 'POS', 'STAFF']:
                     authenticated_user = auth_user
                     break
                 else:
@@ -187,8 +187,8 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             raise serializers.ValidationError("Invalid email or password.")
 
         role = authenticated_user.profile.role if hasattr(authenticated_user, 'profile') else 'STAFF'
-        if role.upper() not in ['ADMIN', 'MANAGER']:
-            raise serializers.ValidationError("You do not have permission to access the Admin Portal.")
+        if role.upper() not in ['ADMIN', 'MANAGER', 'CASHIER', 'POS', 'STAFF']:
+            raise serializers.ValidationError("You do not have permission to log in.")
 
         refresh = RefreshToken.for_user(authenticated_user)
 
