@@ -229,6 +229,11 @@
   opacity: 0.3;
 }
 
+/* Dark spinner variant for light backgrounds */
+.aip-spinner--dark {
+  border-color: rgba(61, 35, 20, 0.2);
+  border-top-color: var(--color-espresso, #3d2314);
+}
 .aip-empty-items {
   font-size: 13px;
   color: var(--color-text-muted, #888);
@@ -442,6 +447,7 @@
 }
 
 /* ── Spinner ── */
+/* ── Spinner inline ── */
 .aip-spinner {
   display: inline-block;
   width: 13px; height: 13px;
@@ -596,6 +602,9 @@
   background: rgba(61, 35, 20, 0.03);
   box-shadow: 0 4px 14px rgba(61, 35, 20, 0.12);
 }
+.aip-product-card--selected:hover {
+  border-color: var(--color-espresso, #3d2314);
+}
 
 .aip-popular-badge {
   position: absolute;
@@ -658,6 +667,9 @@
   color: var(--color-espresso, #3d2314);
 }
 .aip-product-card__add { margin-top: 4px; }
+.aip-product-card__add {
+  margin-top: 4px;
+}
 .aip-product-card__add-icon {
   display: inline-flex;
   align-items: center;
