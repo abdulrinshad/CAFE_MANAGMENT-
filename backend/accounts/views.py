@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import UserProfile, Waiter, Branch, BranchManager
+from .models import UserProfile, Waiter, Branch, BranchManager, Cashier
 from .serializers import (
     CustomTokenObtainPairSerializer,
     UserSerializer,
@@ -15,6 +15,8 @@ from .serializers import (
     BranchSerializer,
     BranchWriteSerializer,
     BranchManagerSerializer,
+    CashierSerializer,
+    CashierSafeSerializer,
 )
 from .permissions import IsAdminOrManager, IsAdmin
 
@@ -82,6 +84,9 @@ class WaiterViewSet(viewsets.ModelViewSet):
         if is_active is not None:
             active_bool = is_active.lower() == 'true'
             queryset = queryset.filter(is_active=active_bool)
+        branch_id = self.request.query_params.get('branch')
+        if branch_id:
+            queryset = queryset.filter(branch_id=branch_id)
         return queryset
 
 
@@ -95,6 +100,13 @@ class ActiveWaiterListView(APIView):
 
 
 class WaiterLoginView(APIView):
+    """
+    POST /auth/waiter-login/
+    Body: { waiter_id, pin }
+
+    Legacy login for Waiters using their DB id (integer).
+    Also supports employee_id string lookup for new-style logins.
+    """
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
@@ -104,10 +116,22 @@ class WaiterLoginView(APIView):
         if not waiter_id or not pin:
             return Response({"detail": "waiter_id and pin are required."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Support both integer PK and string employee_id
+        waiter = None
         try:
-            waiter = Waiter.objects.get(id=waiter_id)
-        except Waiter.DoesNotExist:
-            return Response({"detail": "Incorrect PIN. Please try again."}, status=status.HTTP_401_UNAUTHORIZED)
+            waiter_id_int = int(waiter_id)
+            try:
+                waiter = Waiter.objects.get(id=waiter_id_int)
+            except Waiter.DoesNotExist:
+                pass
+        except (ValueError, TypeError):
+            pass
+
+        if waiter is None:
+            try:
+                waiter = Waiter.objects.get(employee_id=str(waiter_id))
+            except Waiter.DoesNotExist:
+                return Response({"detail": "Incorrect PIN. Please try again."}, status=status.HTTP_401_UNAUTHORIZED)
 
         if not waiter.is_active:
             return Response({"detail": "This waiter account is currently inactive."}, status=status.HTTP_403_FORBIDDEN)
@@ -131,16 +155,21 @@ class WaiterLoginView(APIView):
 
         profile, _ = UserProfile.objects.get_or_create(user=shadow_user)
         profile.role = UserProfile.STAFF
+        profile.branch = waiter.branch
         profile.save()
 
         refresh = RefreshToken.for_user(shadow_user)
 
         return Response({
             "success": True,
+            "role": "waiter",
             "waiter": {
                 "id": waiter.id,
                 "name": waiter.name,
+                "employee_id": waiter.employee_id,
                 "section": waiter.section,
+                "branch_id": waiter.branch_id,
+                "branch_name": waiter.branch.name if waiter.branch else None,
                 "photo": request.build_absolute_uri(waiter.photo.url) if waiter.photo else None
             },
             "access": str(refresh.access_token),
@@ -152,6 +181,195 @@ class WaiterLoginView(APIView):
                 "role": "STAFF"
             }
         }, status=status.HTTP_200_OK)
+
+
+# ── Employee Login (unified Waiter + Cashier) ──────────────────────────────────
+
+class EmployeeLoginView(APIView):
+    """
+    POST /auth/employee-login/
+    Body: { employee_id, pin }
+
+    Authenticates either a Waiter or Cashier using their unique Employee ID + PIN.
+    Returns role ('waiter' or 'cashier') so the frontend can route correctly.
+    Inactive employees cannot log in.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        employee_id = request.data.get('employee_id', '').strip()
+        pin = request.data.get('pin', '')
+
+        if not employee_id or not pin:
+            return Response(
+                {"detail": "employee_id and pin are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Try Waiter first
+        waiter = None
+        cashier = None
+        try:
+            waiter = Waiter.objects.select_related('branch').get(employee_id=employee_id)
+        except Waiter.DoesNotExist:
+            pass
+
+        if waiter is None:
+            try:
+                cashier = Cashier.objects.select_related('branch').get(employee_id=employee_id)
+            except Cashier.DoesNotExist:
+                pass
+
+        if waiter is None and cashier is None:
+            return Response(
+                {"detail": "Invalid Employee ID or PIN."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        if waiter is not None:
+            return self._login_waiter(request, waiter, pin)
+        return self._login_cashier(request, cashier, pin)
+
+    def _login_waiter(self, request, waiter, pin):
+        if not waiter.is_active:
+            return Response(
+                {"detail": "This employee account is currently inactive."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        if not waiter.check_pin(pin):
+            return Response(
+                {"detail": "Invalid Employee ID or PIN."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        shadow_username = f"waiter_{waiter.id}"
+        shadow_user, created = User.objects.get_or_create(
+            username=shadow_username,
+            defaults={
+                'email': f"waiter_{waiter.id}@artisanbrew.internal",
+                'is_staff': False,
+                'is_superuser': False,
+                'is_active': True,
+            }
+        )
+        if created:
+            shadow_user.set_unusable_password()
+            shadow_user.save()
+
+        profile, _ = UserProfile.objects.get_or_create(user=shadow_user)
+        profile.role = UserProfile.STAFF
+        profile.branch = waiter.branch
+        profile.save()
+
+        refresh = RefreshToken.for_user(shadow_user)
+        return Response({
+            "success": True,
+            "role": "waiter",
+            "employee": {
+                "id": waiter.id,
+                "name": waiter.name,
+                "employee_id": waiter.employee_id,
+                "section": waiter.section,
+                "branch_id": waiter.branch_id,
+                "branch_name": waiter.branch.name if waiter.branch else None,
+                "photo": request.build_absolute_uri(waiter.photo.url) if waiter.photo else None,
+            },
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": {
+                "id": shadow_user.id,
+                "username": shadow_user.username,
+                "email": shadow_user.email,
+                "role": "STAFF",
+            }
+        }, status=status.HTTP_200_OK)
+
+    def _login_cashier(self, request, cashier, pin):
+        if not cashier.is_active:
+            return Response(
+                {"detail": "This employee account is currently inactive."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        if not cashier.check_pin(pin):
+            return Response(
+                {"detail": "Invalid Employee ID or PIN."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        shadow_username = f"cashier_{cashier.id}"
+        shadow_user, created = User.objects.get_or_create(
+            username=shadow_username,
+            defaults={
+                'email': f"cashier_{cashier.id}@artisanbrew.internal",
+                'is_staff': False,
+                'is_superuser': False,
+                'is_active': True,
+            }
+        )
+        if created:
+            shadow_user.set_unusable_password()
+            shadow_user.save()
+
+        profile, _ = UserProfile.objects.get_or_create(user=shadow_user)
+        profile.role = UserProfile.CASHIER
+        profile.branch = cashier.branch
+        profile.save()
+
+        refresh = RefreshToken.for_user(shadow_user)
+        return Response({
+            "success": True,
+            "role": "cashier",
+            "employee": {
+                "id": cashier.id,
+                "name": cashier.name,
+                "employee_id": cashier.employee_id,
+                "branch_id": cashier.branch_id,
+                "branch_name": cashier.branch.name if cashier.branch else None,
+            },
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": {
+                "id": shadow_user.id,
+                "username": shadow_user.username,
+                "email": shadow_user.email,
+                "role": "CASHIER",
+            }
+        }, status=status.HTTP_200_OK)
+
+
+# ── Cashier Views ──────────────────────────────────────────────────────────────
+
+class CashierViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for Cashiers. Only Admin/Manager can manage these.
+    """
+    queryset = Cashier.objects.select_related('branch').all()
+    serializer_class = CashierSerializer
+    permission_classes = [IsAdminOrManager]
+
+    def get_queryset(self):
+        qs = Cashier.objects.select_related('branch').all().order_by('-created_at')
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(name__icontains=search)
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == 'true')
+        branch_id = self.request.query_params.get('branch')
+        if branch_id:
+            qs = qs.filter(branch_id=branch_id)
+        return qs
+
+    @action(detail=True, methods=['patch'], url_path='set_active')
+    def set_active(self, request, pk=None):
+        """PATCH /cashiers/{id}/set_active/  { is_active: true|false }"""
+        cashier = self.get_object()
+        is_active = request.data.get('is_active')
+        if is_active is None:
+            return Response({"detail": "'is_active' is required."}, status=status.HTTP_400_BAD_REQUEST)
+        cashier.is_active = bool(is_active)
+        cashier.save(update_fields=['is_active', 'updated_at'])
+        return Response(CashierSerializer(cashier).data)
 
 
 # ── Branch Views ───────────────────────────────────────────────────────────────

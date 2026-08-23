@@ -17,18 +17,20 @@ from django.core.validators import MinValueValidator
 
 
 class Order(models.Model):
-    STATUS_PENDING   = 'pending'
-    STATUS_PREPARING = 'preparing'
-    STATUS_READY     = 'ready'
-    STATUS_COMPLETED = 'completed'
-    STATUS_CANCELLED = 'cancelled'
+    STATUS_PENDING        = 'pending'
+    STATUS_PREPARING      = 'preparing'
+    STATUS_READY          = 'ready'
+    STATUS_COMPLETED      = 'completed'
+    STATUS_CANCELLED      = 'cancelled'
+    STATUS_BILL_REQUESTED = 'bill_requested'
 
     STATUS_CHOICES = [
-        (STATUS_PENDING,   'Pending'),
-        (STATUS_PREPARING, 'Preparing'),
-        (STATUS_READY,     'Ready'),
-        (STATUS_COMPLETED, 'Completed'),
-        (STATUS_CANCELLED, 'Cancelled'),
+        (STATUS_PENDING,        'Pending'),
+        (STATUS_PREPARING,      'Preparing'),
+        (STATUS_READY,          'Ready'),
+        (STATUS_COMPLETED,      'Completed'),
+        (STATUS_CANCELLED,      'Cancelled'),
+        (STATUS_BILL_REQUESTED, 'Bill Requested'),
     ]
 
     # Human-readable unique order number, e.g. ORD-0001

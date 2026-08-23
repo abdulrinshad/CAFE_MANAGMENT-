@@ -167,10 +167,62 @@
   margin-top: 4px;
 }
 
+.bill-card__message {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 2px solid var(--color-espresso, #7c5c3e);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
 .btn-success-bg {
   background: #16a34a !important;
 }
 
 .btn-success-bg:hover {
   background: #15803d !important;
+}
+
+.w-full { width: 100%; }
+
+/* ── Toast notification ── */
+.requests-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
+  z-index: 9999;
+  box-shadow: 0 4px 18px rgba(0,0,0,.22);
+  animation: toastIn .2s ease;
+}
+@keyframes toastIn {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.requests-toast--success {
+  background: #16a34a;
+  color: #fff;
+}
+.requests-toast--error {
+  background: #dc2626;
+  color: #fff;
+}
+
+/* ── Count pill ── */
+.req-count-pill { display: flex; gap: 8px; }
+.req-count-pill--new {
+  padding: 4px 14px;
+  border-radius: 20px;
+  background: #fef3c7;
+  color: #b45309;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid #fde68a;
 }

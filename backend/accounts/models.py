@@ -82,11 +82,12 @@ class UserProfile(models.Model):
 
 class Waiter(models.Model):
     name = models.CharField(max_length=120)
+    employee_id = models.CharField(max_length=50, unique=True, blank=True, null=True)
     branch = models.ForeignKey(
         Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name='waiters'
     )
     photo = models.ImageField(upload_to='waiters/', blank=True, null=True)
-    section = models.CharField(max_length=100)
+    section = models.CharField(max_length=100, blank=True, default='')
     pin_hash = models.CharField(max_length=128)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -100,3 +101,34 @@ class Waiter(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.branch.name if self.branch else 'No Branch'})"
+
+
+class Cashier(models.Model):
+    """
+    Cashier account.
+    Authenticated using employee_id + PIN (hashed), following the same
+    pattern as Waiter and BranchManager.
+    """
+    name = models.CharField(max_length=120)
+    employee_id = models.CharField(max_length=50, unique=True)
+    branch = models.ForeignKey(
+        Branch, on_delete=models.CASCADE, related_name='cashiers'
+    )
+    pin_hash = models.CharField(max_length=128)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Cashier'
+        verbose_name_plural = 'Cashiers'
+        ordering = ['name']
+
+    def set_pin(self, raw_pin):
+        self.pin_hash = make_password(raw_pin)
+
+    def check_pin(self, raw_pin):
+        return check_password(raw_pin, self.pin_hash)
+
+    def __str__(self):
+        return f"{self.name} — {self.branch.name}"

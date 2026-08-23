@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Waiter, Branch, BranchManager
+from .models import Waiter, Branch, BranchManager, Cashier
 
 
 # ── Branch Serializers ─────────────────────────────────────────────────────────
@@ -211,12 +211,14 @@ class ChangePasswordSerializer(serializers.Serializer):
     new_password = serializers.CharField(required=True)
 
 
+# ── Waiter Serializers ────────────────────────────────────────────────────────
+
 class WaiterSafeSerializer(serializers.ModelSerializer):
     branch_name = serializers.CharField(source='branch.name', read_only=True)
 
     class Meta:
         model = Waiter
-        fields = ('id', 'name', 'photo', 'section', 'branch', 'branch_name', 'is_active')
+        fields = ('id', 'name', 'employee_id', 'photo', 'section', 'branch', 'branch_name', 'is_active')
 
 
 class WaiterSerializer(serializers.ModelSerializer):
@@ -226,7 +228,20 @@ class WaiterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Waiter
-        fields = ('id', 'name', 'photo', 'section', 'branch', 'branch_name', 'is_active', 'created_at', 'updated_at', 'pin', 'confirm_pin')
+        fields = ('id', 'name', 'employee_id', 'photo', 'section', 'branch', 'branch_name', 'is_active', 'created_at', 'updated_at', 'pin', 'confirm_pin')
+
+    def validate_employee_id(self, value):
+        if not value:
+            return value
+        qs = Waiter.objects.filter(employee_id=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("This Employee ID is already in use.")
+        # Also check Cashier namespace to guarantee uniqueness across employees
+        if Cashier.objects.filter(employee_id=value).exists():
+            raise serializers.ValidationError("This Employee ID is already in use by a Cashier.")
+        return value
 
     def validate(self, attrs):
         pin = attrs.get('pin')
@@ -248,6 +263,74 @@ class WaiterSerializer(serializers.ModelSerializer):
             waiter.set_pin(pin)
             waiter.save()
         return waiter
+
+    def update(self, instance, validated_data):
+        pin = validated_data.pop('pin', None)
+        validated_data.pop('confirm_pin', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if pin:
+            instance.set_pin(pin)
+        instance.save()
+        return instance
+
+
+# ── Cashier Serializers ───────────────────────────────────────────────────────
+
+class CashierSafeSerializer(serializers.ModelSerializer):
+    """Public-safe cashier info (no PIN)."""
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
+
+    class Meta:
+        model = Cashier
+        fields = ('id', 'name', 'employee_id', 'branch', 'branch_name', 'is_active')
+
+
+class CashierSerializer(serializers.ModelSerializer):
+    """Full Cashier serializer for create / update (Owner-facing)."""
+    pin = serializers.CharField(write_only=True, required=False)
+    confirm_pin = serializers.CharField(write_only=True, required=False)
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
+
+    class Meta:
+        model = Cashier
+        fields = (
+            'id', 'name', 'employee_id', 'branch', 'branch_name',
+            'is_active', 'created_at', 'updated_at', 'pin', 'confirm_pin',
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at', 'branch_name')
+
+    def validate_employee_id(self, value):
+        qs = Cashier.objects.filter(employee_id=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("This Employee ID is already in use.")
+        # Cross-check Waiter namespace
+        if Waiter.objects.filter(employee_id=value).exists():
+            raise serializers.ValidationError("This Employee ID is already in use by a Waiter.")
+        return value
+
+    def validate(self, attrs):
+        pin = attrs.get('pin')
+        confirm_pin = attrs.get('confirm_pin')
+
+        if pin:
+            if not pin.isdigit() or len(pin) != 4:
+                raise serializers.ValidationError({"pin": "PIN must be exactly 4 digits and numeric."})
+            if confirm_pin and pin != confirm_pin:
+                raise serializers.ValidationError({"confirm_pin": "PINs do not match."})
+
+        return attrs
+
+    def create(self, validated_data):
+        pin = validated_data.pop('pin', None)
+        validated_data.pop('confirm_pin', None)
+        cashier = Cashier(**validated_data)
+        if pin:
+            cashier.set_pin(pin)
+        cashier.save()
+        return cashier
 
     def update(self, instance, validated_data):
         pin = validated_data.pop('pin', None)

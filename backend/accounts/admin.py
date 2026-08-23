@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.forms.models import BaseInlineFormSet
-from .models import UserProfile, Waiter, Branch, BranchManager
+from .models import UserProfile, Waiter, Branch, BranchManager, Cashier
 from django import forms
 from django.core.exceptions import ValidationError
 
@@ -137,4 +137,49 @@ class BranchManagerAdmin(admin.ModelAdmin):
             obj.set_pin(new_pin)
         elif not change and not new_pin:
             raise ValidationError('PIN is required for new branch managers.')
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Cashier)
+class CashierAdmin(admin.ModelAdmin):
+    list_display = ('name', 'employee_id', 'branch', 'is_active', 'created_at')
+    list_filter = ('is_active', 'branch')
+    search_fields = ('name', 'employee_id')
+    readonly_fields = ('created_at', 'updated_at', 'pin_display')
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'employee_id', 'branch', 'is_active')
+        }),
+        ('PIN', {
+            'fields': ('pin_display', 'new_pin'),
+            'description': 'Enter a new PIN to set/reset the cashier PIN.'
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+
+    def pin_display(self, obj):
+        return '********' if (obj and obj.pin_hash) else '(No PIN set)'
+    pin_display.short_description = 'PIN Status'
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        form.base_fields['new_pin'] = forms.CharField(
+            max_length=4,
+            required=False,
+            widget=forms.PasswordInput(render_value=False),
+            label='New 4-Digit PIN',
+            help_text='Exactly 4 digits. Leave blank to keep existing PIN.'
+        )
+        return form
+
+    def save_model(self, request, obj, form, change):
+        new_pin = form.cleaned_data.get('new_pin')
+        if new_pin:
+            if not new_pin.isdigit() or len(new_pin) != 4:
+                raise ValidationError('PIN must be exactly 4 numeric digits.')
+            obj.set_pin(new_pin)
+        elif not change and not new_pin:
+            raise ValidationError('PIN is required for new cashiers.')
         super().save_model(request, obj, form, change)

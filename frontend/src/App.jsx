@@ -95,7 +95,7 @@ function ProtectedRoute({ children, allowedRoles }) {
     )
   }
 
-  const isUserAuthenticated = !!currentUser || currentRole === 'waiter'
+  const isUserAuthenticated = !!currentUser || currentRole === 'waiter' || currentRole === 'cashier'
 
   if (!isUserAuthenticated) {
     return <Navigate to="/login" replace />
@@ -119,6 +119,8 @@ function ProtectedRoute({ children, allowedRoles }) {
           onClick={() => {
             if (currentRole === 'branch_manager') {
               window.location.href = '/branch/dashboard'
+            } else if (currentRole === 'cashier') {
+              window.location.href = '/cashier/dashboard'
             } else {
               window.location.href = '/dashboard'
             }

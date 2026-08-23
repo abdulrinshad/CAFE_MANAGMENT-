@@ -297,19 +297,29 @@ class QRCodeStatusSerializer(serializers.ModelSerializer):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class WaiterRequestSerializer(serializers.ModelSerializer):
-    table_name = serializers.CharField(source='table.name', read_only=True)
-    table_id   = serializers.SerializerMethodField()
-    type       = serializers.CharField(source='request_type', required=False, allow_blank=True)
-    time       = serializers.SerializerMethodField()
+    table_name  = serializers.CharField(source='table.name', read_only=True)
+    table_id    = serializers.SerializerMethodField()
+    branch_id   = serializers.IntegerField(source='branch.id', read_only=True, allow_null=True)
+    branch_name = serializers.CharField(source='branch.name', read_only=True, allow_null=True)
+    type        = serializers.CharField(source='request_type', required=False, allow_blank=True)
+    time        = serializers.SerializerMethodField()
+    # Resolved live from the active order on this table (used by BillRequestsPage)
+    order_id     = serializers.SerializerMethodField()
+    order_number = serializers.SerializerMethodField()
 
     class Meta:
         model  = WaiterRequest
         fields = [
             'id', 'table', 'table_id', 'table_name', 'type', 'request_type',
             'message', 'status', 'assigned_waiter', 'amount',
+            'branch_id', 'branch_name',
+            'order_id', 'order_number',
             'time', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'table_name', 'table_id', 'time', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'table_name', 'table_id', 'time', 'created_at', 'updated_at',
+            'branch_id', 'branch_name', 'order_id', 'order_number',
+        ]
 
     def get_table_id(self, obj):
         if not obj.table:
@@ -321,4 +331,30 @@ class WaiterRequestSerializer(serializers.ModelSerializer):
         if not obj.created_at:
             return ''
         return obj.created_at.strftime('%I:%M %p').lstrip('0')
+
+    def get_order_id(self, obj):
+        """Return the most recent non-cancelled/completed order ID for this table."""
+        if not obj.table:
+            return None
+        from orders.models import Order
+        order = Order.objects.filter(
+            table=obj.table,
+        ).exclude(status__in=['completed', 'cancelled']).order_by('-created_at').first()
+        if order is None:
+            # Fall back: most recent order created around the same time as this request
+            order = Order.objects.filter(
+                table=obj.table,
+            ).order_by('-created_at').first()
+        return order.id if order else None
+
+    def get_order_number(self, obj):
+        if not obj.table:
+            return None
+        from orders.models import Order
+        order = Order.objects.filter(
+            table=obj.table,
+        ).exclude(status__in=['completed', 'cancelled']).order_by('-created_at').first()
+        if order is None:
+            order = Order.objects.filter(table=obj.table).order_by('-created_at').first()
+        return order.order_number if order else None
 

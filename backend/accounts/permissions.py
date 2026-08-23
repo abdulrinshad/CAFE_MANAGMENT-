@@ -29,6 +29,15 @@ class IsStaff(BasePermission):
             return False
         return hasattr(request.user, 'profile') and request.user.profile.role == 'STAFF'
 
+class IsCashier(BasePermission):
+    """
+    Allows access to Cashier users only.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return hasattr(request.user, 'profile') and request.user.profile.role == 'CASHIER'
+
 class IsAdminOrManager(BasePermission):
     """
     Allows access to Admin and Manager users (including superusers and staff admins).
@@ -55,3 +64,15 @@ class IsAdminOrManagerOrStaff(BasePermission):
             return False
         return request.user.profile.role in ['ADMIN', 'MANAGER', 'STAFF']
 
+class IsAdminOrManagerOrCashier(BasePermission):
+    """
+    Allows access to Admin, Manager, and Cashier users.
+    """
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        if not hasattr(request.user, 'profile'):
+            return False
+        return request.user.profile.role in ['ADMIN', 'MANAGER', 'CASHIER']

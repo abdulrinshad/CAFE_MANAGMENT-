@@ -9,6 +9,8 @@ from .views import (
     WaiterViewSet,
     ActiveWaiterListView,
     WaiterLoginView,
+    EmployeeLoginView,
+    CashierViewSet,
     BranchViewSet,
     BranchManagerViewSet,
     BranchManagerLoginView,
@@ -16,6 +18,7 @@ from .views import (
 
 router = DefaultRouter()
 router.register(r'waiters', WaiterViewSet, basename='waiters')
+router.register(r'cashiers', CashierViewSet, basename='cashiers')
 router.register(r'branches', BranchViewSet, basename='branches')
 router.register(r'branch-managers', BranchManagerViewSet, basename='branch-managers')
 
@@ -27,6 +30,7 @@ urlpatterns = [
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='auth_token_refresh'),
     path('auth/waiters/', ActiveWaiterListView.as_view(), name='auth_waiters'),
     path('auth/waiter-login/', WaiterLoginView.as_view(), name='auth_waiter_login'),
+    path('auth/employee-login/', EmployeeLoginView.as_view(), name='auth_employee_login'),
     path('auth/branch-manager-login/', BranchManagerLoginView.as_view(), name='auth_branch_manager_login'),
     path('', include(router.urls)),
 ]

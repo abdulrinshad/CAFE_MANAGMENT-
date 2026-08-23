@@ -240,6 +240,7 @@
 .owner-badge--takeaway  { background: rgba(212,165,116,0.15);color: var(--color-tan-dark);}
 .owner-badge--swiggy    { background: rgba(255,102,0,0.1);   color: #e65300;             }
 .owner-badge--zomato    { background: rgba(220,0,0,0.1);     color: #b81414;             }
+.owner-badge--warning   { background: rgba(234,179,8,0.15);  color: #a16207;             }
 
 /* ── Icon Button ── */
 .owner-icon-btn {
