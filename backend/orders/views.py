@@ -255,6 +255,23 @@ class OrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['delete'], url_path=r'remove_item/(?P<item_id>\d+)')
     def remove_item(self, request, pk=None, item_id=None):
         order = self.get_object()
+
+        # Verify waiter's assigned branch
+        waiter_branch = get_waiter_branch(request)
+        if waiter_branch and order.branch and order.branch != waiter_branch:
+            raise PermissionDenied("Order belongs to another branch.")
+
+        # Allow deletion only before "Finalize / Request Bill"
+        blocked_statuses = [
+            Order.STATUS_BILL_REQUESTED,
+            Order.STATUS_CANCELLED,
+        ]
+        if order.status in blocked_statuses or hasattr(order, 'invoice'):
+            return Response(
+                {'detail': f'Cannot remove item from order in "{order.status}" status or after bill generation.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             item = order.items.get(pk=item_id)
             item.delete()
@@ -268,6 +285,23 @@ class OrderViewSet(viewsets.ModelViewSet):
     def update_item_qty(self, request, pk=None):
         """PATCH /orders/{id}/update_item_qty/  { item_id: N, delta: 1, quantity: N }"""
         order = self.get_object()
+
+        # Verify waiter's assigned branch
+        waiter_branch = get_waiter_branch(request)
+        if waiter_branch and order.branch and order.branch != waiter_branch:
+            raise PermissionDenied("Order belongs to another branch.")
+
+        # Allow editing only before "Finalize / Request Bill"
+        blocked_statuses = [
+            Order.STATUS_BILL_REQUESTED,
+            Order.STATUS_CANCELLED,
+        ]
+        if order.status in blocked_statuses or hasattr(order, 'invoice'):
+            return Response(
+                {'detail': f'Cannot edit items for order in "{order.status}" status or after bill generation.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         item_id = request.data.get('item_id')
         try:
             item = order.items.get(pk=item_id)
@@ -294,10 +328,27 @@ class OrderViewSet(viewsets.ModelViewSet):
         order.refresh_from_db()
         return Response(OrderSerializer(order, context={'request': request}).data)
 
-    @action(detail=True, methods=['patch'], url_path=r'update_item/(?P<item_id>\d+)')
+    @action(detail=True, methods=['patch', 'put'], url_path=r'update_item/(?P<item_id>\d+)')
     def update_item(self, request, pk=None, item_id=None):
         """PATCH /orders/{id}/update_item/{item_id}/  { quantity: N }"""
         order = self.get_object()
+
+        # Verify waiter's assigned branch
+        waiter_branch = get_waiter_branch(request)
+        if waiter_branch and order.branch and order.branch != waiter_branch:
+            raise PermissionDenied("Order belongs to another branch.")
+
+        # Allow editing only before "Finalize / Request Bill"
+        blocked_statuses = [
+            Order.STATUS_BILL_REQUESTED,
+            Order.STATUS_CANCELLED,
+        ]
+        if order.status in blocked_statuses or hasattr(order, 'invoice'):
+            return Response(
+                {'detail': f'Cannot edit items for order in "{order.status}" status or after bill generation.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             item = order.items.get(pk=item_id)
         except OrderItem.DoesNotExist:
@@ -306,37 +357,17 @@ class OrderViewSet(viewsets.ModelViewSet):
         qty = request.data.get('quantity')
         try:
             qty = int(qty)
-            if qty < 1:
-                raise ValueError
         except (TypeError, ValueError):
-            return Response({'detail': 'quantity must be a positive integer.'},
+            return Response({'detail': 'quantity must be an integer.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        item.quantity = qty
-        item.subtotal = item.unit_price * qty
-        item.save(update_fields=['quantity', 'subtotal'])
-        order.recalculate_totals()
-        order.refresh_from_db()
-        return Response(OrderSerializer(order, context={'request': request}).data)
+        if qty <= 0:
+            item.delete()
+        else:
+            item.quantity = qty
+            item.subtotal = item.unit_price * qty
+            item.save(update_fields=['quantity', 'subtotal'])
 
-        order = self.get_object()
-        try:
-            item = order.items.get(pk=item_id)
-        except OrderItem.DoesNotExist:
-            return Response({'detail': 'Item not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-        qty = request.data.get('quantity')
-        try:
-            qty = int(qty)
-            if qty < 1:
-                raise ValueError
-        except (TypeError, ValueError):
-            return Response({'detail': 'quantity must be a positive integer.'},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        item.quantity = qty
-        item.subtotal = item.unit_price * qty
-        item.save(update_fields=['quantity', 'subtotal'])
         order.recalculate_totals()
         order.refresh_from_db()
         return Response(OrderSerializer(order, context={'request': request}).data)
@@ -944,6 +975,8 @@ class DashboardStatsView(APIView):
     """GET /api/v1/dashboard/stats/ — today's KPIs."""
 
     def get(self, request):
+        waiter_branch = get_waiter_branch(request)
+
         tz    = timezone.get_current_timezone()
         now   = timezone.now()
         today = now.date()
@@ -960,6 +993,10 @@ class DashboardStatsView(APIView):
         today_qs     = Order.objects.filter(created_at__range=(today_start, today_end))
         yesterday_qs = Order.objects.filter(created_at__range=(yesterday_start, yesterday_end))
 
+        if waiter_branch:
+            today_qs     = today_qs.filter(branch=waiter_branch)
+            yesterday_qs = yesterday_qs.filter(branch=waiter_branch)
+
         # Sales = sum of completed order totals
         today_sales     = today_qs.filter(status=Order.STATUS_COMPLETED).aggregate(
             s=Sum('total'))['s'] or Decimal('0')
@@ -974,11 +1011,6 @@ class DashboardStatsView(APIView):
         else:
             sales_change_pct = None  # no baseline
 
-        waiter_branch = get_waiter_branch(request)
-        if waiter_branch:
-            today_qs     = today_qs.filter(branch=waiter_branch)
-            yesterday_qs = yesterday_qs.filter(branch=waiter_branch)
-
         # Order counts
         today_total     = today_qs.count()
         today_pending   = today_qs.filter(status=Order.STATUS_PENDING).count()
@@ -987,12 +1019,12 @@ class DashboardStatsView(APIView):
         today_ready     = today_qs.filter(status=Order.STATUS_READY).count()
         today_cancelled = today_qs.filter(status=Order.STATUS_CANCELLED).count()
 
-        # Active tables (occupied or bill_requested)
+        # Active tables (occupied or bill_requested or needs_attention)
         try:
             from menu.models import Table
             tables_qs = Table.objects.filter(active=True)
             if waiter_branch:
-                tables_qs = tables_qs.filter(branch=waiter_branch)
+                tables_qs = tables_qs.filter(Q(branch=waiter_branch) | Q(branch__isnull=True))
             active_tables = tables_qs.filter(
                 status__in=['occupied', 'bill_requested', 'needs_attention']
             ).count()
@@ -1019,8 +1051,11 @@ class DashboardStatsView(APIView):
             active_requests = 0
             recent_requests = []
 
-        # Active orders (pending, preparing, or ready status Orders today)
-        active_orders = today_qs.filter(
+        # Active orders (pending, preparing, or ready status Orders across all time)
+        all_orders_qs = Order.objects.all()
+        if waiter_branch:
+            all_orders_qs = all_orders_qs.filter(branch=waiter_branch)
+        active_orders = all_orders_qs.filter(
             status__in=[Order.STATUS_PENDING, Order.STATUS_PREPARING, Order.STATUS_READY]
         ).count()
 

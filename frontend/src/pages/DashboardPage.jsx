@@ -139,6 +139,10 @@ export default function DashboardPage() {
 
   // ── Waiter view ────────────────────────────────────────────────────────────
   if (currentRole === 'waiter') {
+    const displayRequests = (stats?.recent_requests && stats.recent_requests.length > 0)
+      ? stats.recent_requests.slice(0, 3)
+      : (waiterRequests || []).slice(0, 3)
+
     return (
       <AdminLayout
         searchPlaceholder="Search active tables, orders..."
@@ -147,14 +151,14 @@ export default function DashboardPage() {
       >
         <div className="dashboard">
           <div className="dashboard__greeting">
-            <h1 className="dashboard__greeting-title">Good morning, {currentWaiter?.name || 'Waiter'}</h1>
-            <p className="dashboard__greeting-sub">Current Shift Performance · {currentWaiter?.station || 'Station'}</p>
+            <h1 className="dashboard__greeting-title">Good morning, {currentWaiter?.name || currentUser?.first_name || 'Waiter'}</h1>
+            <p className="dashboard__greeting-sub">Current Shift Performance · {stats?.branch || currentWaiter?.station || 'Assigned Branch'}</p>
           </div>
           <div className="dashboard__waiter-cta">
             <div className="waiter-cta__card">
               <div className="waiter-cta__info">
                 <h3>Serve a Table</h3>
-                <p>Start a new order, add items, or process payment requests.</p>
+                <p>Start a new order or add items to active tables.</p>
               </div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 <button
@@ -209,36 +213,34 @@ export default function DashboardPage() {
               </button>
             </div>
             <div className="waiter-requests-list">
-              {waiterRequests && waiterRequests.length > 0 ? (
-                waiterRequests.slice(0, 3).map((req) => (
-                  <div key={req.id} className={`waiter-request-card ${req.status}`}>
-                    <div className="waiter-request-card__header">
-                      <span className="request-table-badge">Table {req.tableId?.replace('T-', '')}</span>
-                      <span className="request-time">{req.time}</span>
+              {displayRequests && displayRequests.length > 0 ? (
+                displayRequests.map((req) => {
+                  const tableLabel = req.table_name || (req.tableId ? `Table ${req.tableId.replace('T-', '')}` : `Table #${req.table || ''}`)
+                  const reqTime = req.created_at
+                    ? new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : (req.time || '')
+                  const reqType = req.request_type || req.type || 'Table Request'
+                  const reqStatus = (req.status || 'new').toLowerCase()
+
+                  return (
+                    <div key={req.id} className={`waiter-request-card ${reqStatus}`}>
+                      <div className="waiter-request-card__header">
+                        <span className="request-table-badge">{tableLabel}</span>
+                        {reqTime && <span className="request-time">{reqTime}</span>}
+                      </div>
+                      <div className="waiter-request-card__body">
+                        <div className="request-type-label">{reqType}</div>
+                        {req.message && <p className="request-msg">{req.message}</p>}
+                        {req.amount && <div className="request-amount">Amount: ₹{req.amount}</div>}
+                      </div>
+                      <div className="waiter-request-card__status-view">
+                        <span className={`request-status-badge status-${reqStatus}`}>
+                          {reqStatus.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </div>
                     </div>
-                    <div className="waiter-request-card__body">
-                      <div className="request-type-label">{req.type}</div>
-                      <p className="request-msg">{req.message}</p>
-                      {req.amount && <div className="request-amount">Amount: ₹{req.amount}</div>}
-                    </div>
-                    <div className="waiter-request-card__actions">
-                      {req.status === 'new' ? (
-                        <>
-                          <button className="btn-outline btn-sm" onClick={() => dismissRequest(req.id)}>Dismiss</button>
-                          <button className="btn-primary btn-sm" onClick={() => updateRequestStatus(req.id, 'in_progress')}>Accept</button>
-                        </>
-                      ) : (
-                        <button
-                          className="btn-primary btn-sm btn-success-bg"
-                          onClick={() => updateRequestStatus(req.id, 'completed')}
-                          disabled={req.status === 'completed'}
-                        >
-                          {req.status === 'completed' ? 'Completed' : 'Mark Completed'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))
+                  )
+                })
               ) : (
                 <div className="requests-empty">No requests at the moment.</div>
               )}

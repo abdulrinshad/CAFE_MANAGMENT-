@@ -93,6 +93,8 @@ export default function OrderDetailPage() {
   const [advancing,   setAdvancing]   = useState(false)
   const [advError,    setAdvError]    = useState('')
   const [updating,    setUpdating]    = useState(null)    // item id being updated
+  const [editingItemId, setEditingItemId] = useState(null) // item id currently being edited
+  const [editingQty,    setEditingQty]    = useState(1)    // temp quantity being edited
 
   // ── Bill request state ────────────────────────────────────────────────────
   const [requestingBill,  setRequestingBill]  = useState(false)
@@ -210,18 +212,43 @@ export default function OrderDetailPage() {
     }
   }
 
+  // ── Item Inline Editing ──────────────────────────────────────────────────
+  const handleStartEdit = (item) => {
+    setEditingItemId(item.id)
+    setEditingQty(item.qty)
+  }
+
+  const handleCancelEdit = () => {
+    setEditingItemId(null)
+  }
+
+  const handleSaveEdit = async (item) => {
+    const newQty = parseInt(editingQty, 10)
+    if (isNaN(newQty) || newQty < 1) {
+      if (window.confirm(`Quantity is ${isNaN(newQty) ? 0 : newQty}. Remove "${item.name}" from this order?`)) {
+        await handleRemoveItem(item)
+      }
+      return
+    }
+    setUpdating(item.id)
+    try {
+      const updated = await orderApi.updateItem(id, item.id, { quantity: newQty })
+      if (updated) {
+        setOrder(normaliseOrder(updated))
+      }
+      setEditingItemId(null)
+    } catch (err) {
+      alert(err.message || 'Failed to update item.')
+      loadOrder()
+    } finally {
+      setUpdating(null)
+    }
+  }
+
   // ── Qty change ────────────────────────────────────────────────────────────
   const handleQtyChange = async (item, delta) => {
     const newQty = item.qty + delta
     if (newQty < 1) return
-    setOrder((prev) => ({
-      ...prev,
-      items: prev.items.map((it) =>
-        it.id === item.id
-          ? { ...it, qty: newQty, subtotal: it.unitPrice * newQty }
-          : it
-      ),
-    }))
     setUpdating(item.id)
     try {
       const updated = await orderApi.updateItem(id, item.id, { quantity: newQty })
@@ -240,6 +267,7 @@ export default function OrderDetailPage() {
     try {
       const updated = await orderApi.removeItem(id, item.id)
       if (updated) setOrder(normaliseOrder(updated))
+      setEditingItemId(null)
     } catch {
       loadOrder()
     } finally {
@@ -313,8 +341,8 @@ export default function OrderDetailPage() {
   const isCompleted     = order.status === 'COMPLETED'
   const isCancelled     = order.status === 'CANCELLED'
   const isBillRequested = order.status === 'BILL_REQUESTED'
-  // Editable = waiter can change qty / remove items
-  const isEditable      = !isCompleted && !isCancelled && !isBillRequested
+  // Editable = waiter can change qty / edit / remove items before "Finalize / Request Bill"
+  const isEditable      = !isCancelled && !isBillRequested && !order.invoice_number
 
   // Bill request display status
   const brStatus = billRequestData
@@ -523,46 +551,110 @@ export default function OrderDetailPage() {
               <p className="order-detail__empty-items">No items yet.</p>
             )}
 
-            {order.items.map((item) => (
-              <div key={item.id} className="order-item order-item--with-controls">
-                <div className="order-item__icon"><ItemDotIcon /></div>
-                <div className="order-item__info">
-                  <div className="order-item__name">{item.name}</div>
-                  <div className="order-item__unit-price">₹{Number(item.unitPrice).toLocaleString('en-IN')}</div>
-                </div>
+            {order.items.map((item) => {
+              const isEditingThis = editingItemId === item.id
 
-                {isEditable ? (
-                  <div className="order-item__qty-controls">
-                    <button
-                      className="qty-ctrl-btn"
-                      onClick={() => handleQtyChange(item, -1)}
-                      disabled={updating === item.id || item.qty <= 1}
-                    >−</button>
-                    <span className="qty-ctrl-val">{updating === item.id ? '…' : item.qty}</span>
-                    <button
-                      className="qty-ctrl-btn"
-                      onClick={() => handleQtyChange(item, 1)}
-                      disabled={updating === item.id}
-                    >+</button>
+              if (isEditingThis) {
+                return (
+                  <div key={item.id} className="order-item order-item--editing">
+                    <div className="order-item__edit-row-top">
+                      <div className="order-item__info">
+                        <div className="order-item__name">{item.name}</div>
+                        <div className="order-item__unit-price">
+                          ₹{Number(item.unitPrice).toLocaleString('en-IN')} / unit
+                        </div>
+                      </div>
+                      <div className="order-item__total">
+                        ₹{(Number(item.unitPrice) * Math.max(1, parseInt(editingQty) || 1)).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+
+                    <div className="order-item__edit-controls">
+                      <div className="qty-edit-stepper">
+                        <button
+                          type="button"
+                          className="qty-ctrl-btn"
+                          onClick={() => setEditingQty(q => Math.max(1, (parseInt(q) || 1) - 1))}
+                          disabled={updating === item.id || (parseInt(editingQty) || 1) <= 1}
+                        >−</button>
+                        <input
+                          type="number"
+                          min="1"
+                          className="qty-edit-input"
+                          value={editingQty}
+                          onChange={(e) => setEditingQty(e.target.value)}
+                          disabled={updating === item.id}
+                        />
+                        <button
+                          type="button"
+                          className="qty-ctrl-btn"
+                          onClick={() => setEditingQty(q => (parseInt(q) || 1) + 1)}
+                          disabled={updating === item.id}
+                        >+</button>
+                      </div>
+
+                      <div className="order-item__edit-actions">
+                        <button
+                          type="button"
+                          className="btn-item-save"
+                          onClick={() => handleSaveEdit(item)}
+                          disabled={updating === item.id}
+                        >
+                          {updating === item.id ? 'Saving…' : 'Save'}
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn-item-delete"
+                          onClick={() => handleRemoveItem(item)}
+                          disabled={updating === item.id}
+                        >
+                          Remove
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn-item-cancel"
+                          onClick={handleCancelEdit}
+                          disabled={updating === item.id}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                ) : (
+                )
+              }
+
+              return (
+                <div key={item.id} className="order-item order-item--with-controls">
+                  <div className="order-item__icon"><ItemDotIcon /></div>
+                  <div className="order-item__info">
+                    <div className="order-item__name">{item.name}</div>
+                    <div className="order-item__unit-price">
+                      ₹{Number(item.unitPrice).toLocaleString('en-IN')}
+                    </div>
+                  </div>
+
                   <div className="order-item__qty-readonly">×{item.qty}</div>
-                )}
 
-                <div className="order-item__total">
-                  ₹{Number(item.subtotal).toLocaleString('en-IN')}
+                  <div className="order-item__total">
+                    ₹{Number(item.subtotal).toLocaleString('en-IN')}
+                  </div>
+
+                  {isEditable && (
+                    <button
+                      type="button"
+                      className="order-item__edit-btn"
+                      onClick={() => handleStartEdit(item)}
+                      disabled={updating === item.id}
+                    >
+                      Edit
+                    </button>
+                  )}
                 </div>
-
-                {isEditable && (
-                  <button
-                    className="order-item__remove-btn"
-                    onClick={() => handleRemoveItem(item)}
-                    disabled={updating === item.id}
-                    aria-label={`Remove ${item.name}`}
-                  >×</button>
-                )}
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Right: Summary */}
