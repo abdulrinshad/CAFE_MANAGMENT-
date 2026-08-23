@@ -59,11 +59,15 @@ class UserProfile(models.Model):
     ADMIN = 'ADMIN'
     MANAGER = 'MANAGER'
     STAFF = 'STAFF'
+    CASHIER = 'CASHIER'
+    POS = 'POS'
 
     ROLE_CHOICES = [
         (ADMIN, 'Admin'),
         (MANAGER, 'Manager'),
         (STAFF, 'Staff'),
+        (CASHIER, 'Cashier'),
+        (POS, 'POS / Desk'),
     ]
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
