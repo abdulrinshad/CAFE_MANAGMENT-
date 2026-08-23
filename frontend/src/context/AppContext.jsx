@@ -54,6 +54,14 @@ export function AppProvider({ children }) {
     } catch { return null }
   })
 
+  // ── Cashier session state ────────────────────────────────────────────────
+  const [currentCashier, setCurrentCashierRaw] = useState(() => {
+    try {
+      const s = localStorage.getItem('artisan_cashier')
+      return s ? JSON.parse(s) : null
+    } catch { return null }
+  })
+
   // Derive waiterRequests from waiterRequestsState (actual backend WaiterRequests)
   const waiterRequests = useMemo(() => {
     return waiterRequestsState.map(wr => ({
@@ -84,6 +92,14 @@ export function AppProvider({ children }) {
     setCurrentWaiterRaw(waiter)
   }
 
+  const setCurrentCashier = (cashier) => {
+    try {
+      if (cashier) localStorage.setItem('artisan_cashier', JSON.stringify(cashier))
+      else localStorage.removeItem('artisan_cashier')
+    } catch {}
+    setCurrentCashierRaw(cashier)
+  }
+
   const logout = useCallback(() => {
     localStorage.removeItem('artisan_access')
     localStorage.removeItem('artisan_refresh')
@@ -92,11 +108,13 @@ export function AppProvider({ children }) {
     localStorage.removeItem('artisan_waiter')
     localStorage.removeItem('artisan_bm')
     localStorage.removeItem('artisan_bm_branch')
+    localStorage.removeItem('artisan_cashier')
     setCurrentUser(null)
     setCurrentRoleRaw('admin')
     setCurrentWaiterRaw(null)
     setCurrentBranchManagerRaw(null)
     setCurrentBranchRaw(null)
+    setCurrentCashierRaw(null)
   }, [])
 
   const setCurrentBranchManager = (mgr) => {
@@ -182,6 +200,22 @@ export function AppProvider({ children }) {
     setCurrentWaiter(res.waiter)
     setCurrentRole('waiter')
     return res.waiter
+  }
+
+  const loginEmployee = async (employeeId, pin) => {
+    const res = await authApi.employeeLogin({ employee_id: employeeId, pin })
+    localStorage.setItem('artisan_access', res.access)
+    localStorage.setItem('artisan_refresh', res.refresh)
+    localStorage.setItem('artisan_user', JSON.stringify(res.user))
+    setCurrentUser(res.user)
+    if (res.role === 'cashier') {
+      setCurrentCashier(res.employee)
+      setCurrentRole('cashier')
+    } else {
+      setCurrentWaiter(res.employee)
+      setCurrentRole('waiter')
+    }
+    return res
   }
 
   const isAuthenticated = !!currentUser
@@ -709,10 +743,13 @@ export function AppProvider({ children }) {
         authLoading,
         login,
         loginWaiter,
+        loginEmployee,
         logout,
         refreshUser,
         currentRole,            setCurrentRole,
         currentWaiter,          setCurrentWaiter,
+        // Cashier auth
+        currentCashier,         setCurrentCashier,
         // Branch Manager auth
         currentBranchManager,   setCurrentBranchManager,
         currentBranch,          setCurrentBranch,

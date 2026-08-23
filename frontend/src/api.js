@@ -106,6 +106,7 @@ export const authApi = {
   changePassword: (data) => request('POST', '/auth/change-password/', data),
   getWaiters: () => request('GET', '/auth/waiters/'),
   waiterLogin: (data) => request('POST', '/auth/waiter-login/', data),
+  employeeLogin: (data) => request('POST', '/auth/employee-login/', data),
 }
 
 
@@ -313,6 +314,14 @@ export const orderApi = {
 
   /** GET /orders/{id}/invoice/ */
   getInvoice: (orderId) => request('GET', `/orders/${orderId}/invoice/`),
+
+  /**
+   * POST /orders/{id}/request_bill/
+   * Waiter finalizes order: creates a Bill Request for Cashier + frees the table.
+   * Does NOT generate an invoice — that is the cashier's job.
+   */
+  requestBill: (orderId) =>
+    request('POST', `/orders/${orderId}/request_bill/`),
 }
 
 // ── Invoice API ───────────────────────────────────────────────────────────────
@@ -503,3 +512,29 @@ export const expenseApi = {
   /** DELETE /expenses/{id}/ */
   delete: (id) => request('DELETE', `/expenses/${id}/`),
 }
+
+// ── Cashier API ───────────────────────────────────────────────────────────────
+
+export const cashierApi = {
+  /** GET /cashiers/ — list cashiers */
+  list: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/cashiers/${qs ? `?${qs}` : ''}`)
+  },
+
+  /** GET /cashiers/{id}/ */
+  get: (id) => request('GET', `/cashiers/${id}/`),
+
+  /** POST /cashiers/ — create new cashier */
+  create: (data) => request('POST', '/cashiers/', data),
+
+  /** PATCH /cashiers/{id}/ — update existing cashier */
+  update: (id, data) => request('PATCH', `/cashiers/${id}/`, data),
+
+  /** DELETE /cashiers/{id}/ — delete cashier */
+  delete: (id) => request('DELETE', `/cashiers/${id}/`),
+
+  /** PATCH /cashiers/{id}/set_active/ — toggle active status */
+  setActive: (id, is_active) => request('PATCH', `/cashiers/${id}/set_active/`, { is_active }),
+}
+

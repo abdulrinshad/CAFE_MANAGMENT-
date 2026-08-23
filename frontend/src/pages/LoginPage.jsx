@@ -6,7 +6,7 @@ import './LoginPage.css'
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { login, loginWaiter, loginBranchManager } = useApp()
+  const { login, loginWaiter, loginBranchManager, loginEmployee } = useApp()
 
   // 'admin' | 'waiter' | 'branch_manager' | 'cashier'
   const [loginMode, setLoginMode] = useState('admin')
@@ -33,11 +33,11 @@ export default function LoginPage() {
   const [bmError,   setBmError]   = useState('')
   const [bmLoading, setBmLoading] = useState(false)
 
-  // ── Cashier / POS credentials ──────────────────────────────────────────────
-  const [cashierEmail,    setCashierEmail]    = useState('')
-  const [cashierPassword, setCashierPassword] = useState('')
-  const [cashierError,    setCashierError]    = useState('')
-  const [cashierLoading,  setCashierLoading]  = useState(false)
+  // ── Cashier / POS credentials (Employee ID + PIN) ───────────────────────────
+  const [cashierEmpId,  setCashierEmpId]  = useState('')
+  const [cashierPin,    setCashierPin]    = useState('')
+  const [cashierError,  setCashierError]  = useState('')
+  const [cashierLoading,setCashierLoading]= useState(false)
 
   // Load waiters when waiter tab is active
   useEffect(() => {
@@ -67,8 +67,8 @@ export default function LoginPage() {
     setPin('')
     setBmId('')
     setBmPin('')
-    setCashierEmail('')
-    setCashierPassword('')
+    setCashierEmpId('')
+    setCashierPin('')
   }
 
   // ── Admin login ────────────────────────────────────────────────────────────
@@ -137,19 +137,24 @@ export default function LoginPage() {
     }
   }
 
-  // ── Cashier / POS login ────────────────────────────────────────────────────
+  // ── Cashier / POS Employee ID + PIN login ─────────────────────────────
   const handleCashierLogin = async (e) => {
     e.preventDefault()
-    if (!cashierEmail.trim() || !cashierPassword.trim()) { setCashierError('Please enter both email/username and password.'); return }
+    if (!cashierEmpId.trim()) { setCashierError('Please enter your Employee ID.'); return }
+    if (!cashierPin.trim())   { setCashierError('Please enter your PIN.'); return }
     setCashierError('')
     setCashierLoading(true)
     try {
-      try { localStorage.removeItem('artisan_waiter') } catch {}
-      const user = await login(cashierEmail.trim(), cashierPassword.trim())
-      navigate('/pos/dashboard')
+      const res = await loginEmployee(cashierEmpId.trim(), cashierPin.trim())
+      if (res.role === 'cashier') {
+        navigate('/cashier/dashboard')
+      } else {
+        // Waiter logged in via cashier tab — redirect to waiter dashboard
+        navigate('/dashboard')
+      }
     } catch (err) {
       console.error(err)
-      setCashierError(err.message || 'Invalid cashier credentials.')
+      setCashierError(err.message || 'Invalid Employee ID or PIN.')
     } finally {
       setCashierLoading(false)
     }
@@ -363,36 +368,37 @@ export default function LoginPage() {
           </form>
         )}
 
-        {/* ── Cashier / POS form ── */}
+        {/* ── Cashier / POS form (Employee ID + PIN) ── */}
         {loginMode === 'cashier' && (
           <form className="login-card__form" onSubmit={handleCashierLogin} id="cashier-login-form">
             <div className="login-form__field">
-              <label className="login-form__label" htmlFor="cashier-email">Email / Username</label>
+              <label className="login-form__label" htmlFor="cashier-emp-id">Employee ID</label>
               <input
-                id="cashier-email"
+                id="cashier-emp-id"
                 type="text"
                 className="login-form__input"
-                placeholder="cashier@artisanbrew.com"
-                value={cashierEmail}
-                onChange={e => setCashierEmail(e.target.value)}
+                placeholder="e.g. EMP-001"
+                value={cashierEmpId}
+                onChange={e => setCashierEmpId(e.target.value)}
                 autoComplete="username"
               />
             </div>
             <div className="login-form__field">
-              <label className="login-form__label" htmlFor="cashier-password">Password</label>
+              <label className="login-form__label" htmlFor="cashier-pin-input">4-Digit PIN</label>
               <input
-                id="cashier-password"
+                id="cashier-pin-input"
                 type="password"
                 className="login-form__input"
-                placeholder="••••••••"
-                value={cashierPassword}
-                onChange={e => setCashierPassword(e.target.value)}
+                placeholder="••••"
+                maxLength={4}
+                value={cashierPin}
+                onChange={e => setCashierPin(e.target.value)}
                 autoComplete="current-password"
               />
             </div>
             {cashierError && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{cashierError}</div>}
             <button type="submit" className="login-form__submit" id="btn-cashier-login" disabled={cashierLoading}>
-              {cashierLoading ? 'Signing into POS...' : 'Login to POS'}
+              {cashierLoading ? 'Verifying...' : 'Login to POS'}
               <span className="login-form__submit-arrow">→</span>
             </button>
           </form>

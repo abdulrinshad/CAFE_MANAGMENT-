@@ -2,18 +2,21 @@
  * OrderDetailPage — /orders/:id
  *
  * Waiter workflow:
- *   New → [Mark Preparing] → [Mark Ready] → [Mark Completed] → [Generate Bill]
+ *   New → [Mark Preparing] → [Mark Ready] → [Mark Served] → [+ Add Extra Item] → [✓ Finalize / Request Bill]
+ *   After bill request: read-only status view (Requested / Processing / Ready / Completed)
  *
  * Rules:
  *  - Status advances one step at a time (enforced by backend too)
- *  - Generate Bill is ONLY available once status = COMPLETED
- *  - Qty +/− controls persist to backend
- *  - Table stays OCCUPIED until bill/payment is done
+ *  - "+ Add Extra Item" navigates to /orders/:id/add-items (existing flow)
+ *  - "✓ Finalize / Request Bill" calls /orders/:id/request_bill/ → BILL_REQUESTED
+ *  - Once BILL_REQUESTED: waiter can only see status, cannot modify anything
+ *  - Generate Bill, complete_order, complete_payment are Cashier-only (hidden from waiter)
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
-import { orderApi } from '../api'
+import { useApp } from '../context/AppContext'
+import { orderApi, waiterRequestApi } from '../api'
 import './OrderDetailPage.css'
 
 // ── Status config ──────────────────────────────────────────────────────────────
@@ -26,12 +29,13 @@ const STEP_LABELS   = {
   BILL_REQUESTED: 'BILL REQUESTED',
 }
 
-// next step to advance to (from current)
+// next step to advance to (from current) — waiter kitchen progression only
 const NEXT_STATUS = {
-  PENDING:   { api: 'preparing',      label: 'Mark Preparing' },
-  PREPARING: { api: 'ready',          label: 'Mark Ready'     },
-  READY:     { api: 'completed',      label: 'Mark Served'  },
-  COMPLETED: { api: 'bill_requested', label: 'Request Bill'  },
+  PENDING:   { api: 'preparing', label: 'Mark Preparing' },
+  PREPARING: { api: 'ready',     label: 'Mark Ready'     },
+  READY:     { api: 'completed', label: 'Mark Served'    },
+  // COMPLETED → waiter uses "Finalize / Request Bill" instead of status advance
+  // BILL_REQUESTED → no further advance by waiter
 }
 
 function stepIndex(s) {
@@ -67,20 +71,38 @@ function validateWhatsApp(num) {
   return digits.length === 10 || (digits.length === 12 && digits.startsWith('91'))
 }
 
+// Map WaiterRequest status → display label for waiter read-only view
+function billRequestStatusLabel(rawStatus) {
+  if (!rawStatus) return 'Requested'
+  const s = rawStatus.toLowerCase()
+  if (s === 'new')         return 'Requested'
+  if (s === 'in_progress') return 'Processing'
+  if (s === 'ready')       return 'Ready'
+  if (s === 'completed')   return 'Completed'
+  return rawStatus
+}
+
 export default function OrderDetailPage() {
   const { id }   = useParams()
   const navigate = useNavigate()
+  const { currentRole } = useApp()
 
   const [order,       setOrder]       = useState(null)
   const [loading,     setLoading]     = useState(true)
   const [error,       setError]       = useState('')
-  const [advancing,   setAdvancing]   = useState(false)  // advancing status
+  const [advancing,   setAdvancing]   = useState(false)
   const [advError,    setAdvError]    = useState('')
   const [updating,    setUpdating]    = useState(null)    // item id being updated
 
-  // ── Generate Bill modal ───────────────────────────────────────────────────
+  // ── Bill request state ────────────────────────────────────────────────────
+  const [requestingBill,  setRequestingBill]  = useState(false)
+  const [requestBillErr,  setRequestBillErr]  = useState('')
+  const [requestBillOk,   setRequestBillOk]   = useState(false)
+  const [billRequestData, setBillRequestData] = useState(null)  // WaiterRequest data after submission
+
+  // ── Generate Bill modal (cashier/admin/manager only) ──────────────────────
   const [showBillModal, setShowBillModal] = useState(false)
-  const [billStep,      setBillStep]      = useState('choose') // 'choose' | 'whatsapp'
+  const [billStep,      setBillStep]      = useState('choose')
   const [customerName,  setCustomerName]  = useState('')
   const [whatsapp,      setWhatsapp]      = useState('')
   const [waError,       setWaError]       = useState('')
@@ -88,23 +110,65 @@ export default function OrderDetailPage() {
   const [billLoading,   setBillLoading]   = useState(false)
   const [billError,     setBillError]     = useState('')
 
+  const isWaiter = currentRole === 'waiter'
+
   // ── Load ─────────────────────────────────────────────────────────────────
   const loadOrder = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const data = await orderApi.get(id)
-      setOrder(normaliseOrder(data))
+      const norm = normaliseOrder(data)
+      setOrder(norm)
+      // If already bill_requested, try to find the associated bill request
+      if (norm.status === 'BILL_REQUESTED' && !billRequestData) {
+        try {
+          const requests = await waiterRequestApi.list()
+          const items = Array.isArray(requests) ? requests : (requests.results ?? [])
+          // Find the most recent open bill request linked to this order's table
+          const linked = items.find(r =>
+            r.request_type === 'Bill Request' &&
+            r.table === norm.table_id
+          ) || items.find(r =>
+            r.request_type === 'Bill Request' &&
+            r.order_id === norm.id
+          ) || items.find(r => r.request_type === 'Bill Request')
+          if (linked) setBillRequestData(linked)
+        } catch (_) {}
+      }
     } catch {
       setError('Order not found or could not be loaded.')
     } finally {
       setLoading(false)
     }
-  }, [id])
+  }, [id, billRequestData])
 
-  useEffect(() => { loadOrder() }, [loadOrder])
+  useEffect(() => { loadOrder() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Advance status ────────────────────────────────────────────────────────
+  // Poll bill request status every 10s when in BILL_REQUESTED state
+  useEffect(() => {
+    if (!order || order.status !== 'BILL_REQUESTED') return
+    const interval = setInterval(async () => {
+      try {
+        const fresh = await orderApi.get(id)
+        setOrder(normaliseOrder(fresh))
+        // Refresh bill request data
+        const requests = await waiterRequestApi.list()
+        const items = Array.isArray(requests) ? requests : (requests.results ?? [])
+        const linked = items.find(r =>
+          r.request_type === 'Bill Request' && (
+            r.order_id === fresh.id ||
+            r.table === fresh.table_id ||
+            r.table === fresh.table
+          )
+        )
+        if (linked) setBillRequestData(linked)
+      } catch (_) {}
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [id, order?.status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Advance status (kitchen progression: pending→preparing→ready→completed) ──
   const handleAdvanceStatus = async () => {
     if (!order) return
     const next = NEXT_STATUS[order.status]
@@ -116,15 +180,33 @@ export default function OrderDetailPage() {
       setOrder(normaliseOrder(updated))
     } catch (err) {
       const msg = err.message || ''
-      // Try to extract Django's 'detail' message
       try {
         const obj = JSON.parse(msg)
         setAdvError(obj.detail || 'Failed to update status.')
       } catch {
-        setAdvError('Failed to update status. Please try again.')
+        setAdvError(msg || 'Failed to update status. Please try again.')
       }
     } finally {
       setAdvancing(false)
+    }
+  }
+
+  // ── Request Bill (waiter → cashier) ───────────────────────────────────────
+  const handleRequestBill = async () => {
+    setRequestingBill(true)
+    setRequestBillErr('')
+    setRequestBillOk(false)
+    try {
+      const res = await orderApi.requestBill(id)
+      setRequestBillOk(true)
+      if (res?.request) setBillRequestData(res.request)
+      // Reload order to get BILL_REQUESTED status
+      const fresh = await orderApi.get(id)
+      setOrder(normaliseOrder(fresh))
+    } catch (err) {
+      setRequestBillErr(err.message || 'Failed to send bill request.')
+    } finally {
+      setRequestingBill(false)
     }
   }
 
@@ -132,7 +214,6 @@ export default function OrderDetailPage() {
   const handleQtyChange = async (item, delta) => {
     const newQty = item.qty + delta
     if (newQty < 1) return
-    // Optimistic
     setOrder((prev) => ({
       ...prev,
       items: prev.items.map((it) =>
@@ -166,7 +247,7 @@ export default function OrderDetailPage() {
     }
   }
 
-  // ── Generate Bill submit ──────────────────────────────────────────────────
+  // ── Generate Bill submit (cashier/admin/manager only) ─────────────────────
   const handleGenerateBillSubmit = async (method, phoneVal = '') => {
     setWaError('')
     setNameError('')
@@ -174,7 +255,6 @@ export default function OrderDetailPage() {
     let normalized = ''
 
     if (method === 'whatsapp') {
-      // Validate customer name
       if (!customerName.trim()) {
         setNameError('Customer name is required.')
         return
@@ -228,11 +308,18 @@ export default function OrderDetailPage() {
     )
   }
 
-  const currentStep = stepIndex(order.status)
-  const nextStep    = NEXT_STATUS[order.status]           // null when COMPLETED / CANCELLED
-  const isCompleted = order.status === 'COMPLETED'
-  const isCancelled = order.status === 'CANCELLED'
-  const isEditable  = !isCompleted && !isCancelled
+  const currentStep     = stepIndex(order.status)
+  const nextStep        = NEXT_STATUS[order.status]   // null for COMPLETED, BILL_REQUESTED, CANCELLED
+  const isCompleted     = order.status === 'COMPLETED'
+  const isCancelled     = order.status === 'CANCELLED'
+  const isBillRequested = order.status === 'BILL_REQUESTED'
+  // Editable = waiter can change qty / remove items
+  const isEditable      = !isCompleted && !isCancelled && !isBillRequested
+
+  // Bill request display status
+  const brStatus = billRequestData
+    ? billRequestStatusLabel(billRequestData.status)
+    : (isBillRequested ? 'Requested' : null)
 
   return (
     <AdminLayout searchPlaceholder="Search orders...">
@@ -265,7 +352,7 @@ export default function OrderDetailPage() {
               Print Receipt
             </button>
 
-            {/* Step-advance button (New→Preparing→Ready→Completed) */}
+            {/* Kitchen step-advance: pending→preparing→ready→completed */}
             {nextStep && (
               <button
                 className="advance-status-btn"
@@ -289,8 +376,8 @@ export default function OrderDetailPage() {
               </button>
             )}
 
-            {/* Generate Bill — ONLY after Completed */}
-            {isCompleted && (
+            {/* Generate Bill — cashier/admin/manager only, ONLY after Completed or Bill Requested */}
+            {(isCompleted || isBillRequested) && !isWaiter && (
               <button
                 className="btn-primary"
                 onClick={() => {
@@ -353,7 +440,7 @@ export default function OrderDetailPage() {
             })}
           </div>
 
-          {/* Inline next-step CTA below stepper */}
+          {/* Kitchen next-step CTA below stepper (pending→preparing→ready→completed) */}
           {nextStep && (
             <div className="stepper-advance-wrap">
               <button
@@ -375,15 +462,30 @@ export default function OrderDetailPage() {
                 )}
               </button>
               <span className="stepper-advance-hint">
-                {order.status === 'PENDING' && 'Kitchen received? Mark as Preparing.'}
+                {order.status === 'PENDING'   && 'Kitchen received? Mark as Preparing.'}
                 {order.status === 'PREPARING' && 'Food ready? Mark as Ready.'}
-                {order.status === 'READY' && 'Served to customer? Mark as Completed to enable billing.'}
+                {order.status === 'READY'     && 'Delivered to customer’s table? Mark as Served.'}
               </span>
             </div>
           )}
+
+          {/* After COMPLETED — waiter sees extra items + finalize CTA */}
           {isCompleted && (
             <div className="stepper-complete-note">
-              ✓ Order served. You can now <strong>Generate Bill</strong>.
+              ✓ Order served. Add extra items if needed, then <strong>Request Bill from Cashier</strong>.
+            </div>
+          )}
+
+          {/* BILL_REQUESTED — read-only status for waiter */}
+          {isBillRequested && brStatus && (
+            <div className="stepper-complete-note" style={{
+              background: 'linear-gradient(135deg, rgba(22,163,74,0.12), rgba(21,128,61,0.08))',
+              border: '1px solid rgba(22,163,74,0.25)',
+              color: '#4ade80',
+            }}>
+              ✓ Bill request sent to Cashier.{' '}
+              <strong>Status: {brStatus}</strong>
+              {brStatus === 'Completed' && ' — Bill processed by Cashier.'}
             </div>
           )}
         </div>
@@ -394,7 +496,18 @@ export default function OrderDetailPage() {
           <div className="order-detail__items-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 className="order-detail__section-title">Current Items</h2>
-              {isEditable && (
+              {/* + Add Extra Item — waiter, when order is COMPLETED and NOT yet bill-requested */}
+              {isCompleted && !isBillRequested && (
+                <button
+                  className="btn-outline btn-sm"
+                  onClick={() => navigate(`/orders/${id}/add-items`)}
+                  id="add-extra-item-btn"
+                >
+                  + Add Extra Item
+                </button>
+              )}
+              {/* Add More Items — when order is still active (pre-served) */}
+              {isEditable && !isCompleted && (
                 <button
                   className="btn-outline btn-sm"
                   onClick={() => navigate(`/orders/${id}/add-items`)}
@@ -480,11 +593,100 @@ export default function OrderDetailPage() {
               </div>
             )}
 
-            {/* Generate Bill — bottom of right column, ONLY when completed */}
-            {isCompleted && (
+            {/* ── Waiter: COMPLETED state — Add Extra Item + Finalize / Request Bill ── */}
+            {isCompleted && !isCancelled && (
+              <div style={{ marginTop: 16 }}>
+                {/* Add Extra Item button */}
+                <button
+                  className="btn-outline"
+                  style={{
+                    width: '100%',
+                    marginBottom: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 8,
+                    padding: '11px 16px',
+                    fontWeight: 600,
+                  }}
+                  onClick={() => navigate(`/orders/${id}/add-items`)}
+                  id="btn-add-extra-item"
+                >
+                  + Add Extra Item
+                </button>
+
+                {/* Finalize / Request Bill */}
+                {requestBillErr && (
+                  <div style={{ color: '#f87171', fontSize: 12, marginBottom: 8, textAlign: 'center',
+                    background: 'rgba(248,113,113,0.08)', padding: '6px 8px', borderRadius: 6 }}>
+                    {requestBillErr}
+                  </div>
+                )}
+                {requestBillOk && (
+                  <div style={{ color: '#4ade80', fontSize: 12, marginBottom: 8, textAlign: 'center',
+                    background: 'rgba(74,222,128,0.08)', padding: '6px 8px', borderRadius: 6 }}>
+                    ✓ Bill request sent to Cashier!
+                  </div>
+                )}
+                <button
+                  className="btn-primary"
+                  style={{
+                    width: '100%',
+                    background: 'linear-gradient(135deg,#16a34a 0%,#15803d 100%)',
+                    boxShadow: '0 4px 14px rgba(22,163,74,.35)',
+                  }}
+                  onClick={handleRequestBill}
+                  disabled={requestingBill || requestBillOk}
+                  id="btn-request-bill-cashier"
+                >
+                  {requestingBill ? 'Sending…' : requestBillOk ? '✓ Sent!' : '✓ Finalize / Request Bill'}
+                </button>
+              </div>
+            )}
+
+            {/* ── BILL_REQUESTED: waiter read-only status ── */}
+            {isBillRequested && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{
+                  borderRadius: 10,
+                  background: 'linear-gradient(135deg, rgba(22,163,74,0.10), rgba(21,128,61,0.06))',
+                  border: '1px solid rgba(22,163,74,0.2)',
+                  padding: '14px 16px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 18 }}>🧾</span>
+                    <span style={{ fontWeight: 700, color: '#4ade80', fontSize: 14 }}>Bill Requested</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 6 }}>
+                    Request sent to Cashier. Current status:
+                  </div>
+                  <div style={{
+                    display: 'inline-block',
+                    padding: '4px 12px',
+                    borderRadius: 20,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    letterSpacing: 0.5,
+                    background: brStatus === 'Completed'
+                      ? 'rgba(22,163,74,0.2)' : 'rgba(99,102,241,0.15)',
+                    color: brStatus === 'Completed' ? '#4ade80' : '#a5b4fc',
+                    border: brStatus === 'Completed'
+                      ? '1px solid rgba(22,163,74,0.3)' : '1px solid rgba(99,102,241,0.25)',
+                  }}>
+                    {brStatus || 'Requested'}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 10 }}>
+                    The Cashier will process payment and generate the bill.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Generate Bill — cashier/admin/manager only, when completed or bill_requested */}
+            {(isCompleted || isBillRequested) && !isWaiter && (
               <button
                 className="btn-primary"
-                style={{ width: '100%', marginTop: 16 }}
+                style={{ width: '100%', marginTop: 8 }}
                 onClick={() => {
                   setShowBillModal(true)
                   setBillStep('choose')
@@ -494,22 +696,16 @@ export default function OrderDetailPage() {
                   setNameError('')
                   setBillError('')
                 }}
+                id="generate-bill-summary-btn"
               >
-                Generate Bill
+                Generate Bill (Invoice)
               </button>
-            )}
-
-            {/* Hint when not completed yet */}
-            {!isCompleted && !isCancelled && (
-              <div className="summary-not-ready-hint">
-                Complete all steps first to generate the bill.
-              </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ── Generate Bill Modal ── */}
+      {/* ── Generate Bill Modal (cashier/admin/manager only) ── */}
       {showBillModal && (
         <div className="od-modal-backdrop" onClick={() => !billLoading && setShowBillModal(false)}>
           <div className="od-modal" onClick={(e) => e.stopPropagation()}>
@@ -572,7 +768,6 @@ export default function OrderDetailPage() {
               </>
             ) : (
               <>
-                {/* Customer Name field */}
                 <div className="od-modal__field" style={{ marginTop: 12 }}>
                   <label className="od-modal__label" htmlFor="customer-name-input">
                     Customer Name
@@ -590,7 +785,6 @@ export default function OrderDetailPage() {
                   {nameError && <p className="od-modal__field-error">{nameError}</p>}
                 </div>
 
-                {/* WhatsApp Number field */}
                 <div className="od-modal__field" style={{ marginTop: 14 }}>
                   <label className="od-modal__label" htmlFor="whatsapp-input">
                     WhatsApp Number

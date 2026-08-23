@@ -289,6 +289,28 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
     def set_status(self, request, pk=None):
         req_obj = self.get_object()
         new_status = request.data.get('status')
+
+        # ── Permission guard ──────────────────────────────────────────────────
+        # Waiters can only view bill requests. They cannot progress status.
+        if req_obj.request_type == 'Bill Request':
+            user = getattr(request, 'user', None)
+            is_waiter = False
+            if user and user.is_authenticated:
+                if user.username and user.username.startswith('waiter_'):
+                    is_waiter = True
+                elif hasattr(user, 'profile') and user.profile.role == 'STAFF':
+                    is_waiter = True
+            if is_waiter:
+                return Response(
+                    {
+                        'detail': (
+                            'Waiter cannot update bill request status. '
+                            'Only the Cashier can process or complete a bill request.'
+                        )
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
         if new_status:
             req_obj.status = new_status.lower()
         if 'assigned_waiter' in request.data:

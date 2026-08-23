@@ -83,6 +83,35 @@ from accounts.utils import get_waiter_branch
 from rest_framework.exceptions import PermissionDenied
 
 
+def _is_waiter_user(request):
+    """Return True if the authenticated user is a waiter shadow account (STAFF role)."""
+    user = getattr(request, 'user', None)
+    if not user or not user.is_authenticated:
+        return False
+    # Shadow waiter accounts use username='waiter_{id}'
+    if user.username and user.username.startswith('waiter_'):
+        return True
+    # Also check profile role
+    if hasattr(user, 'profile') and user.profile.role == 'STAFF':
+        return True
+    return False
+
+
+def _is_cashier_or_above(request):
+    """Return True if the authenticated user is a cashier, manager, or admin."""
+    user = getattr(request, 'user', None)
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser or user.is_staff:
+        return True
+    if hasattr(user, 'profile'):
+        return user.profile.role in ['ADMIN', 'MANAGER', 'CASHIER']
+    # Cashier shadow accounts
+    if user.username and user.username.startswith('cashier_'):
+        return True
+    return False
+
+
 class OrderViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrManagerOrStaff]
     queryset = Order.objects.select_related('table', 'branch').prefetch_related('items__product').all()
@@ -134,6 +163,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         """
         Advance order status one step at a time:
           pending → preparing → ready → completed
+          bill_requested → completed  (cashier confirms payment received)
 
         Table.status stays OCCUPIED for all active states.
         Table becomes AVAILABLE only after complete_order (bill paid).
@@ -144,9 +174,10 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         # Allowed step-by-step transitions
         TRANSITIONS = {
-            Order.STATUS_PENDING:   Order.STATUS_PREPARING,
-            Order.STATUS_PREPARING: Order.STATUS_READY,
-            Order.STATUS_READY:     Order.STATUS_COMPLETED,
+            Order.STATUS_PENDING:        Order.STATUS_PREPARING,
+            Order.STATUS_PREPARING:      Order.STATUS_READY,
+            Order.STATUS_READY:          Order.STATUS_COMPLETED,   # waiter: Mark Served
+            Order.STATUS_BILL_REQUESTED: Order.STATUS_COMPLETED,   # cashier: confirm payment
         }
         CANCELLED = Order.STATUS_CANCELLED
 
@@ -202,6 +233,17 @@ class OrderViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='add_item')
     def add_item(self, request, pk=None):
         order = self.get_object()
+        # Waiters can add extra items to any active order including COMPLETED (served).
+        # Only block adding to BILL_REQUESTED (already sent to cashier) or CANCELLED orders.
+        blocked_statuses = [
+            Order.STATUS_BILL_REQUESTED,
+            Order.STATUS_CANCELLED,
+        ]
+        if _is_waiter_user(request) and order.status in blocked_statuses:
+            return Response(
+                {'detail': f'Cannot add items to a "{order.status}" order.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = OrderItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = serializer.save(order=order)
@@ -307,7 +349,15 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         Creates or updates an Invoice for this order.
         Returns the Invoice data including invoice_number and receipt_url.
+        CASHIER / MANAGER / ADMIN only — waiters are not permitted.
         """
+        # ── Permission guard: waiter cannot generate bills ─────────────────────
+        if _is_waiter_user(request):
+            return Response(
+                {'detail': 'Only a Cashier can generate the bill. Please submit a Bill Request instead.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         from django.db import transaction
 
         order = self.get_object()
@@ -419,6 +469,159 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         return Response(
             InvoiceSerializer(invoice, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'], url_path='request_bill')
+    def request_bill(self, request, pk=None):
+        """
+        POST /orders/{id}/request_bill/
+
+        Waiter finalizes order and sends a Bill Request to the Cashier for their branch.
+
+        Flow:
+          1. Guard: order must not already be bill_requested, completed, or cancelled.
+          2. Guard against duplicate bill requests (idempotent within the same order).
+          3. Refresh & snapshot the current order totals.
+          4. Create a WaiterRequest of type 'Bill Request' on the table (for the Cashier).
+          5. Set order status → bill_requested.
+          6. Set table status → available (frees it for the next customer).
+
+        The Cashier sees this request on their Bill Requests page and handles
+        invoice/payment generation separately (not done here).
+        """
+        from django.db import transaction
+
+        order = self.get_object()
+
+        if order.status == Order.STATUS_CANCELLED:
+            return Response(
+                {'detail': 'Cannot request bill for a cancelled order.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if order.status == Order.STATUS_BILL_REQUESTED:
+            # Idempotent: already submitted; return the existing open request
+            from menu.models import WaiterRequest
+            existing = WaiterRequest.objects.filter(
+                table_id=order.table_id,
+                request_type='Bill Request',
+                status__in=[WaiterRequest.STATUS_NEW, WaiterRequest.STATUS_IN_PROGRESS],
+            ).first()
+            from menu.serializers import WaiterRequestSerializer
+            return Response(
+                {
+                    'detail': 'Bill request already submitted.',
+                    'request': WaiterRequestSerializer(existing, context={'request': request}).data if existing else None,
+                    'order_total': str(order.total),
+                },
+                status=status.HTTP_200_OK
+            )
+
+        if not order.table_id:
+            return Response(
+                {'detail': 'This order is not linked to a table.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Enforce the required flow: order must be COMPLETED (Served) before bill can be requested.
+        # Waiters must mark the order as Served first, then Finalize / Request Bill.
+        if order.status != Order.STATUS_COMPLETED:
+            return Response(
+                {
+                    'detail': (
+                        f'Cannot request bill — order is "{order.status}". '
+                        'Please mark the order as Served first.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            order.recalculate_totals()
+            order.refresh_from_db()
+
+            from menu.models import Table, WaiterRequest
+
+            # Idempotency: check for an existing open Bill Request for this order's table
+            existing = WaiterRequest.objects.filter(
+                table_id=order.table_id,
+                request_type='Bill Request',
+                status__in=[WaiterRequest.STATUS_NEW, WaiterRequest.STATUS_IN_PROGRESS],
+            ).first()
+
+            if existing:
+                # Mark order as bill_requested without creating a new request
+                if order.status != Order.STATUS_BILL_REQUESTED:
+                    Order.objects.filter(pk=order.pk).update(status=Order.STATUS_BILL_REQUESTED)
+                from menu.serializers import WaiterRequestSerializer
+                return Response(
+                    {
+                        'detail': 'Bill request already submitted.',
+                        'request': WaiterRequestSerializer(existing, context={'request': request}).data,
+                        'order_total': str(order.total),
+                    },
+                    status=status.HTTP_200_OK
+                )
+
+            # Resolve the branch for this table
+            table = Table.objects.select_related('branch').get(pk=order.table_id)
+            branch = table.branch or order.branch
+
+            # Build a summary message with all order items for the cashier
+            items_text = '; '.join(
+                f'{item.quantity}× {item.product_name} (₹{item.unit_price})'
+                for item in order.items.all()
+            )
+            message = (
+                f'Order {order.order_number} | '
+                f'Customer: {order.customer_name or "Guest"} | '
+                f'Items: {items_text} | '
+                f'Subtotal: ₹{order.subtotal} | '
+                f'Tax (5%%): ₹{order.tax_amount} | '
+                f'Total: ₹{order.total}'
+            )
+
+            bill_request = WaiterRequest.objects.create(
+                table=table,
+                branch=branch,
+                request_type='Bill Request',
+                message=message,
+                status=WaiterRequest.STATUS_NEW,
+                amount=order.total,
+            )
+
+            # Mark order as bill_requested
+            Order.objects.filter(pk=order.pk).update(status=Order.STATUS_BILL_REQUESTED)
+            order.status = Order.STATUS_BILL_REQUESTED
+
+            # Free the table — the waiter is done, cashier takes over
+            Table.objects.filter(pk=order.table_id).update(
+                status=Table.STATUS_AVAILABLE,
+                current_order_ref='',
+            )
+
+            # Optionally create a notification for admin/cashier visibility
+            try:
+                from notifications.models import Notification
+                Notification.objects.create(
+                    type=Notification.TYPE_BILL_REQUESTED,
+                    title=f'Bill Request — {table.name}',
+                    message=f'Waiter requested bill for Order {order.order_number}. Total: ₹{order.total}.',
+                    order=order,
+                    table=table,
+                    status=Notification.STATUS_NEW,
+                )
+            except Exception:
+                pass
+
+        from menu.serializers import WaiterRequestSerializer
+        return Response(
+            {
+                'detail': 'Bill request submitted. Table is now available.',
+                'request': WaiterRequestSerializer(bill_request, context={'request': request}).data,
+                'order_total': str(order.total),
+            },
             status=status.HTTP_201_CREATED,
         )
 
@@ -586,6 +789,12 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post', 'patch'], url_path='complete_payment')
     def complete_payment(self, request, pk=None):
+        # Waiter cannot complete payment — cashier only
+        if _is_waiter_user(request):
+            return Response(
+                {'detail': 'Only a Cashier can process payment.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         return self.complete_order(request, pk=pk)
 
     @action(detail=True, methods=['post'], url_path='complete_order')
@@ -599,7 +808,15 @@ class OrderViewSet(viewsets.ModelViewSet):
         2. Mark invoice paid
         3. Create/update payment record
         4. Release table
+        CASHIER / MANAGER / ADMIN only.
         """
+        # Waiter cannot complete the order — cashier only
+        if _is_waiter_user(request):
+            return Response(
+                {'detail': 'Only a Cashier can complete an order and process payment.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         from django.db import transaction
 
         order = self.get_object()

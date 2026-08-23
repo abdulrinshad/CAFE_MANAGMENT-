@@ -145,6 +145,7 @@
   flex-direction: column;
   gap: 8px;
 }
+
 .aip-item-row {
   display: flex;
   align-items: center;
@@ -445,6 +446,7 @@
   color: var(--color-espresso, #3d2314);
 }
 
+/* ── Spinner ── */
 /* ── Spinner inline ── */
 .aip-spinner {
   display: inline-block;
@@ -454,6 +456,12 @@
   border-radius: 50%;
   animation: aip-spin 0.65s linear infinite;
   flex-shrink: 0;
+}
+
+/* Dark spinner variant for light backgrounds */
+.aip-spinner--dark {
+  border-color: rgba(61, 35, 20, 0.2);
+  border-top-color: var(--color-espresso, #3d2314);
 }
 
 /* ── Locked state ── */
@@ -658,6 +666,7 @@
   font-weight: 700;
   color: var(--color-espresso, #3d2314);
 }
+.aip-product-card__add { margin-top: 4px; }
 .aip-product-card__add {
   margin-top: 4px;
 }
