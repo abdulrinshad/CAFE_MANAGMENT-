@@ -1159,33 +1159,45 @@ class DashboardStatsView(APIView):
         today_ready     = today_qs.filter(status=Order.STATUS_READY).count()
         today_cancelled = today_qs.filter(status=Order.STATUS_CANCELLED).count()
 
-        # Active tables (occupied or bill_requested or needs_attention)
+        # Active tables (active floor tables in database)
         try:
             from menu.models import Table
             tables_qs = Table.objects.filter(active=True)
             if waiter_branch:
                 tables_qs = tables_qs.filter(Q(branch=waiter_branch) | Q(branch__isnull=True))
-            active_tables = tables_qs.filter(
-                status__in=['occupied', 'bill_requested', 'needs_attention']
-            ).count()
-            pending_bills = tables_qs.filter(status='bill_requested').count()
-            total_tables  = tables_qs.count()
+            active_tables    = tables_qs.filter(active=True).count()
+            occupied_tables  = tables_qs.filter(status='occupied').count()
+            available_tables = tables_qs.filter(status='available').count()
+            pending_bills    = tables_qs.filter(status__in=['bill_requested', 'needs_attention']).count()
+            total_tables     = tables_qs.count()
         except Exception:
-            active_tables = 0
-            pending_bills = 0
-            total_tables  = 0
+            active_tables    = 0
+            occupied_tables  = 0
+            available_tables = 0
+            pending_bills    = 0
+            total_tables     = 0
 
-        # Active requests (new or in_progress status WaiterRequests)
+        # Active requests (table assistance requests excluding bill requests)
         try:
-            from menu.models import WaiterRequest, WaiterRequestSerializer
+            from menu.models import WaiterRequest
+            from menu.serializers import WaiterRequestSerializer
             reqs_qs = WaiterRequest.objects.all()
             if waiter_branch:
-                reqs_qs = reqs_qs.filter(branch=waiter_branch)
-            active_requests = reqs_qs.filter(
-                status__in=[WaiterRequest.STATUS_REQUESTED, WaiterRequest.STATUS_PROCESSING]
+                reqs_qs = reqs_qs.filter(Q(branch=waiter_branch) | Q(branch__isnull=True) | Q(table__branch=waiter_branch))
+
+            # Exclude bill requests (which are handled on /bill-requests under pending bills)
+            table_reqs = reqs_qs.exclude(
+                Q(request_type__icontains='bill') | Q(message__icontains='bill')
+            )
+
+            active_requests = table_reqs.filter(
+                status__in=[WaiterRequest.STATUS_REQUESTED, WaiterRequest.STATUS_PROCESSING, 'new', 'in_progress']
             ).count()
+
             recent_requests = WaiterRequestSerializer(
-                reqs_qs.order_by('-created_at')[:5], many=True, context={'request': request}
+                table_reqs.exclude(status__in=[WaiterRequest.STATUS_COMPLETED, WaiterRequest.STATUS_DISMISSED]).order_by('-created_at')[:5],
+                many=True,
+                context={'request': request}
             ).data
         except Exception:
             active_requests = 0
@@ -1196,7 +1208,7 @@ class DashboardStatsView(APIView):
         if waiter_branch:
             all_orders_qs = all_orders_qs.filter(branch=waiter_branch)
         active_orders = all_orders_qs.filter(
-            status__in=[Order.STATUS_PENDING, Order.STATUS_PREPARING, Order.STATUS_READY]
+            status__in=[Order.STATUS_PENDING, Order.STATUS_PREPARING, Order.STATUS_READY, Order.STATUS_BILL_REQUESTED]
         ).count()
 
         return Response({
@@ -1210,7 +1222,8 @@ class DashboardStatsView(APIView):
             'completed':         today_completed,
             'cancelled':         today_cancelled,
             'active_tables':     active_tables,
-            'occupied_tables':   active_tables,
+            'occupied_tables':   occupied_tables,
+            'available_tables':  available_tables,
             'total_tables':      total_tables,
             'active_requests':   active_requests,
             'pending_requests':  active_requests,

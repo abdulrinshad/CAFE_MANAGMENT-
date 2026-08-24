@@ -80,7 +80,7 @@ function StatusBadge({ status }) {
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { currentRole, currentWaiter, waiterRequests, tables, orders,
-          updateRequestStatus, dismissRequest, currentUser } = useApp()
+          currentUser, fetchTables, fetchOrders, fetchWaiterRequests } = useApp()
 
   // Time-aware greeting
   const hour = new Date().getHours()
@@ -103,8 +103,10 @@ export default function DashboardPage() {
   const [bestSellers,  setBestSellers]  = useState([])
   const [chartData,    setChartData]    = useState([])
   const [loading,      setLoading]      = useState(true)
+  const [dashboardErr, setDashboardErr] = useState(null)
 
   const loadDashboard = useCallback(async () => {
+    setLoading(true)
     try {
       const [statsRes, recentsRes, bestRes, chartRes] = await Promise.all([
         dashboardApi.stats(),
@@ -116,8 +118,10 @@ export default function DashboardPage() {
       setRecentOrders(recentsRes)
       setBestSellers(bestRes)
       setChartData(chartRes.data || [])
+      setDashboardErr(null)
     } catch (err) {
       console.error('Dashboard load error:', err)
+      setDashboardErr(err.message || 'Failed to load dashboard statistics')
     } finally {
       setLoading(false)
     }
@@ -125,24 +129,39 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadDashboard()
-    // Auto-refresh dashboard every 60 seconds
-    const timer = setInterval(loadDashboard, 60000)
-    return () => clearInterval(timer)
-  }, [loadDashboard])
+    if (fetchTables) fetchTables()
+    if (fetchOrders) fetchOrders()
+    if (fetchWaiterRequests) fetchWaiterRequests()
 
-  // Waiter-specific stats (from PostgreSQL API / live context)
-  const occupiedTablesCount = stats?.occupied_tables ?? (tables ? tables.filter(t => t.status === 'occupied').length : 0)
-  const activeRequestsCount = stats?.active_requests ?? (waiterRequests ? waiterRequests.filter(r => r.status === 'new' || r.status === 'in_progress').length : 0)
-  const activeOrdersCount   = stats?.active_orders ?? (orders ? orders.filter(o => o.status === 'PREPARING' || o.status === 'PENDING').length : 0)
+    // Auto-refresh dashboard and underlying tables/orders/requests every 15 seconds
+    const timer = setInterval(() => {
+      loadDashboard()
+      if (fetchTables) fetchTables()
+      if (fetchOrders) fetchOrders()
+      if (fetchWaiterRequests) fetchWaiterRequests()
+    }, 15000)
+    return () => clearInterval(timer)
+  }, [loadDashboard, fetchTables, fetchOrders, fetchWaiterRequests])
+
+  // Waiter-specific stats (from PostgreSQL API / live backend tables)
+  const activeTablesCount   = stats?.active_tables ?? (tables ? tables.filter(t => t.active !== false).length : 0)
+
+  // Filter waiterRequests for table assistance requests (excluding bill requests, matching /requests page)
+  const tableAssistanceRequests = (waiterRequests || []).filter(
+    (wr) =>
+      wr.request_type !== 'Bill Request' &&
+      wr.request_type !== 'Request Bill' &&
+      wr.type !== 'Bill Request' &&
+      !(wr.message && wr.message.toLowerCase().includes('bill'))
+  )
+
+  const activeRequestsCount = stats?.active_requests ?? tableAssistanceRequests.filter(r => !['completed', 'dismissed', 'ready', 'done'].includes((r.status || '').toLowerCase())).length
+  const activeOrdersCount   = stats?.active_orders ?? (orders ? orders.filter(o => !['COMPLETED', 'CANCELLED'].includes((o.status || '').toUpperCase())).length : 0)
   const pendingBillsCount   = stats?.pending_bills ?? (tables ? tables.filter(t => t.status === 'needs_attention' || t.status === 'bill_requested').length : 0)
 
 
   // ── Waiter view ────────────────────────────────────────────────────────────
   if (currentRole === 'waiter') {
-    const displayRequests = (stats?.recent_requests && stats.recent_requests.length > 0)
-      ? stats.recent_requests.slice(0, 3)
-      : (waiterRequests || []).slice(0, 3)
-
     return (
       <AdminLayout
         searchPlaceholder="Search active tables, orders..."
@@ -150,10 +169,18 @@ export default function DashboardPage() {
         pageIcon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>}
       >
         <div className="dashboard">
+          {dashboardErr && (
+            <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid #fca5a5', color: '#ef4444', padding: '10px 14px', borderRadius: '8px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
+              <span>⚠️ Could not refresh dashboard data from database: {dashboardErr}</span>
+              <button onClick={() => loadDashboard()} className="btn-outline btn-sm" style={{ borderColor: '#ef4444', color: '#ef4444' }}>Retry</button>
+            </div>
+          )}
+
           <div className="dashboard__greeting">
             <h1 className="dashboard__greeting-title">Good morning, {currentWaiter?.name || currentUser?.first_name || 'Waiter'}</h1>
             <p className="dashboard__greeting-sub">Current Shift Performance · {stats?.branch || currentWaiter?.station || 'Assigned Branch'}</p>
           </div>
+
           <div className="dashboard__waiter-cta">
             <div className="waiter-cta__card">
               <div className="waiter-cta__info">
@@ -175,75 +202,35 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
           <div className="dashboard__stats-grid">
             <div className="waiter-stat-card">
               <span className="waiter-stat-card__icon text-orange">🪑</span>
               <div className="waiter-stat-card__details">
-                <span className="waiter-stat-card__val">{occupiedTablesCount}</span>
+                <span className="waiter-stat-card__val">{loading && !stats ? '—' : activeTablesCount}</span>
                 <span className="waiter-stat-card__lbl">Active Tables</span>
               </div>
             </div>
             <div className="waiter-stat-card">
               <span className="waiter-stat-card__icon text-red">🛎️</span>
               <div className="waiter-stat-card__details">
-                <span className="waiter-stat-card__val">{activeRequestsCount}</span>
+                <span className="waiter-stat-card__val">{loading && !stats ? '—' : activeRequestsCount}</span>
                 <span className="waiter-stat-card__lbl">Pending Requests</span>
               </div>
             </div>
             <div className="waiter-stat-card">
               <span className="waiter-stat-card__icon text-green">☕</span>
               <div className="waiter-stat-card__details">
-                <span className="waiter-stat-card__val">{activeOrdersCount}</span>
+                <span className="waiter-stat-card__val">{loading && !stats ? '—' : activeOrdersCount}</span>
                 <span className="waiter-stat-card__lbl">Active Orders</span>
               </div>
             </div>
             <div className="waiter-stat-card">
               <span className="waiter-stat-card__icon text-tan">💵</span>
               <div className="waiter-stat-card__details">
-                <span className="waiter-stat-card__val">{pendingBillsCount}</span>
+                <span className="waiter-stat-card__val">{loading && !stats ? '—' : pendingBillsCount}</span>
                 <span className="waiter-stat-card__lbl">Pending Bills</span>
               </div>
-            </div>
-          </div>
-          <div className="recent-requests-section">
-            <div className="recent-orders__header">
-              <h2 className="recent-orders__title">Recent Table Requests</h2>
-              <button className="recent-orders__view-all" onClick={() => navigate('/requests')}>
-                View All <span>→</span>
-              </button>
-            </div>
-            <div className="waiter-requests-list">
-              {displayRequests && displayRequests.length > 0 ? (
-                displayRequests.map((req) => {
-                  const tableLabel = req.table_name || (req.tableId ? `Table ${req.tableId.replace('T-', '')}` : `Table #${req.table || ''}`)
-                  const reqTime = req.created_at
-                    ? new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                    : (req.time || '')
-                  const reqType = req.request_type || req.type || 'Table Request'
-                  const reqStatus = (req.status || 'new').toLowerCase()
-
-                  return (
-                    <div key={req.id} className={`waiter-request-card ${reqStatus}`}>
-                      <div className="waiter-request-card__header">
-                        <span className="request-table-badge">{tableLabel}</span>
-                        {reqTime && <span className="request-time">{reqTime}</span>}
-                      </div>
-                      <div className="waiter-request-card__body">
-                        <div className="request-type-label">{reqType}</div>
-                        {req.message && <p className="request-msg">{req.message}</p>}
-                        {req.amount && <div className="request-amount">Amount: ₹{req.amount}</div>}
-                      </div>
-                      <div className="waiter-request-card__status-view">
-                        <span className={`request-status-badge status-${reqStatus}`}>
-                          {reqStatus.replace('_', ' ').toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
-                  )
-                })
-              ) : (
-                <div className="requests-empty">No requests at the moment.</div>
-              )}
             </div>
           </div>
         </div>
