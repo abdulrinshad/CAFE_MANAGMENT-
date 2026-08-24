@@ -88,8 +88,6 @@ export default function CheckoutPage() {
     setCompleting(true)
     setError('')
     try {
-      // Use AppContext.completeOrder which calls the API AND refreshes
-      // tables + orders + notifications so the floor plan updates immediately
       const result = await completeOrder(orderId, {
         method: paymentMethod,
         status: 'paid',
@@ -141,7 +139,7 @@ export default function CheckoutPage() {
           <div className="checkout-card-header">
             <button
               className="checkout-back-btn"
-              onClick={() => navigate(`/orders/${orderId}/invoice`)}
+              onClick={() => navigate(`/orders/${orderId}`)}
               aria-label="Go back"
             >←</button>
             <div>

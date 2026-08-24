@@ -226,7 +226,7 @@ export default function NewOrderPOSPage() {
             })}
             {products.length === 0 ? (
               <div className="pos-empty-products">No menu items are currently available.</div>
-) : filteredProducts.length === 0 ? (
+            ) : filteredProducts.length === 0 ? (
               <div className="pos-empty-products">No items found matching filter.</div>
             ) : null}
           </div>

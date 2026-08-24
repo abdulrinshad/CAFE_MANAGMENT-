@@ -259,7 +259,7 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/orders/:id/invoice"  element={
-          <ProtectedRoute allowedRoles={['admin', 'branch_manager', 'cashier']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'branch_manager', 'pos', 'cashier', 'waiter']}>
             <InvoicePreviewPage />
           </ProtectedRoute>
         } />
@@ -269,7 +269,7 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/orders/:id/success"  element={
-          <ProtectedRoute allowedRoles={['admin', 'branch_manager', 'cashier']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'branch_manager', 'pos', 'cashier', 'waiter']}>
             <SuccessPage />
           </ProtectedRoute>
         } />

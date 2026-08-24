@@ -898,6 +898,10 @@ class OrderViewSet(viewsets.ModelViewSet):
             if not cashier_name:
                 cashier_name = user.get_full_name() or user.username
 
+        amount_received = Decimal(str(request.data.get('amount_received') or 0))
+        change_returned = Decimal(str(request.data.get('change_returned') or 0))
+        transaction_ref = str(request.data.get('transaction_ref') or request.data.get('transactionReference') or '').strip()
+
         try:
             with transaction.atomic():
                 # Complete the order
@@ -905,6 +909,10 @@ class OrderViewSet(viewsets.ModelViewSet):
                 order.completed_at = timezone.now()
                 order.payment_method = method
                 order.payment_status = pay_status
+                order.amount_received = amount_received
+                order.change_returned = change_returned
+                if transaction_ref:
+                    order.transaction_ref = transaction_ref
                 if cashier_name:
                     order.cashier_name = cashier_name
                 if pos_terminal_obj:
@@ -914,12 +922,9 @@ class OrderViewSet(viewsets.ModelViewSet):
 
                 order.save(update_fields=[
                     'status', 'completed_at', 'payment_method', 'payment_status',
-                    'cashier_name', 'pos_terminal', 'branch', 'updated_at'
+                    'cashier_name', 'pos_terminal', 'branch', 'amount_received',
+                    'change_returned', 'transaction_ref', 'updated_at'
                 ])
-
-                # ── Mark invoice paid ────────────────────────────────────────
-                invoice = None
-                _inv_sp = transaction.savepoint()
                 try:
                     invoice = Invoice.objects.get(order=order)
                     invoice.status  = Invoice.STATUS_PAID

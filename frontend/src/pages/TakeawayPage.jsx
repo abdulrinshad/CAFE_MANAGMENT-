@@ -4,7 +4,6 @@ import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
 import './NewOrderPOSPage.css' // Reuse NewOrderPOSPage.css for identical layout styling
 
-
 const getCategoryName = (product) => {
   if (product.category_name && typeof product.category_name === 'string') {
     return product.category_name.trim()
