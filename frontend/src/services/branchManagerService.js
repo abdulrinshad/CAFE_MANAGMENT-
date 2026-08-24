@@ -19,19 +19,24 @@ export const branchManagerService = {
   },
 
   async addStaff(member) {
+    // member: { role, name, employee_id, section, pin, confirm_pin, is_active }
     return request('POST', '/branch/staff/', member);
   },
 
+  async editStaff(id, data) {
+    // id is e.g. "waiter_5" or "cashier_3"
+    return request('PATCH', `/branch/staff/${id}/`, data);
+  },
+
   async updateStaff(id, data) {
-    if (data.status) {
-      // status toggle endpoint shortcut or partial update
+    if (Object.prototype.hasOwnProperty.call(data, 'status')) {
+      // status toggle shortcut
       return request('PATCH', `/branch/staff/${id}/status/`, data);
     }
     return request('PATCH', `/branch/staff/${id}/`, data);
   },
 
   async deleteStaff(id) {
-    // If deleted from cashier, waiter or kitchen
     const roleType = id.split('_')[0];
     const rawId = id.split('_')[1];
     if (roleType === 'waiter') {
@@ -42,6 +47,7 @@ export const branchManagerService = {
       return request('DELETE', `/branch/staff/${id}/`);
     }
   },
+
 
   // ── Table Management ──
   async getTables() {

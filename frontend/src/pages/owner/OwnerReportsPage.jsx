@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
-import { reportsApi, dashboardApi } from '../../api'
-import { useApp } from '../../context/AppContext'
+import { reportsApi, branchApi } from '../../api'
 import '../DashboardPage.css'
 import './owner.css'
 
@@ -51,50 +50,107 @@ const PERIODS = [
   { key: 'daily',   label: 'Daily' },
   { key: 'weekly',  label: 'Weekly' },
   { key: 'monthly', label: 'Monthly' },
+  { key: 'manual',  label: 'Manual' },
 ]
 
+// Default date range for manual: last 7 days
+function todayStr() { return new Date().toISOString().split('T')[0] }
+function sevenDaysAgoStr() {
+  const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split('T')[0]
+}
+
 export default function OwnerReportsPage() {
-  const { orders } = useApp()
-  const [period, setPeriod] = useState('weekly')
-  const [reportType, setReportType] = useState('Sales')
-  const [summary, setSummary] = useState(null)
-  const [chartData, setChartData] = useState([])
-  const [topCats, setTopCats] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [period,       setPeriod]       = useState('weekly')
+  const [summary,      setSummary]      = useState(null)
+  const [chartData,    setChartData]    = useState([])
+  const [topCats,      setTopCats]      = useState([])
+  const [loading,      setLoading]      = useState(true)
+
+  // Manual date range state
+  const [dateFrom,     setDateFrom]     = useState(sevenDaysAgoStr())
+  const [dateTo,       setDateTo]       = useState(todayStr())
+  const [appliedFrom,  setAppliedFrom]  = useState(sevenDaysAgoStr())
+  const [appliedTo,    setAppliedTo]    = useState(todayStr())
+  const [manualReady,  setManualReady]  = useState(false)   // true once Apply is clicked
+
+  // Branch filter
+  const [branchFilter, setBranchFilter] = useState('all')
+  const [branches,     setBranches]     = useState([])
 
   useEffect(() => {
-    let active = true
-    async function loadReports() {
-      try {
-        setLoading(true)
-        const [sumData, revData, catsData] = await Promise.all([
-          reportsApi.summary({ period }).catch(() => null),
-          reportsApi.revenueChart({ period }).catch(() => null),
-          reportsApi.topCategories({ period }).catch(() => null),
-        ])
-        if (!active) return
-        setSummary(sumData)
-        if (Array.isArray(revData)) {
-          setChartData(revData.map(d => ({ label: d.label || d.day || d.date, value: d.sales || d.value || 0 })))
-        } else if (revData && Array.isArray(revData.data)) {
-          setChartData(revData.data)
-        }
-        if (Array.isArray(catsData)) {
-          setTopCats(catsData)
-        }
-      } catch (err) {
-        console.error('Load reports error:', err)
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-    loadReports()
-    return () => { active = false }
-  }, [period])
+    branchApi.list()
+      .then(data => setBranches(Array.isArray(data) ? data : (data.results ?? [])))
+      .catch(() => {})
+  }, [])
 
-  const totalSales = summary?.total_sales ?? summary?.revenue ?? orders.filter(o => o.status === 'COMPLETED').reduce((s, o) => s + (o.amount || 0), 0)
-  const totalOrders = summary?.total_orders ?? orders.length
+  const loadReports = useCallback(async () => {
+    // For manual mode, only load after Apply is clicked
+    if (period === 'manual' && !manualReady) return
+
+    let active = true
+    setLoading(true)
+    try {
+      const params = {}
+      if (branchFilter !== 'all') params.branch = branchFilter
+
+      let sumPromise, revPromise, catsPromise
+      if (period === 'manual') {
+        const manualParams = { ...params, period: 'custom', date_from: appliedFrom, date_to: appliedTo }
+        sumPromise  = reportsApi.summary(manualParams).catch(() => null)
+        revPromise  = reportsApi.revenueChart({ ...params, period: 'custom', date_from: appliedFrom, date_to: appliedTo }).catch(() => null)
+        catsPromise = reportsApi.topCategories(manualParams).catch(() => null)
+      } else {
+        sumPromise  = reportsApi.summary({ period, ...params }).catch(() => null)
+        revPromise  = reportsApi.revenueChart({ period, ...params }).catch(() => null)
+        catsPromise = reportsApi.topCategories({ period, ...params }).catch(() => null)
+      }
+
+      const [sumData, revData, catsData] = await Promise.all([sumPromise, revPromise, catsPromise])
+      if (!active) return
+
+      setSummary(sumData)
+      if (Array.isArray(revData)) {
+        setChartData(revData.map(d => ({ label: d.label || d.day || d.date, value: d.sales || d.value || 0 })))
+      } else if (revData && Array.isArray(revData.data)) {
+        setChartData(revData.data)
+      } else {
+        setChartData([])
+      }
+      if (Array.isArray(catsData)) {
+        setTopCats(catsData)
+      }
+    } catch (err) {
+      console.error('Load reports error:', err)
+    } finally {
+      if (active) setLoading(false)
+    }
+    return () => { active = false }
+  }, [period, branchFilter, appliedFrom, appliedTo, manualReady])
+
+  useEffect(() => {
+    loadReports()
+  }, [loadReports])
+
+  const handleApplyManual = () => {
+    if (!dateFrom || !dateTo) return
+    setAppliedFrom(dateFrom)
+    setAppliedTo(dateTo)
+    setManualReady(true)
+  }
+
+  const handlePeriodChange = (key) => {
+    setPeriod(key)
+    if (key !== 'manual') setManualReady(false)
+  }
+
+  const totalSales  = summary?.revenue ?? summary?.total_sales ?? 0
+  const totalOrders = summary?.total_orders ?? 0
   const avgOrderVal = totalOrders > 0 ? (totalSales / totalOrders) : 0
+  const completed   = summary?.completed ?? 0
+
+  const periodLabel = period === 'manual'
+    ? (manualReady ? `${appliedFrom} → ${appliedTo}` : 'Select Range')
+    : period.toUpperCase()
 
   return (
     <AdminLayout pageTitle="Reports & Analytics" pageIcon="📊">
@@ -103,7 +159,7 @@ export default function OwnerReportsPage() {
         <div className="owner-page-header">
           <div className="owner-page-header__left">
             <h1 className="owner-page-header__title">Reports &amp; Analytics</h1>
-            <p className="owner-page-header__sub">Database analytics and revenue metrics.</p>
+            <p className="owner-page-header__sub">Real database analytics and revenue metrics, filterable by period and branch.</p>
           </div>
           <div className="owner-page-header__actions">
             <button className="btn-outline" onClick={() => window.print()}>⬇ Export / Print</button>
@@ -113,22 +169,73 @@ export default function OwnerReportsPage() {
         {/* Filters Row */}
         <div className="owner-section-card">
           <div className="owner-section-card__header">
-            <span className="owner-section-card__title">Time Period & Filter</span>
+            <span className="owner-section-card__title">Filters</span>
           </div>
           <div className="owner-section-card__body">
-            <div className="owner-filter-bar" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <div className="owner-filter-bar" style={{ flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+              {/* Period tabs */}
               <div className="owner-chart-filters">
                 {PERIODS.map(p => (
                   <button
                     key={p.key}
                     className={`owner-chart-filter-btn${period === p.key ? ' owner-chart-filter-btn--active' : ''}`}
-                    onClick={() => setPeriod(p.key)}
+                    onClick={() => handlePeriodChange(p.key)}
                     id={`report-period-${p.key}`}
                   >
                     {p.label}
                   </button>
                 ))}
               </div>
+
+              {/* Manual date inputs */}
+              {period === 'manual' && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 500 }}>From</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={dateFrom}
+                    max={dateTo}
+                    onChange={e => setDateFrom(e.target.value)}
+                    style={{ fontSize: 13, padding: '7px 10px', minWidth: 130 }}
+                    id="report-date-from"
+                  />
+                  <label style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 500 }}>To</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={dateTo}
+                    min={dateFrom}
+                    max={todayStr()}
+                    onChange={e => setDateTo(e.target.value)}
+                    style={{ fontSize: 13, padding: '7px 10px', minWidth: 130 }}
+                    id="report-date-to"
+                  />
+                  <button
+                    className="btn-primary"
+                    style={{ fontSize: 13, padding: '7px 18px' }}
+                    onClick={handleApplyManual}
+                    disabled={!dateFrom || !dateTo || dateFrom > dateTo}
+                    id="report-apply-manual"
+                  >
+                    Apply Filter
+                  </button>
+                </div>
+              )}
+
+              {/* Branch filter */}
+              <select
+                className="form-select"
+                value={branchFilter}
+                onChange={e => { setBranchFilter(e.target.value); if (period === 'manual') setManualReady(manualReady) }}
+                style={{ fontSize: 13, padding: '7px 12px', minWidth: 150 }}
+                id="filter-reports-branch"
+              >
+                <option value="all">All Branches</option>
+                {branches.filter(b => b.active).map(b => (
+                  <option key={b.id} value={String(b.id)}>{b.name}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -138,64 +245,104 @@ export default function OwnerReportsPage() {
           <div className="owner-kpi-card">
             <div className="owner-kpi-card__label">Total Revenue</div>
             <div className="owner-kpi-card__value">₹{Number(totalSales).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+            {summary?.revenue_change_pct != null && (
+              <div className={`owner-kpi-card__sub ${summary.revenue_change_pct >= 0 ? 'positive' : 'negative'}`}>
+                {summary.revenue_change_pct >= 0 ? '↑' : '↓'} {Math.abs(summary.revenue_change_pct)}% vs prior period
+              </div>
+            )}
           </div>
           <div className="owner-kpi-card">
             <div className="owner-kpi-card__label">Total Orders</div>
             <div className="owner-kpi-card__value">{totalOrders}</div>
+            <div className="owner-kpi-card__sub">{completed} completed</div>
           </div>
           <div className="owner-kpi-card">
             <div className="owner-kpi-card__label">Avg. Order Value</div>
             <div className="owner-kpi-card__value">₹{Number(avgOrderVal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
           </div>
+          {summary?.cancelled != null && (
+            <div className="owner-kpi-card">
+              <div className="owner-kpi-card__label">Cancelled</div>
+              <div className="owner-kpi-card__value">{summary.cancelled}</div>
+            </div>
+          )}
         </div>
 
-        {/* Chart */}
-        <div className="owner-section-card">
-          <div className="owner-section-card__header">
-            <span className="owner-section-card__title">Revenue Breakdown ({period.toUpperCase()})</span>
+        {loading ? (
+          <div className="owner-section-card" style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-muted)' }}>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>⏳</div>
+            Loading analytics from database…
           </div>
-          <div className="owner-section-card__body">
-            <ReportChart data={chartData} />
-          </div>
-        </div>
-
-        {/* Top Categories Table */}
-        <div className="owner-section-card">
-          <div className="owner-section-card__header">
-            <span className="owner-section-card__title">Top Category Performance</span>
-          </div>
-          <div className="owner-table-wrap">
-            <table className="owner-table">
-              <thead>
-                <tr>
-                  <th>Category</th>
-                  <th>Total Sales</th>
-                  <th>Order Items Sold</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topCats.length === 0 ? (
-                  <tr>
-                    <td colSpan={3}>
-                      <div className="owner-empty">
-                        <div className="owner-empty__icon">📊</div>
-                        <div className="owner-empty__text">No category sales recorded yet.</div>
-                      </div>
-                    </td>
-                  </tr>
+        ) : (
+          <>
+            {/* Revenue Chart */}
+            <div className="owner-section-card">
+              <div className="owner-section-card__header">
+                <span className="owner-section-card__title">Revenue Breakdown ({periodLabel})</span>
+              </div>
+              <div className="owner-section-card__body">
+                {period === 'manual' && !manualReady ? (
+                  <div style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: 48, fontSize: 14 }}>
+                    Select a date range and click <strong>Apply Filter</strong> to load the revenue chart.
+                  </div>
                 ) : (
-                  topCats.map((cat, idx) => (
-                    <tr key={idx}>
-                      <td className="td-name">{cat.category || cat.name}</td>
-                      <td style={{ fontWeight: 600 }}>₹{Number(cat.sales || cat.revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                      <td>{cat.items_count || cat.count || '—'}</td>
-                    </tr>
-                  ))
+                  <ReportChart data={chartData} />
                 )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </div>
+            </div>
+
+            {/* Top Categories */}
+            <div className="owner-section-card">
+              <div className="owner-section-card__header">
+                <span className="owner-section-card__title">Top Category Performance</span>
+              </div>
+              <div className="owner-table-wrap">
+                <table className="owner-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Category</th>
+                      <th>Revenue</th>
+                      <th>Items Sold</th>
+                      <th>Share</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topCats.length === 0 ? (
+                      <tr>
+                        <td colSpan={5}>
+                          <div className="owner-empty">
+                            <div className="owner-empty__icon">📊</div>
+                            <div className="owner-empty__text">No category sales recorded for this period.</div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      topCats.map((cat, idx) => (
+                        <tr key={idx}>
+                          <td className="td-muted" style={{ width: 36, fontWeight: 600 }}>{idx + 1}</td>
+                          <td className="td-name">{cat.category || cat.name}</td>
+                          <td style={{ fontWeight: 600 }}>₹{Number(cat.sales || cat.revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                          <td>{cat.items_count || cat.qty || cat.count || '—'}</td>
+                          <td>
+                            {cat.pct != null ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ flex: 1, height: 6, background: 'var(--color-border)', borderRadius: 3, overflow: 'hidden' }}>
+                                  <div style={{ width: `${cat.pct}%`, height: '100%', background: 'var(--color-primary)', borderRadius: 3 }} />
+                                </div>
+                                <span style={{ fontSize: 12, color: 'var(--color-text-muted)', minWidth: 36 }}>{cat.pct}%</span>
+                              </div>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
 
       </div>
     </AdminLayout>

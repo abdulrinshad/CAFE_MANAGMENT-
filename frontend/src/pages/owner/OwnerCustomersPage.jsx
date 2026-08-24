@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
-import { orderApi } from '../../api'
+import { orderApi, branchApi } from '../../api'
 import './owner.css'
 
 export default function OwnerCustomersPage() {
-  const [orders,  setOrders]  = useState([])
-  const [loading, setLoading] = useState(true)
-  const [search,  setSearch]  = useState('')
+  const [orders,  setOrders]         = useState([])
+  const [loading, setLoading]        = useState(true)
+  const [search,  setSearch]         = useState('')
   const [selectedKey, setSelectedKey] = useState(null)
+  const [branchFilter, setBranchFilter] = useState('all')
+  const [branches,     setBranches]   = useState([])
 
   // Fetch all orders from real API
   const fetchOrders = useCallback(async () => {
@@ -23,14 +25,26 @@ export default function OwnerCustomersPage() {
     }
   }, [])
 
-  useEffect(() => { fetchOrders() }, [fetchOrders])
+  useEffect(() => {
+    fetchOrders()
+    branchApi.list()
+      .then(data => setBranches(Array.isArray(data) ? data : (data.results ?? [])))
+      .catch(() => {})
+  }, [fetchOrders])
+
+  // Apply branch filter to orders before building customer map
+  const branchOrders = useMemo(() =>
+    branchFilter === 'all'
+      ? orders
+      : orders.filter(o => String(o.branch) === branchFilter),
+  [orders, branchFilter])
 
   // Build customer records.
   // Key priority: phone number → customer name → 'walk-in-guest'
   // On merge: always promote a better phone / real name from any order in the group.
   const customersList = useMemo(() => {
     const map = new Map()
-    orders.forEach(o => {
+    branchOrders.forEach(o => {
       const phone = (o.whatsapp_number || '').trim()
       const name  = (o.customer_name  || '').trim()
       const key   = phone || name.toLowerCase() || 'walk-in-guest'
@@ -79,7 +93,7 @@ export default function OwnerCustomersPage() {
       }
     })
     return Array.from(map.values())
-  }, [orders])
+  }, [branchOrders])
 
   const filtered = customersList.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -141,9 +155,21 @@ export default function OwnerCustomersPage() {
                   placeholder="Search by name or phone…"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  style={{ minWidth: 220, fontSize: 13, padding: '8px 14px' }}
+                  style={{ minWidth: 200, fontSize: 13, padding: '8px 14px' }}
                   id="search-customers"
                 />
+                <select
+                  className="form-select"
+                  value={branchFilter}
+                  onChange={e => { setBranchFilter(e.target.value); setSelectedKey(null) }}
+                  style={{ fontSize: 13, padding: '8px 12px', minWidth: 150 }}
+                  id="filter-customers-branch"
+                >
+                  <option value="all">All Branches</option>
+                  {branches.filter(b => b.active).map(b => (
+                    <option key={b.id} value={String(b.id)}>{b.name}</option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="owner-table-wrap">

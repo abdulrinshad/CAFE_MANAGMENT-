@@ -902,118 +902,176 @@ class OrderViewSet(viewsets.ModelViewSet):
         change_returned = Decimal(str(request.data.get('change_returned') or 0))
         transaction_ref = str(request.data.get('transaction_ref') or request.data.get('transactionReference') or '').strip()
 
-        with transaction.atomic():
-            # Complete the order
-            order.status = Order.STATUS_COMPLETED
-            order.completed_at = timezone.now()
-            order.payment_method = method
-            order.payment_status = pay_status
-            order.amount_received = amount_received
-            order.change_returned = change_returned
-            if transaction_ref:
-                order.transaction_ref = transaction_ref
-            if cashier_name:
-                order.cashier_name = cashier_name
-            if pos_terminal_obj:
-                order.pos_terminal = pos_terminal_obj
-            if not order.branch and pos_terminal_obj and pos_terminal_obj.branch:
-                order.branch = pos_terminal_obj.branch
+        try:
+            with transaction.atomic():
+                # Complete the order
+                order.status = Order.STATUS_COMPLETED
+                order.completed_at = timezone.now()
+                order.payment_method = method
+                order.payment_status = pay_status
+                order.amount_received = amount_received
+                order.change_returned = change_returned
+                if transaction_ref:
+                    order.transaction_ref = transaction_ref
+                if cashier_name:
+                    order.cashier_name = cashier_name
+                if pos_terminal_obj:
+                    order.pos_terminal = pos_terminal_obj
+                if not order.branch and pos_terminal_obj and pos_terminal_obj.branch:
+                    order.branch = pos_terminal_obj.branch
 
-            order.save(update_fields=[
-                'status', 'completed_at', 'payment_method', 'payment_status', 
-                'cashier_name', 'pos_terminal', 'branch', 'amount_received', 
-                'change_returned', 'transaction_ref', 'updated_at'
-            ])
+                order.save(update_fields=[
+                    'status', 'completed_at', 'payment_method', 'payment_status',
+                    'cashier_name', 'pos_terminal', 'branch', 'amount_received',
+                    'change_returned', 'transaction_ref', 'updated_at'
+                ])
 
-            # Mark invoice paid
-            invoice = None
-            try:
-                invoice = order.invoice
-                invoice.status  = Invoice.STATUS_PAID
-                invoice.paid_at = timezone.now()
-                invoice.save(update_fields=['status', 'paid_at', 'updated_at'])
-            except Exception:
+                # ── Mark invoice paid ────────────────────────────────────────
+                # Use a savepoint so an IntegrityError on Invoice (OneToOneField)
+                # does not abort the outer atomic block, causing
+                # TransactionManagementError on subsequent queries.
+                invoice = None
+                _inv_sp = transaction.savepoint()
                 try:
-                    from orders.models import Invoice
-                    invoice = Invoice.objects.create(
+                    invoice = Invoice.objects.get(order=order)
+                    invoice.status  = Invoice.STATUS_PAID
+                    invoice.paid_at = timezone.now()
+                    invoice.save(update_fields=['status', 'paid_at', 'updated_at'])
+                    transaction.savepoint_commit(_inv_sp)
+                except Invoice.DoesNotExist:
+                    # No invoice yet — create one inside its own savepoint
+                    transaction.savepoint_rollback(_inv_sp)
+                    _inv_create_sp = transaction.savepoint()
+                    try:
+                        invoice = Invoice.objects.create(
+                            order=order,
+                            subtotal=order.subtotal,
+                            tax_amount=order.tax_amount,
+                            total=order.total,
+                            status=Invoice.STATUS_PAID,
+                            paid_at=timezone.now(),
+                        )
+                        transaction.savepoint_commit(_inv_create_sp)
+                    except Exception:
+                        # If creation also fails (e.g. race condition on OneToOne),
+                        # roll back the savepoint only — do NOT abort the outer block.
+                        transaction.savepoint_rollback(_inv_create_sp)
+                        # Try one more time to fetch the now-existing invoice
+                        try:
+                            invoice = Invoice.objects.get(order=order)
+                            invoice.status  = Invoice.STATUS_PAID
+                            invoice.paid_at = timezone.now()
+                            invoice.save(update_fields=['status', 'paid_at', 'updated_at'])
+                        except Exception:
+                            pass  # Invoice failure must not block order completion
+                except Exception:
+                    # Any other unexpected error — roll back savepoint only
+                    transaction.savepoint_rollback(_inv_sp)
+
+                # ── Create or update payment record ──────────────────────────
+                # Payment.order is also a OneToOneField; use a savepoint so that
+                # an IntegrityError from a race/duplicate does not abort the outer
+                # atomic block (which is the direct cause of TransactionManagementError).
+                payment = None
+                _pay_sp = transaction.savepoint()
+                try:
+                    payment, created = Payment.objects.get_or_create(
                         order=order,
-                        subtotal=order.subtotal,
-                        tax_amount=order.tax_amount,
-                        total=order.total,
-                        status='paid',
-                        paid_at=timezone.now(),
+                        defaults={
+                            'invoice': invoice,
+                            'method':  method,
+                            'status':  pay_status,
+                            'amount':  order.total,
+                        }
+                    )
+                    # Always update to the current values
+                    pay_update_fields = ['method', 'status']
+                    payment.method = method
+                    payment.status = pay_status
+                    if pay_status == Payment.STATUS_PAID:
+                        payment.paid_at = timezone.now()
+                        pay_update_fields.append('paid_at')
+                    payment.save(update_fields=pay_update_fields)
+                    transaction.savepoint_commit(_pay_sp)
+                except Exception as pay_exc:
+                    transaction.savepoint_rollback(_pay_sp)
+                    # Re-fetch in case of race condition
+                    try:
+                        payment = Payment.objects.get(order=order)
+                        payment.method = method
+                        payment.status = pay_status
+                        pay_update_fields = ['method', 'status']
+                        if pay_status == Payment.STATUS_PAID:
+                            payment.paid_at = timezone.now()
+                            pay_update_fields.append('paid_at')
+                        payment.save(update_fields=pay_update_fields)
+                    except Exception:
+                        raise pay_exc  # Surface the original error
+
+                # ── Release table ────────────────────────────────────────────
+                if order.table_id:
+                    try:
+                        from menu.models import Table
+                        Table.objects.filter(pk=order.table_id).update(
+                            status=Table.STATUS_AVAILABLE,
+                            current_order_ref='',
+                        )
+                    except Exception:
+                        pass
+
+                # ── Mark associated waiter bill requests completed ────────────
+                if order.table_id:
+                    try:
+                        from menu.models import WaiterRequest
+                        WaiterRequest.objects.filter(
+                            table_id=order.table_id,
+                            request_type='Bill Request',
+                            status__in=['requested', 'processing', 'ready']
+                        ).update(status='completed')
+                    except Exception:
+                        pass
+
+                # ── Mark associated bill_share requests completed ─────────────
+                try:
+                    from notifications.models import Notification
+                    active_shares = Notification.objects.filter(
+                        order=order,
+                        type='bill_share'
+                    ).exclude(status__in=['completed', 'dismissed'])
+                    for share in active_shares:
+                        share.status = 'completed'
+                        share.save()
+                except Exception:
+                    pass
+
+                # ── Notification ──────────────────────────────────────────────
+                try:
+                    from notifications.models import Notification
+                    Notification.objects.create(
+                        type='payment_completed',
+                        title=f'Payment Complete: {order.order_number}',
+                        message=(
+                            f'Order {order.order_number} paid via {method.title()}. '
+                            f'Total: ₹{order.total}. '
+                            f'Table {order.table_label} is now available.'
+                        ),
+                        order=order,
+                        table=order.table,
                     )
                 except Exception:
                     pass
 
-            # Create or update payment
-            payment, _ = Payment.objects.get_or_create(
-                order=order,
-                defaults={
-                    'invoice': invoice,
-                    'method':  method,
-                    'status':  pay_status,
-                    'amount':  order.total,
-                }
+        except Exception as exc:
+            # Return a proper JSON error response instead of Django's HTML debug page.
+            # This prevents TransactionManagementError (or any other DB error) from
+            # leaking through as an unhandled 500 HTML response.
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.exception('complete_order failed for order %s', pk)
+            return Response(
+                {'detail': str(exc) or 'Order completion failed. Please try again.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-            payment.method = method
-            payment.status = pay_status
-            if pay_status == Payment.STATUS_PAID:
-                payment.paid_at = timezone.now()
-            payment.save(update_fields=['method', 'status', 'paid_at'])
-
-            # Release table
-            if order.table_id:
-                try:
-                    from menu.models import Table
-                    Table.objects.filter(pk=order.table_id).update(
-                        status=Table.STATUS_AVAILABLE,
-                        current_order_ref='',
-                    )
-                except Exception:
-                    pass
-
-            # Mark associated waiter bill requests completed
-            if order.table_id:
-                try:
-                    from menu.models import WaiterRequest
-                    WaiterRequest.objects.filter(
-                        table_id=order.table_id,
-                        request_type='Bill Request',
-                        status__in=['requested', 'processing', 'ready']
-                    ).update(status='completed')
-                except Exception:
-                    pass
-
-            # Mark associated bill_share requests completed
-            try:
-                from notifications.models import Notification
-                active_shares = Notification.objects.filter(
-                    order=order,
-                    type='bill_share'
-                ).exclude(status__in=['completed', 'dismissed'])
-                for share in active_shares:
-                    share.status = 'completed'
-                    share.save()
-            except Exception:
-                pass
-
-            # Notification
-            try:
-                from notifications.models import Notification
-                Notification.objects.create(
-                    type='payment_completed',
-                    title=f'Payment Complete: {order.order_number}',
-                    message=(
-                        f'Order {order.order_number} paid via {method.title()}. '
-                        f'Total: ₹{order.total}. '
-                        f'Table {order.table_label} is now available.'
-                    ),
-                    order=order,
-                    table=order.table,
-                )
-            except Exception:
-                pass
 
         order.refresh_from_db()
         return Response({
@@ -1242,30 +1300,67 @@ class DashboardSalesChartView(APIView):
 
     def get(self, request):
         period = request.query_params.get('period', 'weekly')
+        branch = request.query_params.get('branch')
         tz     = timezone.get_current_timezone()
         today  = timezone.now().date()
 
-        if period == 'daily':
-            # Hourly buckets for today
-            start, end = _get_period_range('daily')
-            rows = (
-                Order.objects
-                .filter(
-                    created_at__range=(start, end),
-                    status=Order.STATUS_COMPLETED,
+        def _apply_branch(qs):
+            if branch:
+                try:
+                    return qs.filter(branch_id=int(branch))
+                except (ValueError, TypeError):
+                    pass
+            return qs
+
+        if period in ('daily', 'custom'):
+            # For custom range, use _get_period_range; for daily use today
+            date_from = request.query_params.get('date_from')
+            date_to   = request.query_params.get('date_to')
+            if period == 'custom' and date_from and date_to:
+                start, end = _get_period_range('custom', date_from, date_to)
+                # Day-by-day buckets for custom range
+                rows = (
+                    _apply_branch(Order.objects)
+                    .filter(
+                        created_at__range=(start, end),
+                        status=Order.STATUS_COMPLETED,
+                    )
+                    .annotate(bucket=TruncDate('created_at', tzinfo=tz))
+                    .values('bucket')
+                    .annotate(value=Sum('total'))
+                    .order_by('bucket')
                 )
-                .annotate(bucket=TruncHour('created_at', tzinfo=tz))
-                .values('bucket')
-                .annotate(value=Sum('total'))
-                .order_by('bucket')
-            )
-            data = [
-                {
-                    'label': row['bucket'].astimezone(tz).strftime('%I%p').lstrip('0'),
-                    'value': float(row['value']),
-                }
-                for row in rows
-            ]
+                from datetime import date as date_cls
+                start_date = date_cls.fromisoformat(date_from)
+                end_date   = date_cls.fromisoformat(date_to)
+                days = (end_date - start_date).days + 1
+                row_map = {row['bucket']: float(row['value']) for row in rows}
+                data = []
+                for i in range(days):
+                    d     = start_date + timedelta(days=i)
+                    label = d.strftime('%d %b')
+                    data.append({'label': label, 'value': row_map.get(d, 0)})
+            else:
+                # Hourly buckets for today
+                start, end = _get_period_range('daily')
+                rows = (
+                    _apply_branch(Order.objects)
+                    .filter(
+                        created_at__range=(start, end),
+                        status=Order.STATUS_COMPLETED,
+                    )
+                    .annotate(bucket=TruncHour('created_at', tzinfo=tz))
+                    .values('bucket')
+                    .annotate(value=Sum('total'))
+                    .order_by('bucket')
+                )
+                data = [
+                    {
+                        'label': row['bucket'].astimezone(tz).strftime('%I%p').lstrip('0'),
+                        'value': float(row['value']),
+                    }
+                    for row in rows
+                ]
         else:
             # Daily buckets for the week/month
             if period == 'monthly':
@@ -1282,7 +1377,7 @@ class DashboardSalesChartView(APIView):
             )
 
             rows = (
-                Order.objects
+                _apply_branch(Order.objects)
                 .filter(
                     created_at__range=(start, end),
                     status=Order.STATUS_COMPLETED,
@@ -1315,9 +1410,15 @@ class ReportsSummaryView(APIView):
         period    = request.query_params.get('period', 'weekly')
         date_from = request.query_params.get('date_from')
         date_to   = request.query_params.get('date_to')
+        branch    = request.query_params.get('branch')
         start, end = _get_period_range(period, date_from, date_to)
 
         qs = Order.objects.filter(created_at__range=(start, end))
+        if branch:
+            try:
+                qs = qs.filter(branch_id=int(branch))
+            except (ValueError, TypeError):
+                pass
 
         total     = qs.count()
         completed = qs.filter(status=Order.STATUS_COMPLETED).count()
@@ -1333,6 +1434,11 @@ class ReportsSummaryView(APIView):
         prev_start = start - period_len
         prev_end   = start
         prev_qs    = Order.objects.filter(created_at__range=(prev_start, prev_end))
+        if branch:
+            try:
+                prev_qs = prev_qs.filter(branch_id=int(branch))
+            except (ValueError, TypeError):
+                pass
         prev_revenue = prev_qs.filter(status=Order.STATUS_COMPLETED).aggregate(
             r=Sum('total'))['r'] or Decimal('0')
 
@@ -1359,10 +1465,10 @@ class ReportsSummaryView(APIView):
 
 
 class ReportsRevenueChartView(APIView):
-    """GET /api/v1/reports/revenue-chart/?period=daily|weekly|monthly"""
+    """GET /api/v1/reports/revenue-chart/?period=daily|weekly|monthly&branch=<id>"""
 
     def get(self, request):
-        # Reuse dashboard chart logic
+        # Reuse dashboard chart logic (branch param passed through request.query_params)
         view = DashboardSalesChartView()
         view.request = request
         return view.get(request)
@@ -1375,16 +1481,23 @@ class ReportsTopCategoriesView(APIView):
         period    = request.query_params.get('period', 'weekly')
         date_from = request.query_params.get('date_from')
         date_to   = request.query_params.get('date_to')
+        branch    = request.query_params.get('branch')
         start, end = _get_period_range(period, date_from, date_to)
 
         # Sum revenue by product category from completed orders
+        qs = OrderItem.objects.filter(
+            order__status=Order.STATUS_COMPLETED,
+            order__created_at__range=(start, end),
+            product__category__isnull=False,
+        )
+        if branch:
+            try:
+                qs = qs.filter(order__branch_id=int(branch))
+            except (ValueError, TypeError):
+                pass
+
         rows = (
-            OrderItem.objects
-            .filter(
-                order__status=Order.STATUS_COMPLETED,
-                order__created_at__range=(start, end),
-                product__category__isnull=False,
-            )
+            qs
             .values('product__category__name')
             .annotate(revenue=Sum('subtotal'), qty=Sum('quantity'))
             .order_by('-revenue')

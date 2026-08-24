@@ -159,15 +159,52 @@ class BranchStaffView(APIView):
 
     def _serialize_member(self, member, role_name):
         return {
-            "id": f"{role_name.lower()}_{member.id}",
-            "name": member.name,
-            "employee_id": member.employee_id,
-            "email": getattr(member, 'email', f"{member.employee_id.lower()}@artisanbrew.internal" if member.employee_id else ''),
-            "phone": getattr(member, 'phone', ''),
-            "role": "Waiter" if role_name == "WAITER" else ("POS" if role_name == "CASHIER" else "Kitchen Staff"),
-            "status": "active" if member.is_active else "inactive",
-            "joinedDate": member.created_at.strftime("%Y-%m-%d") if hasattr(member, 'created_at') and member.created_at else timezone.now().strftime("%Y-%m-%d")
+            "id":          f"{role_name.lower()}_{member.id}",
+            "db_id":       member.id,
+            "name":        member.name,
+            "employee_id": member.employee_id or "",
+            "role":        "Waiter" if role_name == "WAITER" else ("Cashier" if role_name == "CASHIER" else "Kitchen Staff"),
+            "role_key":    role_name.lower(),
+            "branch":      member.branch_id,
+            "branch_name": member.branch.name if member.branch else "",
+            "section":     getattr(member, 'section', "") or "",
+            "is_active":   member.is_active,
+            "status":      "active" if member.is_active else "inactive",
+            "joinedDate":  member.created_at.strftime("%Y-%m-%d") if hasattr(member, 'created_at') and member.created_at else "",
         }
+
+    def _validate_post(self, data, branch):
+        """Shared server-side validation for employee creation."""
+        errors = {}
+
+        name = (data.get('name') or '').strip()
+        if not name:
+            errors['name'] = "Full name is required."
+        elif len(name) > 120:
+            errors['name'] = "Name is too long (max 120 characters)."
+
+        employee_id = (data.get('employee_id') or '').strip()
+        if not employee_id:
+            errors['employee_id'] = "Employee ID is required."
+        else:
+            # Cross-check across all employee namespaces
+            if Waiter.objects.filter(employee_id=employee_id).exists():
+                errors['employee_id'] = "This Employee ID is already in use by a Waiter."
+            elif Cashier.objects.filter(employee_id=employee_id).exists():
+                errors['employee_id'] = "This Employee ID is already in use by a Cashier."
+            elif KitchenStaff.objects.filter(employee_id=employee_id).exists():
+                errors['employee_id'] = "This Employee ID is already in use by Kitchen Staff."
+
+        pin = (data.get('pin') or '').strip()
+        confirm_pin = (data.get('confirm_pin') or '').strip()
+        if not pin:
+            errors['pin'] = "A 4-digit PIN is required."
+        elif not pin.isdigit() or len(pin) != 4:
+            errors['pin'] = "PIN must be exactly 4 numeric digits."
+        elif pin != confirm_pin:
+            errors['confirm_pin'] = "PINs do not match."
+
+        return errors, name, employee_id, pin
 
     def get(self, request, pk=None, *args, **kwargs):
         branch = get_manager_branch(request)
@@ -175,7 +212,6 @@ class BranchStaffView(APIView):
             return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
 
         if pk:
-            # Get specific staff
             role_type, obj_id = pk.split('_', 1)
             obj_id = int(obj_id)
             if role_type == 'waiter':
@@ -186,123 +222,171 @@ class BranchStaffView(APIView):
                 return Response(self._serialize_member(member, "CASHIER"))
             elif role_type == 'kitchen':
                 member = get_object_or_404(KitchenStaff, pk=obj_id, branch=branch)
-                return Response(self._serialize_member(member, "KITCHEN_STAFF"))
+                return Response(self._serialize_member(member, "KITCHEN"))
             return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # List all staff
-        waiters = Waiter.objects.filter(branch=branch)
-        cashiers = Cashier.objects.filter(branch=branch)
-        kitchen = KitchenStaff.objects.filter(branch=branch)
+        # List all staff for this branch from real DB
+        waiters  = Waiter.objects.select_related('branch').filter(branch=branch).order_by('-created_at')
+        cashiers = Cashier.objects.select_related('branch').filter(branch=branch).order_by('-created_at')
+        kitchen  = KitchenStaff.objects.select_related('branch').filter(branch=branch).order_by('-created_at')
 
-        staff_list = []
-        for w in waiters:
-            staff_list.append(self._serialize_member(w, "WAITER"))
-        for c in cashiers:
-            staff_list.append(self._serialize_member(c, "CASHIER"))
-        for k in kitchen:
-            staff_list.append(self._serialize_member(k, "KITCHEN_STAFF"))
-
+        staff_list = (
+            [self._serialize_member(w, "WAITER")  for w in waiters]  +
+            [self._serialize_member(c, "CASHIER") for c in cashiers] +
+            [self._serialize_member(k, "KITCHEN") for k in kitchen]
+        )
         return Response(staff_list)
 
     def post(self, request, *args, **kwargs):
+        """
+        Create a Waiter or Cashier.
+        Security: branch is ALWAYS forced from the manager's JWT.
+        The client cannot choose another branch.
+        """
         branch = get_manager_branch(request)
         if not branch:
             return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
 
-        role = request.data.get('role', 'Waiter')
-        name = request.data.get('name', request.data.get('full_name', ''))
-        email = request.data.get('email', '')
-        phone = request.data.get('phone', '')
-        password = request.data.get('password', request.data.get('pin', ''))
-        status_val = request.data.get('status', 'active')
+        role     = (request.data.get('role') or 'waiter').lower().strip()
+        section  = (request.data.get('section') or '').strip()
+        is_active_raw = request.data.get('is_active', True)
+        is_active = is_active_raw if isinstance(is_active_raw, bool) else str(is_active_raw).lower() not in ('false', '0', 'inactive')
 
-        # Auto-generate employee id if missing
-        employee_id = request.data.get('employee_id', '')
-        if not employee_id:
-            import random
-            employee_id = f"EMP-{random.randint(1000, 9999)}"
+        errors, name, employee_id, pin = self._validate_post(request.data, branch)
 
-        is_active = status_val == 'active' or status_val == 'ACTIVE'
+        if role not in ('waiter', 'cashier'):
+            errors['role'] = "Role must be 'waiter' or 'cashier'."
 
-        if role == 'Waiter' or role == 'WAITER':
-            data = {'name': name, 'employee_id': employee_id, 'branch': branch.id, 'is_active': is_active, 'pin': password, 'confirm_pin': password}
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Force branch — never trust client-supplied branch
+        if role == 'waiter':
+            data = {
+                'name':        name,
+                'employee_id': employee_id,
+                'branch':      branch.id,
+                'section':     section or 'Main Section',
+                'is_active':   is_active,
+                'pin':         pin,
+                'confirm_pin': pin,
+            }
             serializer = WaiterSerializer(data=data)
             serializer.is_valid(raise_exception=True)
             member = serializer.save()
             return Response(self._serialize_member(member, "WAITER"), status=status.HTTP_201_CREATED)
 
-        elif role == 'POS' or role == 'CASHIER':
-            data = {'name': name, 'employee_id': employee_id, 'branch': branch.id, 'is_active': is_active, 'pin': password, 'confirm_pin': password}
+        else:  # cashier
+            data = {
+                'name':        name,
+                'employee_id': employee_id,
+                'branch':      branch.id,
+                'is_active':   is_active,
+                'pin':         pin,
+                'confirm_pin': pin,
+            }
             serializer = CashierSerializer(data=data)
             serializer.is_valid(raise_exception=True)
             member = serializer.save()
             return Response(self._serialize_member(member, "CASHIER"), status=status.HTTP_201_CREATED)
-
-        elif role == 'Kitchen Staff' or role == 'KITCHEN_STAFF':
-            data = {'name': name, 'employee_id': employee_id, 'branch': branch.id, 'is_active': is_active, 'pin': password, 'confirm_pin': password}
-            serializer = KitchenStaffSerializer(data=data)
-            serializer.is_valid(raise_exception=True)
-            member = serializer.save()
-            return Response(self._serialize_member(member, "KITCHEN_STAFF"), status=status.HTTP_201_CREATED)
-
-        return Response({"detail": f"Unsupported role: {role}"}, status=status.HTTP_400_BAD_REQUEST)
 
     def patch(self, request, pk, *args, **kwargs):
         branch = get_manager_branch(request)
         if not branch:
             return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
 
-        role_type, obj_id = pk.split('_', 1)
-        obj_id = int(obj_id)
+        role_type, obj_id_str = pk.split('_', 1)
+        obj_id = int(obj_id_str)
 
-        # Handle status toggle shortcut
+        # Handle status toggle shortcut  /branch/staff/<pk>/status/
         if request.path.endswith('/status/'):
             status_val = request.data.get('status')
-            is_active = status_val == 'active' or status_val == 'ACTIVE'
+            is_active  = status_val in ('active', 'ACTIVE', True) if status_val is not None else True
+            if isinstance(status_val, str):
+                is_active = status_val.lower() in ('active',)
             if role_type == 'waiter':
                 member = get_object_or_404(Waiter, pk=obj_id, branch=branch)
-                member.is_active = is_active
-                member.save()
+                member.is_active = is_active; member.save(update_fields=['is_active'])
                 return Response(self._serialize_member(member, "WAITER"))
             elif role_type == 'cashier':
                 member = get_object_or_404(Cashier, pk=obj_id, branch=branch)
-                member.is_active = is_active
-                member.save()
+                member.is_active = is_active; member.save(update_fields=['is_active'])
                 return Response(self._serialize_member(member, "CASHIER"))
             elif role_type == 'kitchen':
                 member = get_object_or_404(KitchenStaff, pk=obj_id, branch=branch)
-                member.is_active = is_active
-                member.save()
-                return Response(self._serialize_member(member, "KITCHEN_STAFF"))
+                member.is_active = is_active; member.save(update_fields=['is_active'])
+                return Response(self._serialize_member(member, "KITCHEN"))
 
-        # Normal edit
-        name = request.data.get('name')
-        password = request.data.get('password')
-        status_val = request.data.get('status')
+        # Normal edit (name, employee_id, section, pin, is_active)
+        pin         = (request.data.get('pin') or '').strip()
+        confirm_pin = (request.data.get('confirm_pin') or '').strip()
+        name        = (request.data.get('name') or '').strip()
+        employee_id = (request.data.get('employee_id') or '').strip()
+        section     = request.data.get('section')  # optional
+
+        # Validate PIN if provided
+        if pin:
+            if not pin.isdigit() or len(pin) != 4:
+                return Response({"pin": "PIN must be exactly 4 numeric digits."}, status=status.HTTP_400_BAD_REQUEST)
+            if pin != confirm_pin:
+                return Response({"confirm_pin": "PINs do not match."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate name if provided
+        if name is not None and not name:
+            return Response({"name": "Name cannot be empty."}, status=status.HTTP_400_BAD_REQUEST)
+
+        is_active_raw = request.data.get('is_active')
+        is_active = None
+        if is_active_raw is not None:
+            is_active = is_active_raw if isinstance(is_active_raw, bool) else str(is_active_raw).lower() not in ('false', '0', 'inactive')
+
+        def _apply_fields(member, role_key):
+            update_fields = []
+            if name:
+                # Check uniqueness of employee_id across all types (excluding self)
+                if employee_id:
+                    other_w = Waiter.objects.filter(employee_id=employee_id).exclude(pk=obj_id if role_key=='waiter' else -1)
+                    other_c = Cashier.objects.filter(employee_id=employee_id).exclude(pk=obj_id if role_key=='cashier' else -1)
+                    if other_w.exists() or other_c.exists():
+                        return None, "This Employee ID is already in use."
+                member.name = name
+                update_fields.append('name')
+            if employee_id:
+                member.employee_id = employee_id
+                update_fields.append('employee_id')
+            if section is not None and hasattr(member, 'section'):
+                member.section = section
+                update_fields.append('section')
+            if is_active is not None:
+                member.is_active = is_active
+                update_fields.append('is_active')
+            if pin:
+                member.set_pin(pin)
+                update_fields.append('pin_hash')
+            if update_fields:
+                member.save(update_fields=update_fields)
+            return member, None
 
         if role_type == 'waiter':
             member = get_object_or_404(Waiter, pk=obj_id, branch=branch)
-            if name: member.name = name
-            if status_val: member.is_active = (status_val == 'active')
-            if password: member.set_pin(password)
-            member.save()
+            member, err = _apply_fields(member, 'waiter')
+            if err:
+                return Response({"employee_id": err}, status=status.HTTP_400_BAD_REQUEST)
             return Response(self._serialize_member(member, "WAITER"))
 
         elif role_type == 'cashier':
             member = get_object_or_404(Cashier, pk=obj_id, branch=branch)
-            if name: member.name = name
-            if status_val: member.is_active = (status_val == 'active')
-            if password: member.set_pin(password)
-            member.save()
+            member, err = _apply_fields(member, 'cashier')
+            if err:
+                return Response({"employee_id": err}, status=status.HTTP_400_BAD_REQUEST)
             return Response(self._serialize_member(member, "CASHIER"))
 
         elif role_type == 'kitchen':
             member = get_object_or_404(KitchenStaff, pk=obj_id, branch=branch)
-            if name: member.name = name
-            if status_val: member.is_active = (status_val == 'active')
-            if password: member.set_pin(password)
-            member.save()
-            return Response(self._serialize_member(member, "KITCHEN_STAFF"))
+            member, err = _apply_fields(member, 'kitchen')
+            if err:
+                return Response({"employee_id": err}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(self._serialize_member(member, "KITCHEN"))
 
         return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -311,6 +395,7 @@ class BranchStaffView(APIView):
 
 
 # ── Table Management API ────────────────────────────────────────────────────────
+
 
 class BranchTableViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsBranchManager]

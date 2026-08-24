@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
 import { useApp } from '../../context/AppContext'
+import { branchApi } from '../../api'
 import './owner.css'
 
 const STATUS_OPTS = ['All', 'PENDING', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED']
@@ -20,11 +21,16 @@ function statusBadge(status) {
 
 export default function OwnerOrdersPage() {
   const { orders, fetchOrders } = useApp()
-  const [statusFil, setStatus]   = useState('All')
-  const [search,    setSearch]   = useState('')
+  const [statusFil,    setStatus]       = useState('All')
+  const [search,       setSearch]       = useState('')
+  const [branchFilter, setBranchFilter] = useState('all')
+  const [branches,     setBranches]     = useState([])
 
   useEffect(() => {
     fetchOrders()
+    branchApi.list()
+      .then(data => setBranches(Array.isArray(data) ? data : (data.results ?? [])))
+      .catch(() => {})
   }, [fetchOrders])
 
   const filtered = orders.filter(o => {
@@ -32,9 +38,10 @@ export default function OwnerOrdersPage() {
     const matchStatus = statusFil === 'All' || oStat === statusFil
     const matchSearch = !search ||
       (o.orderId && o.orderId.toLowerCase().includes(search.toLowerCase())) ||
-      (o.table && o.table.toLowerCase().includes(search.toLowerCase())) ||
+      (o.table  && o.table.toLowerCase().includes(search.toLowerCase()))  ||
       (o.waiter && o.waiter.toLowerCase().includes(search.toLowerCase()))
-    return matchStatus && matchSearch
+    const matchBranch = branchFilter === 'all' || String(o.branch) === branchFilter
+    return matchStatus && matchSearch && matchBranch
   })
 
   const totalAmount = filtered.reduce((a, o) => a + (Number(o.amount) || 0), 0)
@@ -82,11 +89,24 @@ export default function OwnerOrdersPage() {
                 placeholder="Search order number, table, waiter..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{ minWidth: 220, fontSize: 13, padding: '8px 14px' }}
+                style={{ minWidth: 200, fontSize: 13, padding: '8px 14px' }}
                 id="search-orders"
               />
-              <select className="form-select" value={statusFil} onChange={e => setStatus(e.target.value)} id="filter-order-status">
+              <select className="form-select" value={statusFil} onChange={e => setStatus(e.target.value)} id="filter-order-status"
+                style={{ fontSize: 13, padding: '8px 12px' }}>
                 {STATUS_OPTS.map(s => <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>)}
+              </select>
+              <select
+                className="form-select"
+                value={branchFilter}
+                onChange={e => setBranchFilter(e.target.value)}
+                style={{ fontSize: 13, padding: '8px 12px', minWidth: 150 }}
+                id="filter-orders-branch"
+              >
+                <option value="all">All Branches</option>
+                {branches.filter(b => b.active).map(b => (
+                  <option key={b.id} value={String(b.id)}>{b.name}</option>
+                ))}
               </select>
             </div>
           </div>

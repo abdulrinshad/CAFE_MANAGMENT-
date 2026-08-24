@@ -1,27 +1,41 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
 import { useApp } from '../../context/AppContext'
+import { branchApi } from '../../api'
 import './owner.css'
 
 export default function OwnerPaymentsPage() {
   const { orders } = useApp()
-  const [search, setSearch] = useState('')
+  const [search,       setSearch]       = useState('')
+  const [branchFilter, setBranchFilter] = useState('all')
+  const [branches,     setBranches]     = useState([])
 
-  const paymentsList = orders.map(o => ({
-    id: `PAY-${o.id}`,
+  useEffect(() => {
+    branchApi.list()
+      .then(data => setBranches(Array.isArray(data) ? data : (data.results ?? [])))
+      .catch(() => {})
+  }, [])
+
+  // Apply branch filter before building payments list
+  const branchOrders = branchFilter === 'all'
+    ? orders
+    : orders.filter(o => String(o.branch) === branchFilter)
+
+  const paymentsList = branchOrders.map(o => ({
+    id:      `PAY-${o.id}`,
     invoice: o.invoice_number || `INV-${o.id}`,
-    table: o.table || 'Takeaway',
-    amount: Number(o.amount) || Number(o.total) || 0,
-    status: o.status === 'COMPLETED' ? 'success' : (o.status === 'CANCELLED' ? 'failed' : 'pending'),
-    time: o.time || (o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN') : 'Recent'),
+    table:   o.table || 'Takeaway',
+    amount:  Number(o.amount) || Number(o.total) || 0,
+    status:  o.status === 'COMPLETED' ? 'success' : (o.status === 'CANCELLED' ? 'failed' : 'pending'),
+    time:    o.time || (o.created_at ? new Date(o.created_at).toLocaleDateString('en-IN') : 'Recent'),
   }))
 
   const filtered = paymentsList.filter(p =>
     !search || p.id.toLowerCase().includes(search.toLowerCase()) || p.invoice.toLowerCase().includes(search.toLowerCase())
   )
 
-  const total = paymentsList.reduce((a, p) => a + p.amount, 0)
-  const success = paymentsList.filter(p => p.status === 'success').reduce((a, p) => a + p.amount, 0)
+  const total   = filtered.reduce((a, p) => a + p.amount, 0)
+  const success = filtered.filter(p => p.status === 'success').reduce((a, p) => a + p.amount, 0)
 
   return (
     <AdminLayout pageTitle="Payments" pageIcon="💳">
@@ -46,7 +60,7 @@ export default function OwnerPaymentsPage() {
           </div>
           <div className="owner-kpi-card">
             <div className="owner-kpi-card__label">Completed Orders</div>
-            <div className="owner-kpi-card__value">{paymentsList.filter(p => p.status === 'success').length}</div>
+            <div className="owner-kpi-card__value">{filtered.filter(p => p.status === 'success').length}</div>
           </div>
         </div>
 
@@ -60,9 +74,21 @@ export default function OwnerPaymentsPage() {
                 placeholder="Search payment ID, invoice..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{ minWidth: 220, fontSize: 13, padding: '8px 14px' }}
+                style={{ minWidth: 200, fontSize: 13, padding: '8px 14px' }}
                 id="search-payments"
               />
+              <select
+                className="form-select"
+                value={branchFilter}
+                onChange={e => setBranchFilter(e.target.value)}
+                style={{ fontSize: 13, padding: '8px 12px', minWidth: 150 }}
+                id="filter-payments-branch"
+              >
+                <option value="all">All Branches</option>
+                {branches.filter(b => b.active).map(b => (
+                  <option key={b.id} value={String(b.id)}>{b.name}</option>
+                ))}
+              </select>
             </div>
           </div>
 
