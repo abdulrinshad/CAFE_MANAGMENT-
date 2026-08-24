@@ -258,14 +258,16 @@ class WaiterRequest(models.Model):
     A customer or system request assigned to waiters (e.g. Call Waiter, Refill, Bill Request).
     """
 
-    STATUS_NEW         = 'new'
-    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_REQUESTED   = 'requested'
+    STATUS_PROCESSING  = 'processing'
+    STATUS_READY       = 'ready'
     STATUS_COMPLETED   = 'completed'
     STATUS_DISMISSED   = 'dismissed'
 
     STATUS_CHOICES = [
-        (STATUS_NEW,         'New'),
-        (STATUS_IN_PROGRESS, 'In Progress'),
+        (STATUS_REQUESTED,   'Requested'),
+        (STATUS_PROCESSING,  'Processing'),
+        (STATUS_READY,       'Ready'),
         (STATUS_COMPLETED,   'Completed'),
         (STATUS_DISMISSED,   'Dismissed'),
     ]
@@ -275,7 +277,7 @@ class WaiterRequest(models.Model):
     order           = models.ForeignKey('orders.Order', on_delete=models.SET_NULL, null=True, blank=True, related_name='waiter_requests')
     request_type    = models.CharField(max_length=50, default='Call Waiter')
     message         = models.TextField(blank=True, default='')
-    status          = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW, db_index=True)
+    status          = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_REQUESTED, db_index=True)
     assigned_waiter = models.CharField(max_length=120, blank=True, default='')
     amount          = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     created_at      = models.DateTimeField(auto_now_add=True, db_index=True)

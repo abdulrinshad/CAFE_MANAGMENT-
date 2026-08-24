@@ -417,7 +417,7 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/branch/kitchen" element={
-          <ProtectedRoute allowedRoles={['branch_manager']}>
+          <ProtectedRoute allowedRoles={['admin']}>
             <Kitchen />
           </ProtectedRoute>
         } />

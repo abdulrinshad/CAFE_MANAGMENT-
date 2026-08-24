@@ -35,7 +35,6 @@ export default function BranchManagerLayout({
     { path: '/branch/pos', label: 'POS Terminals', icon: <POSIcon /> },
     { path: '/branch/tables', label: 'Tables', icon: <TablesIcon /> },
     { path: '/branch/orders', label: 'Orders', icon: <OrdersIcon /> },
-    { path: '/branch/kitchen', label: 'Kitchen', icon: <KitchenIcon /> },
     { path: '/branch/menu', label: 'Menu', icon: <MenuIcon /> },
     { path: '/branch/inventory', label: 'Inventory', icon: <InventoryIcon /> },
     { path: '/branch/expenses', label: 'Expenses', icon: <ExpensesIcon /> },

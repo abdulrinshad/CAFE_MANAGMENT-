@@ -537,7 +537,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             existing = WaiterRequest.objects.filter(
                 table_id=order.table_id,
                 request_type='Bill Request',
-                status__in=[WaiterRequest.STATUS_NEW, WaiterRequest.STATUS_IN_PROGRESS],
+                status__in=[WaiterRequest.STATUS_REQUESTED, WaiterRequest.STATUS_PROCESSING],
             ).first()
             from menu.serializers import WaiterRequestSerializer
             return Response(
@@ -578,7 +578,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             existing = WaiterRequest.objects.filter(
                 table_id=order.table_id,
                 request_type='Bill Request',
-                status__in=[WaiterRequest.STATUS_NEW, WaiterRequest.STATUS_IN_PROGRESS],
+                status__in=[WaiterRequest.STATUS_REQUESTED, WaiterRequest.STATUS_PROCESSING],
             ).first()
 
             if existing:
@@ -619,7 +619,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 order=order,
                 request_type='Bill Request',
                 message=message,
-                status=WaiterRequest.STATUS_NEW,
+                status=WaiterRequest.STATUS_REQUESTED,
                 amount=order.total,
             )
 
@@ -940,7 +940,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                     WaiterRequest.objects.filter(
                         table_id=order.table_id,
                         request_type='Bill Request',
-                        status__in=['new', 'in_progress', 'ready']
+                        status__in=['requested', 'processing', 'ready']
                     ).update(status='completed')
                 except Exception:
                     pass
@@ -1084,7 +1084,7 @@ class DashboardStatsView(APIView):
             if waiter_branch:
                 reqs_qs = reqs_qs.filter(branch=waiter_branch)
             active_requests = reqs_qs.filter(
-                status__in=[WaiterRequest.STATUS_NEW, WaiterRequest.STATUS_IN_PROGRESS]
+                status__in=[WaiterRequest.STATUS_REQUESTED, WaiterRequest.STATUS_PROCESSING]
             ).count()
             recent_requests = WaiterRequestSerializer(
                 reqs_qs.order_by('-created_at')[:5], many=True, context={'request': request}

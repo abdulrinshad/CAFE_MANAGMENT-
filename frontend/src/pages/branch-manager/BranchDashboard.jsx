@@ -162,8 +162,8 @@ export default function BranchDashboard() {
         </div>
 
         <div className="owner-kpi-grid">
-          <StatCard label="PENDING ORDERS" value={pendingOrdersCount} sub="New orders in queue" onClick={() => navigate('/branch/kitchen')} />
-          <StatCard label="PREPARING" value={preparingOrdersCount} sub="Being cooked" onClick={() => navigate('/branch/kitchen')} />
+          <StatCard label="PENDING ORDERS" value={pendingOrdersCount} sub="New orders in queue" onClick={() => navigate('/branch/orders')} />
+          <StatCard label="PREPARING" value={preparingOrdersCount} sub="Being cooked" onClick={() => navigate('/branch/orders')} />
           <StatCard label="PENDING BILLS" value={pendingBillsCount} sub="Awaiting payment" onClick={() => navigate('/branch/tables')} />
           <StatCard
             label="LOW STOCK ITEMS"

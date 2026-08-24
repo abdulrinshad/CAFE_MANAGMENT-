@@ -91,8 +91,8 @@ export default function BillRequestsPage() {
     }
     setUpdatingId(item.id)
     try {
-      let apiStatus = 'new'
-      if (nextStatus === 'PROCESSING') apiStatus = 'in_progress'
+      let apiStatus = 'requested'
+      if (nextStatus === 'PROCESSING') apiStatus = 'processing'
       else if (nextStatus === 'READY') apiStatus = 'ready'
       else if (nextStatus === 'COMPLETED') apiStatus = 'completed'
 

@@ -116,6 +116,11 @@ export const branchManagerService = {
     return request('GET', '/branch/customers/');
   },
 
+  // ── Reports ──
+  async getReports(period) {
+    return request('GET', `/branch/reports/?period=${period}`);
+  },
+
   // ── Recent Activities ──
   async getActivities() {
     return [

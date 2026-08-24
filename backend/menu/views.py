@@ -269,7 +269,7 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
         with transaction.atomic():
             active_request = WaiterRequest.objects.select_for_update().filter(
                 table=target_table,
-                status__in=[WaiterRequest.STATUS_NEW, WaiterRequest.STATUS_IN_PROGRESS]
+                status__in=[WaiterRequest.STATUS_REQUESTED, WaiterRequest.STATUS_PROCESSING]
             ).first()
 
             if active_request:
@@ -332,7 +332,7 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
                 return Response({'detail': 'Request not found.'}, status=status.HTTP_404_NOT_FOUND)
 
             # Check if already attended by someone else
-            if req_obj.status in [WaiterRequest.STATUS_IN_PROGRESS, WaiterRequest.STATUS_COMPLETED] or (req_obj.assigned_waiter and req_obj.assigned_waiter != waiter_name):
+            if req_obj.status in [WaiterRequest.STATUS_PROCESSING, WaiterRequest.STATUS_COMPLETED] or (req_obj.assigned_waiter and req_obj.assigned_waiter != waiter_name):
                 assigned_by = req_obj.assigned_waiter or 'another waiter'
                 return Response({
                     'detail': f'This request has already been attended by {assigned_by}.',
@@ -342,7 +342,7 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
                     'request': WaiterRequestSerializer(req_obj, context={'request': request}).data
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            req_obj.status = WaiterRequest.STATUS_IN_PROGRESS
+            req_obj.status = WaiterRequest.STATUS_PROCESSING
             req_obj.assigned_waiter = waiter_name
             req_obj.save()
 
