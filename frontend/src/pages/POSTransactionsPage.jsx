@@ -104,7 +104,7 @@ export default function POSTransactionsPage() {
   return (
     <AdminLayout
       searchPlaceholder="Search transactions by invoice, order, table..."
-      pageTitle="Transaction History"
+      pageTitle="Transactions"
       pageIcon={
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
           <rect x="2" y="5" width="20" height="14" rx="2" />
@@ -211,8 +211,12 @@ export default function POSTransactionsPage() {
           {loading ? (
             <div className="pos-tx-empty">Loading transactions…</div>
           ) : filteredTransactions.length === 0 ? (
-            <div className="pos-tx-empty">
-              No transactions found matching your search and filters.
+            <div className="pos-tx-empty" style={{ padding: '48px 24px', textAlign: 'center' }}>
+              <div style={{ fontSize: '36px', marginBottom: '12px' }}>💳</div>
+              <h4 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: '600' }}>No transactions found</h4>
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
+                Transactions will appear here once payments are completed.
+              </p>
             </div>
           ) : (
             <table className="pos-tx-table">

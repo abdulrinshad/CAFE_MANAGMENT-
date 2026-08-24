@@ -162,6 +162,20 @@ export default function DashboardPage() {
 
   // ── Waiter view ────────────────────────────────────────────────────────────
   if (currentRole === 'waiter') {
+    const displayRequests = (stats?.recent_requests && stats.recent_requests.length > 0)
+      ? stats.recent_requests.slice(0, 3)
+      : (waiterRequests || []).slice(0, 3)
+
+    const waiterName = currentWaiter?.name ||
+                       (currentUser?.first_name ? `${currentUser.first_name} ${currentUser.last_name || ''}`.trim() : null) ||
+                       currentUser?.username ||
+                       'Waiter'
+
+    const waiterBranchName = currentWaiter?.branch_name ||
+                             currentWaiter?.branch?.name ||
+                             currentUser?.branch?.name ||
+                             stats?.branch ||
+                             'No branch assigned'
     return (
       <AdminLayout
         searchPlaceholder="Search active tables, orders..."
@@ -177,8 +191,8 @@ export default function DashboardPage() {
           )}
 
           <div className="dashboard__greeting">
-            <h1 className="dashboard__greeting-title">Good morning, {currentWaiter?.name || currentUser?.first_name || 'Waiter'}</h1>
-            <p className="dashboard__greeting-sub">Current Shift Performance · {stats?.branch || currentWaiter?.station || 'Assigned Branch'}</p>
+            <h1 className="dashboard__greeting-title">{greeting}, {waiterName}</h1>
+            <p className="dashboard__greeting-sub">Current Shift Performance · {waiterBranchName}</p>
           </div>
 
           <div className="dashboard__waiter-cta">
