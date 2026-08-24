@@ -304,8 +304,10 @@ class WaiterRequestSerializer(serializers.ModelSerializer):
     type        = serializers.CharField(source='request_type', required=False, allow_blank=True)
     time        = serializers.SerializerMethodField()
     # Resolved live from the active order on this table (used by BillRequestsPage)
-    order_id     = serializers.SerializerMethodField()
-    order_number = serializers.SerializerMethodField()
+    order_id      = serializers.SerializerMethodField()
+    order_number  = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
+    items_summary = serializers.SerializerMethodField()
 
     class Meta:
         model  = WaiterRequest
@@ -313,12 +315,12 @@ class WaiterRequestSerializer(serializers.ModelSerializer):
             'id', 'table', 'table_id', 'table_name', 'type', 'request_type',
             'message', 'status', 'assigned_waiter', 'amount',
             'branch_id', 'branch_name',
-            'order_id', 'order_number',
+            'order_id', 'order_number', 'customer_name', 'items_summary',
             'time', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'table_name', 'table_id', 'time', 'created_at', 'updated_at',
-            'branch_id', 'branch_name', 'order_id', 'order_number',
+            'branch_id', 'branch_name', 'order_id', 'order_number', 'customer_name', 'items_summary',
         ]
 
     def get_table_id(self, obj):
@@ -332,25 +334,9 @@ class WaiterRequestSerializer(serializers.ModelSerializer):
             return ''
         return obj.created_at.strftime('%I:%M %p').lstrip('0')
 
-    def get_order_id(self, obj):
-        if obj.order_id:
-            return obj.order_id
-        if not obj.table:
-            return None
-        from orders.models import Order
-        order = Order.objects.filter(
-            table=obj.table,
-        ).exclude(status__in=['completed', 'cancelled']).order_by('-created_at').first()
-        if order is None:
-            # Fall back: most recent order created around the same time as this request
-            order = Order.objects.filter(
-                table=obj.table,
-            ).order_by('-created_at').first()
-        return order.id if order else None
-
-    def get_order_number(self, obj):
+    def get_order_obj(self, obj):
         if obj.order:
-            return obj.order.order_number
+            return obj.order
         if not obj.table:
             return None
         from orders.models import Order
@@ -359,5 +345,22 @@ class WaiterRequestSerializer(serializers.ModelSerializer):
         ).exclude(status__in=['completed', 'cancelled']).order_by('-created_at').first()
         if order is None:
             order = Order.objects.filter(table=obj.table).order_by('-created_at').first()
+        return order
+
+    def get_order_id(self, obj):
+        order = self.get_order_obj(obj)
+        return order.id if order else None
+
+    def get_order_number(self, obj):
+        order = self.get_order_obj(obj)
         return order.order_number if order else None
+
+    def get_customer_name(self, obj):
+        order = self.get_order_obj(obj)
+        return order.customer_name if (order and order.customer_name) else ''
+
+    def get_items_summary(self, obj):
+        order = self.get_order_obj(obj)
+        return order.items_summary if order else ''
+
 
