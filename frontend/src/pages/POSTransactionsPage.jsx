@@ -43,7 +43,7 @@ export default function POSTransactionsPage() {
 
   // Derive completed transactions list from orders
   const allTransactions = (orders || []).map((o) => {
-    const isCompleted = o.status === 'completed' || o.status === 'paid'
+    const isCompleted = String(o.status || '').toUpperCase() === 'COMPLETED' || String(o.status || '').toUpperCase() === 'PAID'
     const channel = (o.order_type || o.channel || (o.table_label || o.table ? 'dine_in' : 'takeaway')).toLowerCase()
     
     return {

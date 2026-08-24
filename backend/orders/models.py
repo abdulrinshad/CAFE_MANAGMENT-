@@ -53,6 +53,13 @@ class Order(models.Model):
     # Identifiers
     customer_name    = models.CharField(max_length=120, blank=True, default='')
     waiter_name      = models.CharField(max_length=120, blank=True, default='')
+    cashier_name     = models.CharField(max_length=120, blank=True, default='')
+    pos_terminal     = models.ForeignKey(
+        'accounts.POSTerminal',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='orders',
+    )
     notes            = models.TextField(blank=True, default='')
     whatsapp_number  = models.CharField(max_length=20, blank=True, default='',
                                         help_text='Customer WhatsApp number (10 digits)')

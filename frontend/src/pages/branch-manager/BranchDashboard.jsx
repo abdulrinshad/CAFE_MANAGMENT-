@@ -72,67 +72,55 @@ export default function BranchDashboard() {
   const { currentBranchManager, currentBranch } = useApp();
   const [chartPeriod, setChartPeriod] = useState('daily');
   const [activities, setActivities] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [tables, setTables] = useState([]);
-  const [inventory, setInventory] = useState([]);
-  const [expenses, setExpenses] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setActivities(branchManagerService.getActivities());
-    setOrders(branchManagerService.getOrders());
-    setTables(branchManagerService.getTables());
-    setInventory(branchManagerService.getInventory());
-    setExpenses(branchManagerService.getExpenses());
+    async function loadData() {
+      try {
+        const dashboardStats = await branchManagerService.getDashboardStats();
+        setStats(dashboardStats);
+        const act = await branchManagerService.getActivities();
+        setActivities(act);
+      } catch (err) {
+        console.error("Failed to load dashboard data", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
   }, []);
 
-  const branchInfo = branchManagerService.getBranchInfo();
+  if (loading || !stats) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
+          <h3>Loading dashboard data...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
 
-  // Calculations
-  const todayDateStr = new Date().toISOString().split('T')[0];
-  
-  const todayOrders = orders.filter(o => o.createdTime); // simple count for mock
-  const todaySales = orders
-    .filter(o => o.status === 'COMPLETED' || o.paymentStatus === 'paid')
-    .reduce((sum, o) => sum + o.amount, 0);
+  const todaySales = stats.today_sales || 0;
+  const activeTablesCount = stats.active_tables?.occupied || 0;
+  const totalTablesCount = stats.active_tables?.total || 0;
+  const todayOrdersCount = stats.today_orders || 0;
+  const pendingOrdersCount = stats.pending_orders || 0;
+  const preparingOrdersCount = stats.preparing_orders || 0;
+  const pendingBillsCount = stats.pending_bills || 0;
+  const lowStockCount = stats.low_stock_items || 0;
 
-  const activeTablesCount = tables.filter(t => t.status === 'occupied' || t.status === 'order_in_progress' || t.status === 'bill_requested').length;
-  const pendingOrdersCount = orders.filter(o => o.status === 'NEW').length;
-  const preparingOrdersCount = orders.filter(o => o.status === 'PREPARING').length;
-  const pendingBillsCount = tables.filter(t => t.status === 'bill_requested').length;
-  const lowStockCount = inventory.filter(i => i.currentStock <= i.minimumStock).length;
-  const todayExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const todayOrders = stats.today_orders || 0;
+  const completedOrders = stats.completed_orders || 0;
+  const cancelledOrders = stats.cancelled_orders || 0;
+  const pendingPayments = stats.pending_payments || 0;
+  const avgOrderValue = stats.avg_order_value || 0;
 
-  const avgOrderValue = todayOrders.length > 0 ? Math.round(todaySales / todayOrders.length) : 0;
-  const completedOrders = orders.filter(o => o.status === 'COMPLETED').length;
-  const cancelledOrders = orders.filter(o => o.status === 'CANCELLED').length;
-  const pendingPayments = orders.filter(o => o.paymentStatus === 'pending').reduce((sum, o) => sum + o.amount, 0);
-
-  // Mock Sales Overview Chart Data
+  // Map backend sales overview into chart format
   const chartDataMap = {
-    daily: [
-      { label: '09 AM', value: 1200 },
-      { label: '11 AM', value: 3400 },
-      { label: '01 PM', value: 7800 },
-      { label: '03 PM', value: 4500 },
-      { label: '05 PM', value: 6200 },
-      { label: '07 PM', value: 11000 },
-      { label: '09 PM', value: 9500 },
-    ],
-    weekly: [
-      { label: 'Mon', value: 22000 },
-      { label: 'Tue', value: 24000 },
-      { label: 'Wed', value: 28000 },
-      { label: 'Thu', value: 26000 },
-      { label: 'Fri', value: 35000 },
-      { label: 'Sat', value: 48000 },
-      { label: 'Sun', value: 42000 },
-    ],
-    monthly: [
-      { label: 'Week 1', value: 180000 },
-      { label: 'Week 2', value: 210000 },
-      { label: 'Week 3', value: 240000 },
-      { label: 'Week 4', value: 295000 },
-    ],
+    daily: stats.sales_overview ? stats.sales_overview.map(s => ({ label: s.day, value: s.sales })) : [],
+    weekly: stats.sales_overview ? stats.sales_overview.map(s => ({ label: s.day, value: s.sales })) : [],
+    monthly: stats.sales_overview ? stats.sales_overview.map(s => ({ label: s.day, value: s.sales })) : [],
   };
 
   return (
@@ -142,10 +130,10 @@ export default function BranchDashboard() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h1 className="dashboard__greeting-title">{getGreeting()}, {currentBranchManager?.name || 'Manager'} ☕</h1>
-            <p className="dashboard__greeting-sub">Manage and monitor everything happening at {currentBranch?.name || 'Kochi Branch'}.</p>
+            <p className="dashboard__greeting-sub">Manage and monitor everything happening at {currentBranch?.name || 'your branch'}.</p>
           </div>
           <span className="owner-badge owner-badge--active" style={{ fontSize: '12px', padding: '6px 12px' }}>
-            {currentBranch?.name || 'Kochi Branch'} • Active
+            {currentBranch?.name || 'Branch'} • Active
           </span>
         </div>
 
@@ -160,14 +148,14 @@ export default function BranchDashboard() {
           />
           <StatCard
             label="ACTIVE TABLES"
-            value={`${activeTablesCount} / ${tables.length}`}
+            value={`${activeTablesCount} / ${totalTablesCount}`}
             sub="Occupied or in service"
             badgeType="orange"
             onClick={() => navigate('/branch/tables')}
           />
           <StatCard
             label="TODAY'S ORDERS"
-            value={todayOrders.length}
+            value={todayOrdersCount}
             sub="Total tickets printed"
             onClick={() => navigate('/branch/orders')}
           />
@@ -273,7 +261,7 @@ export default function BranchDashboard() {
               </div>
               <div className="branch-perf-stat">
                 <span className="branch-perf-stat__label">Total Orders</span>
-                <span className="branch-perf-stat__value" style={{ fontSize: '18px' }}>{todayOrders.length}</span>
+                <span className="branch-perf-stat__value" style={{ fontSize: '18px' }}>{todayOrders}</span>
               </div>
               <div className="branch-perf-stat">
                 <span className="branch-perf-stat__label">Average Order Value</span>

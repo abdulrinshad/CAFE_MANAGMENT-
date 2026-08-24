@@ -14,6 +14,21 @@ from .views import (
     BranchViewSet,
     BranchManagerViewSet,
     BranchManagerLoginView,
+    OwnerPOSTerminalViewSet,
+)
+from .branch_views import (
+    BranchDashboardView,
+    BranchStaffView,
+    BranchTableViewSet,
+    BranchOrderViewSet,
+    BranchKitchenOrdersView,
+    BranchMenuView,
+    BranchInventoryViewSet,
+    BranchExpenseViewSet,
+    BranchCustomersView,
+    BranchReportsView,
+    BranchSettingsView,
+    BranchPOSTerminalViewSet,
 )
 
 router = DefaultRouter()
@@ -21,6 +36,12 @@ router.register(r'waiters', WaiterViewSet, basename='waiters')
 router.register(r'cashiers', CashierViewSet, basename='cashiers')
 router.register(r'branches', BranchViewSet, basename='branches')
 router.register(r'branch-managers', BranchManagerViewSet, basename='branch-managers')
+router.register(r'branch/tables', BranchTableViewSet, basename='branch-tables')
+router.register(r'branch/orders', BranchOrderViewSet, basename='branch-orders')
+router.register(r'branch/inventory', BranchInventoryViewSet, basename='branch-inventory')
+router.register(r'branch/expenses', BranchExpenseViewSet, basename='branch-expenses')
+router.register(r'owner/pos', OwnerPOSTerminalViewSet, basename='owner-pos')
+router.register(r'branch/pos', BranchPOSTerminalViewSet, basename='branch-pos')
 
 urlpatterns = [
     path('auth/login/', CustomTokenObtainPairView.as_view(), name='auth_login'),
@@ -32,5 +53,19 @@ urlpatterns = [
     path('auth/waiter-login/', WaiterLoginView.as_view(), name='auth_waiter_login'),
     path('auth/employee-login/', EmployeeLoginView.as_view(), name='auth_employee_login'),
     path('auth/branch-manager-login/', BranchManagerLoginView.as_view(), name='auth_branch_manager_login'),
+
+    # Branch Manager URLs
+    path('branch/dashboard/', BranchDashboardView.as_view(), name='branch_dashboard'),
+    path('branch/staff/', BranchStaffView.as_view(), name='branch_staff_list_create'),
+    path('branch/staff/<str:pk>/', BranchStaffView.as_view(), name='branch_staff_detail_update'),
+    path('branch/staff/<str:pk>/status/', BranchStaffView.as_view(), name='branch_staff_status'),
+    path('branch/kitchen/orders/', BranchKitchenOrdersView.as_view(), name='branch_kitchen_orders'),
+    path('branch/kitchen/orders/<int:pk>/status/', BranchOrderViewSet.as_view({'patch': 'partial_update'}), name='branch_kitchen_order_status'),
+    path('branch/menu/', BranchMenuView.as_view(), name='branch_menu'),
+    path('branch/menu/<int:pk>/', BranchMenuView.as_view(), name='branch_menu_toggle'),
+    path('branch/customers/', BranchCustomersView.as_view(), name='branch_customers'),
+    path('branch/reports/', BranchReportsView.as_view(), name='branch_reports'),
+    path('branch/settings/', BranchSettingsView.as_view(), name='branch_settings'),
+
     path('', include(router.urls)),
 ]

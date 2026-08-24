@@ -272,6 +272,7 @@ class WaiterRequest(models.Model):
 
     table           = models.ForeignKey(Table, on_delete=models.CASCADE, related_name='requests')
     branch          = models.ForeignKey('accounts.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='waiter_requests')
+    order           = models.ForeignKey('orders.Order', on_delete=models.SET_NULL, null=True, blank=True, related_name='waiter_requests')
     request_type    = models.CharField(max_length=50, default='Call Waiter')
     message         = models.TextField(blank=True, default='')
     status          = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NEW, db_index=True)
@@ -287,4 +288,25 @@ class WaiterRequest(models.Model):
 
     def __str__(self):
         return f'[{self.get_status_display()}] Table {self.table.name} - {self.request_type}'
+
+
+class InventoryItem(models.Model):
+    branch = models.ForeignKey('accounts.Branch', on_delete=models.CASCADE, related_name='inventory_items')
+    name = models.CharField(max_length=120)
+    current_stock = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    minimum_stock = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    unit = models.CharField(max_length=30, default='kg')
+    cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    category = models.CharField(max_length=100, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Inventory Item'
+        verbose_name_plural = 'Inventory Items'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.branch.name})"
+
 

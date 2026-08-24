@@ -13,21 +13,47 @@ export default function Orders() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [channelFilter, setChannelFilter] = useState('ALL');
 
-  useEffect(() => {
-    setOrders(branchManagerService.getOrders());
-  }, []);
+  const [loading, setLoading] = useState(true);
 
-  const handleUpdateStatus = (id, nextStatus) => {
-    const updated = branchManagerService.updateOrderStatus(id, nextStatus);
-    setOrders(branchManagerService.getOrders());
-    if (selectedOrder && selectedOrder.id === id) {
-      setSelectedOrder(updated);
+  const loadOrders = async () => {
+    try {
+      const data = await branchManagerService.getOrders();
+      setOrders(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Metrics counts
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  const handleUpdateStatus = async (id, nextStatus) => {
+    try {
+      await branchManagerService.updateOrderStatus(id, nextStatus);
+      await loadOrders();
+      if (selectedOrder && selectedOrder.id === id) {
+        setSelectedOrder(prev => ({ ...prev, status: nextStatus }));
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to update order status');
+    }
+  };
+
+  if (loading) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
+          <h3>Loading orders...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
+
   const totalCount = orders.length;
-  const newCount = orders.filter(o => o.status === 'NEW').length;
+  const newCount = orders.filter(o => o.status === 'NEW' || o.status === 'PENDING').length;
   const preparingCount = orders.filter(o => o.status === 'PREPARING').length;
   const readyCount = orders.filter(o => o.status === 'READY').length;
   const servedCount = orders.filter(o => o.status === 'SERVED').length;
@@ -35,11 +61,13 @@ export default function Orders() {
 
   // Filter logic
   const filteredOrders = orders.filter(o => {
-    const matchesSearch = o.id.toLowerCase().includes(search.toLowerCase()) || 
-                          (o.table && o.table.toLowerCase().includes(search.toLowerCase())) ||
-                          (o.waiter && o.waiter.toLowerCase().includes(search.toLowerCase()));
-    const matchesStatus = statusFilter === 'ALL' || o.status === statusFilter;
-    const matchesChannel = channelFilter === 'ALL' || o.channel.toLowerCase() === channelFilter.toLowerCase();
+    const searchValue = search.toLowerCase();
+    const matchesSearch = String(o.id ?? o.order_number ?? "").toLowerCase().includes(searchValue) || 
+                          String(o.order_number ?? "").toLowerCase().includes(searchValue) ||
+                          String(o.table ?? "").toLowerCase().includes(searchValue) ||
+                          String(o.waiter ?? "").toLowerCase().includes(searchValue);
+    const matchesStatus = statusFilter === 'ALL' || String(o.status ?? "").toUpperCase() === statusFilter.toUpperCase();
+    const matchesChannel = channelFilter === 'ALL' || String(o.channel ?? "").toLowerCase() === channelFilter.toLowerCase();
     return matchesSearch && matchesStatus && matchesChannel;
   });
 
@@ -139,7 +167,7 @@ export default function Orders() {
                   <tr key={order.id}>
                     <td className="td-name td-mono">{order.id}</td>
                     <td>
-                      <span className={`owner-badge owner-badge--${order.channel.toLowerCase()}`}>
+                      <span className={`owner-badge owner-badge--${String(order.channel ?? "").toLowerCase()}`}>
                         {order.channel}
                       </span>
                     </td>

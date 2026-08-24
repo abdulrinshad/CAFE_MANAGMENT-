@@ -76,3 +76,19 @@ class IsAdminOrManagerOrCashier(BasePermission):
         if not hasattr(request.user, 'profile'):
             return False
         return request.user.profile.role in ['ADMIN', 'MANAGER', 'CASHIER']
+
+class IsEmployeeOrAbove(BasePermission):
+    """
+    Allows access to Admin, Manager, Waiter (Staff), and Cashier users (including shadow accounts).
+    """
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        if user.is_superuser or user.is_staff:
+            return True
+        if user.username and (user.username.startswith('waiter_') or user.username.startswith('cashier_')):
+            return True
+        if hasattr(user, 'profile') and user.profile.role in ['ADMIN', 'MANAGER', 'STAFF', 'CASHIER']:
+            return True
+        return False

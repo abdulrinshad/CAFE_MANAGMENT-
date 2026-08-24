@@ -17,15 +17,38 @@ export default function Tables() {
   });
   const [editId, setEditId] = useState(null);
 
+  const [loading, setLoading] = useState(true);
+
+  const loadTables = async () => {
+    try {
+      const data = await branchManagerService.getTables();
+      setTables(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setTables(branchManagerService.getTables());
+    loadTables();
   }, []);
 
+  if (loading) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
+          <h3>Loading tables...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
+
   const totalTables = tables.length;
-  const available = tables.filter(t => t.status === 'available').length;
-  const occupied = tables.filter(t => t.status === 'occupied').length;
-  const orderInProgress = tables.filter(t => t.status === 'order_in_progress').length;
-  const billRequested = tables.filter(t => t.status === 'bill_requested').length;
+  const available = tables.filter(t => String(t.status ?? "").toLowerCase() === 'available').length;
+  const occupied = tables.filter(t => String(t.status ?? "").toLowerCase() === 'occupied').length;
+  const orderInProgress = tables.filter(t => String(t.status ?? "").toLowerCase() === 'order_in_progress').length;
+  const billRequested = tables.filter(t => String(t.status ?? "").toLowerCase() === 'bill_requested').length;
 
   const handleOpenAdd = () => {
     setEditId(null);
@@ -51,25 +74,29 @@ export default function Tables() {
     setShowModal(true);
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    if (editId) {
-      branchManagerService.updateTable(editId, {
-        number: formData.number,
-        capacity: Number(formData.capacity),
-        section: formData.section,
-        qrStatus: formData.active ? 'active' : 'inactive'
-      });
-    } else {
-      branchManagerService.addTable({
-        number: formData.number,
-        capacity: Number(formData.capacity),
-        section: formData.section,
-        qrStatus: formData.active ? 'active' : 'inactive'
-      });
+    try {
+      if (editId) {
+        await branchManagerService.updateTable(editId, {
+          number: formData.number,
+          capacity: Number(formData.capacity),
+          section: formData.section,
+          active: formData.active
+        });
+      } else {
+        await branchManagerService.addTable({
+          number: formData.number,
+          capacity: Number(formData.capacity),
+          section: formData.section,
+          active: formData.active
+        });
+      }
+      await loadTables();
+      setShowModal(false);
+    } catch (err) {
+      alert(err.message || 'Failed to save table');
     }
-    setTables(branchManagerService.getTables());
-    setShowModal(false);
   };
 
   const getStatusColor = (status) => {
@@ -366,11 +393,15 @@ export default function Tables() {
                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid var(--color-border-light)', paddingTop: '16px' }}>
                   <button
                     className="btn-danger"
-                    onClick={() => {
+                    onClick={async () => {
                       if (confirm(`Remove table ${selectedTable.number}?`)) {
-                        branchManagerService.deleteTable(selectedTable.id);
-                        setTables(branchManagerService.getTables());
-                        setShowDetailModal(false);
+                        try {
+                          await branchManagerService.deleteTable(selectedTable.id);
+                          await loadTables();
+                          setShowDetailModal(false);
+                        } catch (err) {
+                          alert(err.message || 'Failed to delete table');
+                        }
                       }
                     }}
                   >

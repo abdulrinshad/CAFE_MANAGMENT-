@@ -8,15 +8,37 @@ export default function Customers() {
   const [selectedCust, setSelectedCust] = useState(null);
   const [showDrawer, setShowDrawer] = useState(false);
 
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    setCustomers(branchManagerService.getCustomers());
+    const loadCustomers = async () => {
+      try {
+        const data = await branchManagerService.getCustomers();
+        setCustomers(data || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadCustomers();
   }, []);
+
+  if (loading) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
+          <h3>Loading customer data...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
 
   // Summary Metrics
   const totalPatrons = customers.length;
-  const totalSpending = customers.reduce((sum, c) => sum + c.totalSpending, 0);
+  const totalSpending = customers.reduce((sum, c) => sum + (c.spent || 0), 0);
   const averageValue = totalPatrons > 0 ? Math.round(totalSpending / totalPatrons) : 0;
-  const returningCount = customers.filter(c => c.totalOrders > 20).length;
+  const returningCount = customers.filter(c => (c.visits || 0) > 1).length;
 
   return (
     <BranchManagerLayout>
@@ -38,7 +60,7 @@ export default function Customers() {
           </div>
           <div className="owner-kpi-card">
             <div className="owner-kpi-card__label">Total CRM Revenue</div>
-            <div className="owner-kpi-card__value" style={{ color: 'var(--color-green)' }}>₹{totalSpending.toLocaleString('en-IN')}</div>
+            <div className="owner-kpi-card__value" style={{ color: 'var(--color-green)' }}>₹{Number(totalSpending ?? 0).toLocaleString('en-IN')}</div>
           </div>
           <div className="owner-kpi-card">
             <div className="owner-kpi-card__label">Average Spent</div>
@@ -88,8 +110,8 @@ export default function Customers() {
                       </div>
                     </td>
                     <td>{c.phone}</td>
-                    <td style={{ fontWeight: 'bold' }}>{c.totalOrders} times</td>
-                    <td style={{ fontWeight: 'bold' }}>₹{c.totalSpending.toLocaleString('en-IN')}</td>
+                    <td style={{ fontWeight: 'bold' }}>{(c.totalOrders ?? c.visits ?? 0)} times</td>
+                    <td style={{ fontWeight: 'bold' }}>₹{Number(c.totalSpending ?? c.spent ?? 0).toLocaleString('en-IN')}</td>
                     <td>{c.lastVisit}</td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
@@ -182,7 +204,7 @@ export default function Customers() {
                     <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>Visits</div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-espresso)' }}>₹{selectedCust.totalSpending}</div>
+                    <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--color-espresso)' }}>₹{Number(selectedCust.totalSpending ?? selectedCust.spent ?? 0).toLocaleString('en-IN')}</div>
                     <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>Total Spent</div>
                   </div>
                   <div style={{ textAlign: 'center' }}>

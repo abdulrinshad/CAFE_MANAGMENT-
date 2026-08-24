@@ -7,19 +7,36 @@ export default function Kitchen() {
   const [orders, setOrders] = useState([]);
   const [channelFilter, setChannelFilter] = useState('ALL');
 
+  const [loading, setLoading] = useState(true);
+
+  const loadKitchenOrders = async () => {
+    try {
+      const data = await branchManagerService.getKitchenOrders();
+      setOrders(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setOrders(branchManagerService.getOrders());
+    loadKitchenOrders();
   }, []);
 
-  const handleMoveStatus = (id, nextStatus) => {
-    branchManagerService.updateOrderStatus(id, nextStatus);
-    setOrders(branchManagerService.getOrders());
+  const handleMoveStatus = async (id, nextStatus) => {
+    try {
+      await branchManagerService.updateOrderStatus(id, nextStatus);
+      await loadKitchenOrders();
+    } catch (err) {
+      alert(err.message || 'Failed to update order status');
+    }
   };
 
   const filteredOrders = orders.filter(o => {
     if (channelFilter === 'ALL') return true;
     if (channelFilter === 'ONLINE') return o.channel === 'Swiggy' || o.channel === 'Zomato';
-    return o.channel.toLowerCase() === channelFilter.toLowerCase();
+    return String(o.channel ?? "").toLowerCase() === String(channelFilter ?? "").toLowerCase();
   });
 
   const columns = [
@@ -28,6 +45,16 @@ export default function Kitchen() {
     { key: 'READY', label: 'Ready for Pickup', color: 'var(--color-green)' },
     { key: 'SERVED', label: 'Served', color: 'var(--color-espresso)' }
   ];
+
+  if (loading) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
+          <h3>Loading kitchen display system...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
 
   return (
     <BranchManagerLayout>
@@ -113,7 +140,7 @@ export default function Kitchen() {
                       {/* Ticket header */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span className="td-mono" style={{ fontWeight: 'bold', color: 'var(--color-espresso)' }}>{order.id}</span>
-                        <span className={`owner-badge owner-badge--${order.channel.toLowerCase()}`} style={{ fontSize: '9px' }}>
+                        <span className={`owner-badge owner-badge--${String(order.channel ?? "").toLowerCase()}`} style={{ fontSize: '9px' }}>
                           {order.channel}
                         </span>
                       </div>

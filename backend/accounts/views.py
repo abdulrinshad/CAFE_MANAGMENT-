@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import UserProfile, Waiter, Branch, BranchManager, Cashier
+from .models import UserProfile, Waiter, Branch, BranchManager, Cashier, KitchenStaff, POSTerminal
 from .serializers import (
     CustomTokenObtainPairSerializer,
     UserSerializer,
@@ -17,6 +17,9 @@ from .serializers import (
     BranchManagerSerializer,
     CashierSerializer,
     CashierSafeSerializer,
+    KitchenStaffSerializer,
+    KitchenStaffSafeSerializer,
+    POSTerminalSerializer,
 )
 from .permissions import IsAdminOrManager, IsAdmin
 
@@ -209,6 +212,7 @@ class EmployeeLoginView(APIView):
         # Try Waiter first
         waiter = None
         cashier = None
+        kitchen = None
         try:
             waiter = Waiter.objects.select_related('branch').get(employee_id=employee_id)
         except Waiter.DoesNotExist:
@@ -221,6 +225,12 @@ class EmployeeLoginView(APIView):
                 pass
 
         if waiter is None and cashier is None:
+            try:
+                kitchen = KitchenStaff.objects.select_related('branch').get(employee_id=employee_id)
+            except KitchenStaff.DoesNotExist:
+                pass
+
+        if waiter is None and cashier is None and kitchen is None:
             return Response(
                 {"detail": "Invalid Employee ID or PIN."},
                 status=status.HTTP_401_UNAUTHORIZED
@@ -228,7 +238,10 @@ class EmployeeLoginView(APIView):
 
         if waiter is not None:
             return self._login_waiter(request, waiter, pin)
-        return self._login_cashier(request, cashier, pin)
+        elif cashier is not None:
+            return self._login_cashier(request, cashier, pin)
+        else:
+            return self._login_kitchen(request, kitchen, pin)
 
     def _login_waiter(self, request, waiter, pin):
         if not waiter.is_active:
@@ -335,6 +348,59 @@ class EmployeeLoginView(APIView):
                 "role": "CASHIER",
             }
         }, status=status.HTTP_200_OK)
+
+    def _login_kitchen(self, request, kitchen, pin):
+        if not kitchen.is_active:
+            return Response(
+                {"detail": "This employee account is currently inactive."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        if not kitchen.check_pin(pin):
+            return Response(
+                {"detail": "Invalid Employee ID or PIN."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        shadow_username = f"kitchen_{kitchen.id}"
+        shadow_user, created = User.objects.get_or_create(
+            username=shadow_username,
+            defaults={
+                'email': f"kitchen_{kitchen.id}@artisanbrew.internal",
+                'is_staff': False,
+                'is_superuser': False,
+                'is_active': True,
+            }
+        )
+        if created:
+            shadow_user.set_unusable_password()
+            shadow_user.save()
+
+        profile, _ = UserProfile.objects.get_or_create(user=shadow_user)
+        profile.role = UserProfile.KITCHEN
+        profile.branch = kitchen.branch
+        profile.save()
+
+        refresh = RefreshToken.for_user(shadow_user)
+        return Response({
+            "success": True,
+            "role": "kitchen",
+            "employee": {
+                "id": kitchen.id,
+                "name": kitchen.name,
+                "employee_id": kitchen.employee_id,
+                "branch_id": kitchen.branch_id,
+                "branch_name": kitchen.branch.name if kitchen.branch else None,
+            },
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": {
+                "id": shadow_user.id,
+                "username": shadow_user.username,
+                "email": shadow_user.email,
+                "role": "KITCHEN",
+            }
+        }, status=status.HTTP_200_OK)
+
 
 
 # ── Cashier Views ──────────────────────────────────────────────────────────────
@@ -456,11 +522,11 @@ class BranchManagerLoginView(APIView):
 
     def post(self, request, *args, **kwargs):
         manager_id = request.data.get('manager_id', '').strip()
-        pin = request.data.get('pin', '')
+        pin = request.data.get('pin', request.data.get('password', ''))
 
         if not manager_id or not pin:
             return Response(
-                {"detail": "manager_id and pin are required."},
+                {"detail": "manager_id and pin/password are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -535,3 +601,22 @@ class BranchManagerLoginView(APIView):
                 "role": "BRANCH_MANAGER",
             }
         }, status=status.HTTP_200_OK)
+
+
+class OwnerPOSTerminalViewSet(viewsets.ModelViewSet):
+    queryset = POSTerminal.objects.select_related('branch', 'assigned_cashier').all()
+    serializer_class = POSTerminalSerializer
+    permission_classes = [IsAuthenticated, IsAdmin]
+    pagination_class = None
+
+    @action(detail=True, methods=['patch'], url_path='status')
+    def set_status(self, request, pk=None):
+        terminal = self.get_object()
+        status_val = request.data.get('status')
+        if not status_val or status_val.lower() not in ['active', 'inactive', 'maintenance', 'offline']:
+            return Response({"detail": "Invalid or missing status."}, status=status.HTTP_400_BAD_REQUEST)
+        if status_val.lower() == 'offline':
+            status_val = 'inactive'
+        terminal.status = status_val.lower()
+        terminal.save(update_fields=['status', 'updated_at'])
+        return Response(POSTerminalSerializer(terminal).data)

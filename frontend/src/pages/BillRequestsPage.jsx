@@ -45,8 +45,9 @@ export default function BillRequestsPage() {
   )
 
   const billRequests = billRequestsRaw.map((r) => {
-    const resolvedOrderId     = r.order_id
-    const resolvedOrderNumber = r.order_number
+    const resolvedOrderId     = r.orderId ?? r.order_id ?? (r.order ? (typeof r.order === 'object' ? r.order.id : r.order) : null)
+    const resolvedOrderNumber = r.orderNumber ?? r.order_number ?? (r.order && typeof r.order === 'object' ? r.order.order_number : null)
+    const resolvedTable       = r.tableName ?? r.table_name ?? r.table_id ?? (r.table ? (typeof r.table === 'object' ? r.table.name : `Table ${r.table}`) : 'undefined')
 
     let billStatus = 'REQUESTED'
     const statusLower = (r.status || '').toLowerCase()
@@ -60,9 +61,9 @@ export default function BillRequestsPage() {
 
     return {
       id:          r.id,
-      table:       r.table_name || r.table_id || `Table ${r.table}`,
-      order:       resolvedOrderNumber || r.order_number || '—',
-      orderId:     resolvedOrderId || null,
+      table:       resolvedTable,
+      order:       resolvedOrderNumber || '—',
+      orderId:     resolvedOrderId,
       amount:      r.amount ?? 0,
       time:        r.time || relativeTime(r.created_at),
       message:     r.message || '',
@@ -107,6 +108,22 @@ export default function BillRequestsPage() {
     } finally {
       setUpdatingId(null)
     }
+  }
+
+  const handleCollectPaymentClick = (item) => {
+    if (!item.orderId || item.orderId === 'null' || item.orderId === 'undefined') {
+      alert('Error: This bill request does not have a valid associated order ID.')
+      return
+    }
+    navigate(`/orders/${item.orderId}/checkout`)
+  }
+
+  const handleGenerateBillClick = (item) => {
+    if (!item.orderId || item.orderId === 'null' || item.orderId === 'undefined') {
+      alert('Error: This bill request does not have a valid associated order ID.')
+      return
+    }
+    navigate(`/orders/${item.orderId}`)
   }
 
   return (
@@ -194,7 +211,7 @@ export default function BillRequestsPage() {
                         <button
                           className="btn-primary btn-sm w-full"
                           style={{ marginBottom: 6, background: 'linear-gradient(135deg,#16a34a 0%,#15803d 100%)' }}
-                          onClick={() => navigate(`/orders/${item.orderId}`)}
+                          onClick={() => handleGenerateBillClick(item)}
                           id={`generate-bill-order-${item.orderId}`}
                         >
                           Generate Bill (Invoice)
@@ -222,16 +239,15 @@ export default function BillRequestsPage() {
                       {item.status === 'READY' && (
                         <button
                           className="btn-primary btn-sm w-full btn-success-bg"
-                          onClick={() => handleUpdateStatus(item, 'COMPLETED')}
-                          disabled={updatingId === item.id}
+                          onClick={() => handleCollectPaymentClick(item)}
                         >
-                          {updatingId === item.id ? 'Updating...' : 'Mark Completed'}
+                          Collect Payment
                         </button>
                       )}
                       {item.status === 'COMPLETED' && (
                         <button
                           className="btn-outline btn-sm w-full"
-                          onClick={() => item.orderId && navigate(`/orders/${item.orderId}`)}
+                          onClick={() => handleGenerateBillClick(item)}
                         >
                           View Order Details
                         </button>

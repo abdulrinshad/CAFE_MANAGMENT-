@@ -73,7 +73,7 @@ def _get_period_range(period, date_from=None, date_to=None):
 
 
 
-from accounts.permissions import IsAdminOrManagerOrStaff
+from accounts.permissions import IsEmployeeOrAbove
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Orders ViewSet
@@ -113,7 +113,7 @@ def _is_cashier_or_above(request):
 
 
 class OrderViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAdminOrManagerOrStaff]
+    permission_classes = [IsEmployeeOrAbove]
     queryset = Order.objects.select_related('table', 'branch').prefetch_related('items__product').all()
     ordering_fields  = ['created_at', 'status', 'total']
     ordering         = ['-created_at']
@@ -616,6 +616,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             bill_request = WaiterRequest.objects.create(
                 table=table,
                 branch=branch,
+                order=order,
                 request_type='Bill Request',
                 message=message,
                 status=WaiterRequest.STATUS_NEW,
@@ -860,11 +861,40 @@ class OrderViewSet(viewsets.ModelViewSet):
         if pay_status not in [Payment.STATUS_PAID, Payment.STATUS_PENDING]:
             pay_status = Payment.STATUS_PAID
 
+        # Resolve cashier name and terminal
+        cashier_name = ''
+        pos_terminal_obj = None
+        user = getattr(request, 'user', None)
+        if user and user.is_authenticated:
+            if user.username and user.username.startswith('cashier_'):
+                try:
+                    cashier_id = int(user.username.split('_')[1])
+                    from accounts.models import Cashier, POSTerminal
+                    cashier = Cashier.objects.filter(pk=cashier_id).first()
+                    if cashier:
+                        cashier_name = cashier.name
+                        terminal = POSTerminal.objects.filter(assigned_cashier=cashier).first()
+                        if terminal:
+                            pos_terminal_obj = terminal
+                except Exception:
+                    pass
+            if not cashier_name:
+                cashier_name = user.get_full_name() or user.username
+
         with transaction.atomic():
             # Complete the order
             order.status = Order.STATUS_COMPLETED
             order.completed_at = timezone.now()
-            order.save(update_fields=['status', 'completed_at', 'updated_at'])
+            order.payment_method = method
+            order.payment_status = pay_status
+            if cashier_name:
+                order.cashier_name = cashier_name
+            if pos_terminal_obj:
+                order.pos_terminal = pos_terminal_obj
+            if not order.branch and pos_terminal_obj and pos_terminal_obj.branch:
+                order.branch = pos_terminal_obj.branch
+
+            order.save(update_fields=['status', 'completed_at', 'payment_method', 'payment_status', 'cashier_name', 'pos_terminal', 'branch', 'updated_at'])
 
             # Mark invoice paid
             invoice = None
@@ -886,20 +916,32 @@ class OrderViewSet(viewsets.ModelViewSet):
                     'amount':  order.total,
                 }
             )
-            if pay_status == Payment.STATUS_PAID and payment.status != Payment.STATUS_PAID:
-                payment.method  = method
-                payment.status  = pay_status
+            payment.method = method
+            payment.status = pay_status
+            if pay_status == Payment.STATUS_PAID:
                 payment.paid_at = timezone.now()
-                payment.save(update_fields=['method', 'status', 'paid_at'])
+            payment.save(update_fields=['method', 'status', 'paid_at'])
 
             # Release table
-            if order.table:
+            if order.table_id:
                 try:
                     from menu.models import Table
                     Table.objects.filter(pk=order.table_id).update(
-                        status='available',
+                        status=Table.STATUS_AVAILABLE,
                         current_order_ref='',
                     )
+                except Exception:
+                    pass
+
+            # Mark associated waiter bill requests completed
+            if order.table_id:
+                try:
+                    from menu.models import WaiterRequest
+                    WaiterRequest.objects.filter(
+                        table_id=order.table_id,
+                        request_type='Bill Request',
+                        status__in=['new', 'in_progress', 'ready']
+                    ).update(status='completed')
                 except Exception:
                     pass
 

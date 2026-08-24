@@ -61,6 +61,7 @@ class UserProfile(models.Model):
     STAFF = 'STAFF'
     CASHIER = 'CASHIER'
     POS = 'POS'
+    KITCHEN = 'KITCHEN'
 
     ROLE_CHOICES = [
         (ADMIN, 'Admin'),
@@ -68,6 +69,7 @@ class UserProfile(models.Model):
         (STAFF, 'Staff'),
         (CASHIER, 'Cashier'),
         (POS, 'POS / Desk'),
+        (KITCHEN, 'Kitchen Staff'),
     ]
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -132,3 +134,64 @@ class Cashier(models.Model):
 
     def __str__(self):
         return f"{self.name} — {self.branch.name}"
+
+
+class KitchenStaff(models.Model):
+    """
+    Kitchen Staff account.
+    Authenticated using employee_id + PIN (hashed), following the same
+    pattern as Waiter and Cashier.
+    """
+    name = models.CharField(max_length=120)
+    employee_id = models.CharField(max_length=50, unique=True)
+    branch = models.ForeignKey(
+        Branch, on_delete=models.CASCADE, related_name='kitchen_staff'
+    )
+    pin_hash = models.CharField(max_length=128)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Kitchen Staff'
+        verbose_name_plural = 'Kitchen Staff'
+        ordering = ['name']
+
+    def set_pin(self, raw_pin):
+        self.pin_hash = make_password(raw_pin)
+
+    def check_pin(self, raw_pin):
+        return check_password(raw_pin, self.pin_hash)
+
+    def __str__(self):
+        return f"{self.name} — {self.branch.name}"
+
+
+class POSTerminal(models.Model):
+    name = models.CharField(max_length=120)
+    branch = models.ForeignKey(
+        Branch, on_delete=models.CASCADE, related_name='pos_terminals'
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('active', 'Active'),
+            ('inactive', 'Inactive'),
+            ('maintenance', 'Maintenance')
+        ],
+        default='active'
+    )
+    assigned_cashier = models.ForeignKey(
+        Cashier, on_delete=models.SET_NULL, null=True, blank=True, related_name='assigned_terminals'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'POS Terminal'
+        verbose_name_plural = 'POS Terminals'
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} — {self.branch.name}"
+

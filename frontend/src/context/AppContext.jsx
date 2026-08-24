@@ -65,6 +65,7 @@ export function AppProvider({ children }) {
   // Derive waiterRequests from waiterRequestsState (actual backend WaiterRequests)
   const waiterRequests = useMemo(() => {
     return waiterRequestsState.map(wr => ({
+      ...wr,
       id:             wr.id,
       type:           wr.request_type || 'Call Waiter',
       title:          `Table ${wr.table_name || wr.table_id || wr.table}`,
@@ -316,7 +317,7 @@ export function AppProvider({ children }) {
     try {
       const list = await waiterRequestApi.list()
       const items = Array.isArray(list) ? list : (list.results ?? [])
-      setWaiterRequests(items)
+      setWaiterRequests(items.map(normaliseWaiterRequest))
     } catch (err) {
       console.warn('fetchWaiterRequests error:', err)
     }
@@ -403,6 +404,17 @@ export function AppProvider({ children }) {
       generatedDate: q.generated_at ? q.generated_at.split('T')[0] : '',
       scanCount:     q.scan_count  ?? 0,
       lastScanned:   q.last_scanned ?? null,
+    }
+  }
+
+  function normaliseWaiterRequest(r) {
+    return {
+      ...r,
+      orderId:     r.order_id ?? r.order ?? null,
+      orderNumber: r.order_number ?? null,
+      tableName:   r.table_name ?? null,
+      tableId:     r.table_id ?? r.table ?? null,
+      table:       r.table_name || r.table_id || (r.table ? `Table ${r.table}` : 'undefined'),
     }
   }
 

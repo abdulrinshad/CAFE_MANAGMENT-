@@ -8,16 +8,43 @@ export default function BranchSettings() {
   const [activeTab, setActiveTab] = useState('profile');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  const [loading, setLoading] = useState(true);
+
+  const loadSettings = async () => {
+    try {
+      const data = await branchManagerService.getBranchInfo();
+      setBranchInfo(data || {});
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setBranchInfo(branchManagerService.getBranchInfo());
+    loadSettings();
   }, []);
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    branchManagerService.updateBranchSettings(branchInfo);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    try {
+      await branchManagerService.updateBranchSettings(branchInfo);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      alert(err.message || 'Failed to save settings');
+    }
   };
+
+  if (loading) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
+          <h3>Loading settings...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
 
   const tabs = [
     { key: 'profile', label: 'Branch Profile' },

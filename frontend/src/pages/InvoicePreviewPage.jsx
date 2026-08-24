@@ -369,6 +369,19 @@ export default function InvoicePreviewPage() {
                   🖨 Print Bill
                 </button>
               )}
+
+              <button
+                type="button"
+                className="btn-primary py-3 px-6"
+                onClick={() => navigate(`/orders/${id}/checkout`)}
+                style={{
+                  background: 'var(--color-espresso)',
+                  borderColor: 'var(--color-espresso)',
+                  marginLeft: 'auto'
+                }}
+              >
+                💳 Collect Payment
+              </button>
             </>
           )}
         </div>

@@ -333,7 +333,8 @@ class WaiterRequestSerializer(serializers.ModelSerializer):
         return obj.created_at.strftime('%I:%M %p').lstrip('0')
 
     def get_order_id(self, obj):
-        """Return the most recent non-cancelled/completed order ID for this table."""
+        if obj.order_id:
+            return obj.order_id
         if not obj.table:
             return None
         from orders.models import Order
@@ -348,6 +349,8 @@ class WaiterRequestSerializer(serializers.ModelSerializer):
         return order.id if order else None
 
     def get_order_number(self, obj):
+        if obj.order:
+            return obj.order.order_number
         if not obj.table:
             return None
         from orders.models import Order

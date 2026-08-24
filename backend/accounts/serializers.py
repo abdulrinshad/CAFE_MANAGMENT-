@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Waiter, Branch, BranchManager, Cashier
+from .models import Waiter, Branch, BranchManager, Cashier, KitchenStaff, POSTerminal
 
 
 # ── Branch Serializers ─────────────────────────────────────────────────────────
@@ -142,9 +142,17 @@ class UserSerializer(serializers.ModelSerializer):
     def get_role(self, obj):
         if obj.username.startswith('bm_'):
             return 'branch_manager'
+        if obj.username.startswith('kitchen_'):
+            return 'kitchen'
+        if obj.username.startswith('cashier_'):
+            return 'cashier'
         if hasattr(obj, 'profile'):
             if obj.profile.role == 'MANAGER':
                 return 'branch_manager'
+            if obj.profile.role == 'KITCHEN':
+                return 'kitchen'
+            if obj.profile.role == 'CASHIER':
+                return 'cashier'
             return obj.profile.role
         return 'STAFF'
 
@@ -341,3 +349,119 @@ class CashierSerializer(serializers.ModelSerializer):
             instance.set_pin(pin)
         instance.save()
         return instance
+
+
+# ── KitchenStaff Serializers ──────────────────────────────────────────────────
+
+class KitchenStaffSafeSerializer(serializers.ModelSerializer):
+    """Public-safe kitchen staff info (no PIN)."""
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
+
+    class Meta:
+        model = KitchenStaff
+        fields = ('id', 'name', 'employee_id', 'branch', 'branch_name', 'is_active')
+
+
+class KitchenStaffSerializer(serializers.ModelSerializer):
+    """Full KitchenStaff serializer for create / update."""
+    pin = serializers.CharField(write_only=True, required=False)
+    confirm_pin = serializers.CharField(write_only=True, required=False)
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
+
+    class Meta:
+        model = KitchenStaff
+        fields = (
+            'id', 'name', 'employee_id', 'branch', 'branch_name',
+            'is_active', 'created_at', 'updated_at', 'pin', 'confirm_pin',
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at', 'branch_name')
+
+    def validate_employee_id(self, value):
+        qs = KitchenStaff.objects.filter(employee_id=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("This Employee ID is already in use.")
+        # Cross-check Waiter and Cashier namespaces
+        if Waiter.objects.filter(employee_id=value).exists():
+            raise serializers.ValidationError("This Employee ID is already in use by a Waiter.")
+        if Cashier.objects.filter(employee_id=value).exists():
+            raise serializers.ValidationError("This Employee ID is already in use by a Cashier.")
+        return value
+
+    def validate(self, attrs):
+        pin = attrs.get('pin')
+        confirm_pin = attrs.get('confirm_pin')
+
+        if pin:
+            if not pin.isdigit() or len(pin) != 4:
+                raise serializers.ValidationError({"pin": "PIN must be exactly 4 digits and numeric."})
+            if confirm_pin and pin != confirm_pin:
+                raise serializers.ValidationError({"confirm_pin": "PINs do not match."})
+
+        return attrs
+
+    def create(self, validated_data):
+        pin = validated_data.pop('pin', None)
+        validated_data.pop('confirm_pin', None)
+        kitchen_staff = KitchenStaff(**validated_data)
+        if pin:
+            kitchen_staff.set_pin(pin)
+        kitchen_staff.save()
+        return kitchen_staff
+
+    def update(self, instance, validated_data):
+        pin = validated_data.pop('pin', None)
+        validated_data.pop('confirm_pin', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if pin:
+            instance.set_pin(pin)
+        instance.save()
+        return instance
+
+
+class POSTerminalSerializer(serializers.ModelSerializer):
+    branch_name = serializers.CharField(source='branch.name', read_only=True)
+    assigned_cashier_name = serializers.CharField(source='assigned_cashier.name', read_only=True)
+    terminal = serializers.CharField(source='name', read_only=True)
+    terminalName = serializers.CharField(source='name', read_only=True)
+    assignedUser = serializers.CharField(source='assigned_cashier.name', default='Not Assigned', read_only=True)
+
+    class Meta:
+        model = POSTerminal
+        fields = (
+            'id',
+            'name',
+            'terminal',
+            'terminalName',
+            'branch',
+            'branch_name',
+            'status',
+            'assigned_cashier',
+            'assigned_cashier_name',
+            'assignedUser',
+            'created_at',
+            'updated_at'
+        )
+        read_only_fields = ('id', 'created_at', 'updated_at')
+
+    def to_internal_value(self, data):
+        data = data.copy()
+        if 'terminal' in data:
+            data['name'] = data.pop('terminal')
+        if 'terminalName' in data:
+            data['name'] = data.pop('terminalName')
+        if 'branchId' in data:
+            data['branch'] = data.pop('branchId')
+        if 'assignedCashierId' in data:
+            data['assigned_cashier'] = data.pop('assignedCashierId')
+        return super().to_internal_value(data)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['terminal'] = instance.name
+        ret['terminalName'] = instance.name
+        ret['assignedUser'] = instance.assigned_cashier.name if instance.assigned_cashier else "Not Assigned"
+        return ret
+

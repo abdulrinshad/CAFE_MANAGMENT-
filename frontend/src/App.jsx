@@ -50,6 +50,7 @@ import BranchManagerDashboardPage from './pages/BranchManagerDashboardPage'
 // ── Branch Manager Module ───────────────────────────────────────────
 import BranchDashboard   from './pages/branch-manager/BranchDashboard'
 import Staff             from './pages/branch-manager/Staff'
+import BranchPOS         from './pages/branch-manager/BranchPOS'
 import Tables            from './pages/branch-manager/Tables'
 import Orders            from './pages/branch-manager/Orders'
 import Kitchen           from './pages/branch-manager/Kitchen'
@@ -236,7 +237,7 @@ export default function App() {
             <InvoicePreviewPage />
           </ProtectedRoute>
         } />
-        <Route path="/orders/:id/checkout" element={
+        <Route path="/orders/:orderId/checkout" element={
           <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
             <CheckoutPage />
           </ProtectedRoute>
@@ -398,6 +399,11 @@ export default function App() {
         <Route path="/branch/staff" element={
           <ProtectedRoute allowedRoles={['branch_manager']}>
             <Staff />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/pos" element={
+          <ProtectedRoute allowedRoles={['branch_manager']}>
+            <BranchPOS />
           </ProtectedRoute>
         } />
         <Route path="/branch/tables" element={

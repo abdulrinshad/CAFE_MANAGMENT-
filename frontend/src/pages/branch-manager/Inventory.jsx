@@ -26,8 +26,21 @@ export default function Inventory() {
     notes: ''
   });
 
+  const [loading, setLoading] = useState(true);
+
+  const loadInventory = async () => {
+    try {
+      const data = await branchManagerService.getInventory();
+      setInventory(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setInventory(branchManagerService.getInventory());
+    loadInventory();
   }, []);
 
   const handleOpenAdd = () => {
@@ -54,24 +67,42 @@ export default function Inventory() {
     setShowAdjustmentModal(true);
   };
 
-  const handleSaveItem = (e) => {
+  const handleSaveItem = async (e) => {
     e.preventDefault();
-    branchManagerService.addInventoryItem(itemForm);
-    setInventory(branchManagerService.getInventory());
-    setShowItemModal(false);
+    try {
+      await branchManagerService.addInventoryItem(itemForm);
+      await loadInventory();
+      setShowItemModal(false);
+    } catch (err) {
+      alert(err.message || 'Failed to add inventory item');
+    }
   };
 
-  const handleSaveAdjustment = (e) => {
+  const handleSaveAdjustment = async (e) => {
     e.preventDefault();
-    branchManagerService.adjustStock(
-      selectedItem.id,
-      adjustmentForm.type,
-      adjustmentForm.quantity,
-      adjustmentForm.reason
-    );
-    setInventory(branchManagerService.getInventory());
-    setShowAdjustmentModal(false);
+    try {
+      await branchManagerService.adjustStock(
+        selectedItem.id,
+        adjustmentForm.type,
+        adjustmentForm.quantity,
+        adjustmentForm.reason
+      );
+      await loadInventory();
+      setShowAdjustmentModal(false);
+    } catch (err) {
+      alert(err.message || 'Failed to adjust stock');
+    }
   };
+
+  if (loading) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
+          <h3>Loading inventory...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
 
   // Metrics
   const totalItems = inventory.length;

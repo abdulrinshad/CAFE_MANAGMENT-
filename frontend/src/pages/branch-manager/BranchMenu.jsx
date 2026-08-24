@@ -9,21 +9,48 @@ export default function BranchMenu() {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
+  const [loading, setLoading] = useState(true);
+
+  const loadProducts = async () => {
+    try {
+      const data = await branchManagerService.getProducts();
+      setProducts(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setProducts(branchManagerService.getProducts());
+    loadProducts();
   }, []);
 
-  const handleToggle = (id) => {
-    const updated = branchManagerService.toggleProductAvailability(id);
-    setProducts(updated);
+  const handleToggle = async (id) => {
+    try {
+      await branchManagerService.toggleProductAvailability(id);
+      await loadProducts();
+    } catch (err) {
+      alert(err.message || 'Failed to update product availability');
+    }
   };
+
+  if (loading) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
+          <h3>Loading menu settings...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
 
   // Get categories from products for filter dropdown
   const categories = ['ALL', ...new Set(products.map(p => p.category))];
 
   const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
-                          p.category.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = String(p.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+                          String(p.category ?? "").toLowerCase().includes(search.toLowerCase());
     const matchesCategory = categoryFilter === 'ALL' || p.category === categoryFilter;
     const matchesStatus = statusFilter === 'ALL' || 
                           (statusFilter === 'available' && p.branchStatus) ||
@@ -100,7 +127,7 @@ export default function BranchMenu() {
                   {p.category}
                 </span>
                 <span style={{ fontWeight: 'bold', color: 'var(--color-espresso)', fontSize: '15px' }}>{p.name}</span>
-                <span style={{ fontWeight: '600', fontSize: '13px' }}>₹{p.basePrice.toFixed(2)}</span>
+                <span style={{ fontWeight: '600', fontSize: '13px' }}>₹{Number(p.basePrice ?? p.price ?? 0).toFixed(2)}</span>
                 
                 {/* Status indicator tags */}
                 <div style={{ display: 'flex', gap: '4px', marginTop: '6px', fontSize: '10px' }}>

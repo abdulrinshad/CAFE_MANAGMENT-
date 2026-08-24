@@ -23,7 +23,7 @@ const PAYMENT_METHODS = [
 ]
 
 export default function CheckoutPage() {
-  const { id }   = useParams()
+  const { orderId } = useParams()
   const navigate = useNavigate()
   const { completeOrder } = useApp()
 
@@ -34,15 +34,24 @@ export default function CheckoutPage() {
   const [completing,    setCompleting]    = useState(false)
   const [error,         setError]         = useState('')
 
+  // ── Validation check ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!orderId || orderId === 'null' || orderId === 'undefined') {
+      alert('Invalid Order ID. Redirecting to Bill Requests.')
+      navigate('/cashier/bill-requests')
+    }
+  }, [orderId, navigate])
+
   // ── Load order + invoice ───────────────────────────────────────────────────
   useEffect(() => {
+    if (!orderId || orderId === 'null' || orderId === 'undefined') return
     let cancelled = false
     async function load() {
       setLoading(true)
       try {
         const [orderData, invoiceData] = await Promise.allSettled([
-          orderApi.get(id),
-          invoiceApi.getByOrder(id),
+          orderApi.get(orderId),
+          invoiceApi.getByOrder(orderId),
         ])
         if (!cancelled) {
           if (orderData.status === 'fulfilled') setOrder(orderData.value)
@@ -56,21 +65,22 @@ export default function CheckoutPage() {
     }
     load()
     return () => { cancelled = true }
-  }, [id])
+  }, [orderId])
 
   // ── Complete order ─────────────────────────────────────────────────────────
   const handleCompleteOrder = async () => {
+    if (!orderId || orderId === 'null' || orderId === 'undefined') return
     setCompleting(true)
     setError('')
     try {
       // Use AppContext.completeOrder which calls the API AND refreshes
       // tables + orders + notifications so the floor plan updates immediately
-      const result = await completeOrder(id, {
+      const result = await completeOrder(orderId, {
         method: paymentMethod,
         status: 'paid',
       })
       const payment = result.payment || {}
-      navigate(`/orders/${id}/success`, {
+      navigate(`/cashier/success/${orderId}`, {
         state: {
           transaction_ref: payment.transaction_ref || '',
           invoice_number:  invoice?.invoice_number  || '',
@@ -90,7 +100,7 @@ export default function CheckoutPage() {
 
   // ── Derived ────────────────────────────────────────────────────────────────
   const amountDue   = invoice ? Number(invoice.total) : (order ? Number(order.total) : 0)
-  const orderNumber = order   ? (order.order_number || `#${id}`) : `#${id}`
+  const orderNumber = order   ? (order.order_number || `#${orderId}`) : `#${orderId}`
   const tableLabel  = order   ? (order.table_label  || '')       : ''
 
   if (loading) {
@@ -116,7 +126,7 @@ export default function CheckoutPage() {
           <div className="checkout-card-header">
             <button
               className="checkout-back-btn"
-              onClick={() => navigate(`/orders/${id}/invoice`)}
+              onClick={() => navigate(`/orders/${orderId}/invoice`)}
               aria-label="Go back"
             >←</button>
             <div>

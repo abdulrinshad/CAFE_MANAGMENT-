@@ -98,8 +98,7 @@ class TableViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         waiter_branch = get_waiter_branch(self.request)
         if waiter_branch:
-            from django.db.models import Q
-            qs = qs.filter(Q(branch=waiter_branch) | Q(branch__isnull=True))
+            qs = qs.filter(branch=waiter_branch)
         return qs
 
     def perform_create(self, serializer):

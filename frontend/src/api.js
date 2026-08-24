@@ -9,7 +9,7 @@ const BASE = '/api/v1'
 
 // ── Generic fetch helper ──────────────────────────────────────────────────────
 
-async function request(method, path, body = null, isFormData = false, isRetry = false) {
+export async function request(method, path, body = null, isFormData = false, isRetry = false) {
   const isForm = isFormData || (typeof FormData !== 'undefined' && body instanceof FormData)
   const headers = {}
   if (body && !isForm) {

@@ -18,12 +18,35 @@ export default function Staff() {
   });
   const [editId, setEditId] = useState(null);
 
+  const [loading, setLoading] = useState(true);
+
+  const loadStaff = async () => {
+    try {
+      const data = await branchManagerService.getStaff();
+      setStaff(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setStaff(branchManagerService.getStaff());
+    loadStaff();
   }, []);
 
+  if (loading) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
+          <h3>Loading staff records...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
+
   const totalStaff = staff.length;
-  const activeStaff = staff.filter(s => s.status === 'active').length;
+  const activeStaff = staff.filter(s => s.status === 'active' || s.status === 'ACTIVE').length;
   const waiters = staff.filter(s => s.role === 'Waiter').length;
   const pos = staff.filter(s => s.role === 'POS').length;
   const kitchen = staff.filter(s => s.role === 'Kitchen Staff').length;
@@ -54,21 +77,29 @@ export default function Staff() {
     setShowModal(true);
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    if (editId) {
-      branchManagerService.updateStaff(editId, formData);
-    } else {
-      branchManagerService.addStaff(formData);
+    try {
+      if (editId) {
+        await branchManagerService.updateStaff(editId, formData);
+      } else {
+        await branchManagerService.addStaff(formData);
+      }
+      await loadStaff();
+      setShowModal(false);
+    } catch (err) {
+      alert(err.message || 'Failed to save staff member');
     }
-    setStaff(branchManagerService.getStaff());
-    setShowModal(false);
   };
 
-  const toggleStatus = (id, currentStatus) => {
-    const nextStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    branchManagerService.updateStaff(id, { status: nextStatus });
-    setStaff(branchManagerService.getStaff());
+  const toggleStatus = async (id, currentStatus) => {
+    const nextStatus = currentStatus === 'active' || currentStatus === 'ACTIVE' ? 'inactive' : 'active';
+    try {
+      await branchManagerService.updateStaff(id, { status: nextStatus });
+      await loadStaff();
+    } catch (err) {
+      alert(err.message || 'Failed to update status');
+    }
   };
 
   return (

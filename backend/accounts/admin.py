@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.forms.models import BaseInlineFormSet
-from .models import UserProfile, Waiter, Branch, BranchManager, Cashier
+from .models import UserProfile, Waiter, Branch, BranchManager, Cashier, KitchenStaff, POSTerminal
 from django import forms
 from django.core.exceptions import ValidationError
 
@@ -183,3 +183,11 @@ class CashierAdmin(admin.ModelAdmin):
         elif not change and not new_pin:
             raise ValidationError('PIN is required for new cashiers.')
         super().save_model(request, obj, form, change)
+
+
+@admin.register(POSTerminal)
+class POSTerminalAdmin(admin.ModelAdmin):
+    list_display = ('name', 'branch', 'status', 'assigned_cashier', 'created_at')
+    list_filter = ('status', 'branch')
+    search_fields = ('name',)
+    readonly_fields = ('created_at', 'updated_at')

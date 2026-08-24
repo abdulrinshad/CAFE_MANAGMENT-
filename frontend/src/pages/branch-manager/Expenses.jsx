@@ -15,8 +15,21 @@ export default function Expenses() {
     notes: ''
   });
 
+  const [loading, setLoading] = useState(true);
+
+  const loadExpenses = async () => {
+    try {
+      const data = await branchManagerService.getExpenses();
+      setExpenses(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setExpenses(branchManagerService.getExpenses());
+    loadExpenses();
   }, []);
 
   const handleOpenAdd = () => {
@@ -31,15 +44,30 @@ export default function Expenses() {
     setShowModal(true);
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    branchManagerService.addExpense({
-      ...formData,
-      amount: Number(formData.amount)
-    });
-    setExpenses(branchManagerService.getExpenses());
-    setShowModal(false);
+    try {
+      await branchManagerService.addExpense({
+        ...formData,
+        amount: Number(formData.amount),
+        title: formData.description
+      });
+      await loadExpenses();
+      setShowModal(false);
+    } catch (err) {
+      alert(err.message || 'Failed to add expense');
+    }
   };
+
+  if (loading) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
+          <h3>Loading expenses...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
 
   // Metrics
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);

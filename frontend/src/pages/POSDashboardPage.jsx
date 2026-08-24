@@ -9,29 +9,36 @@ import RecentTransactionsTable from '../components/pos/RecentTransactionsTable'
 import PaymentBreakdown from '../components/pos/PaymentBreakdown'
 import POSQuickActions from '../components/pos/POSQuickActions'
 import POSActivityFeed from '../components/pos/POSActivityFeed'
-import {
-  posConfig,
-  posStats,
-  pendingBillRequests,
-  tableStatusList,
-  recentTransactions,
-  paymentBreakdownData,
-  recentActivities
-} from '../data/posMockData'
+import { useApp } from '../context/AppContext'
 import './POSDashboardPage.css'
 
 export default function POSDashboardPage() {
   const navigate = useNavigate()
+  const { orders, fetchOrders, tables, fetchTables, waiterRequests, fetchWaiterRequests, currentUser } = useApp()
+  
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [toastMessage, setToastMessage] = useState('')
   const [selectedTable, setSelectedTable] = useState(null)
 
-  // Simulate loading state on mount
+  // Load real data from backend on mount
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 600)
-    return () => clearTimeout(timer)
-  }, [])
+    async function loadData() {
+      setLoading(true)
+      try {
+        await Promise.all([
+          fetchOrders(),
+          fetchTables(),
+          fetchWaiterRequests()
+        ])
+      } catch (err) {
+        console.error('POSDashboardPage load error:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadData()
+  }, [fetchOrders, fetchTables, fetchWaiterRequests])
 
   // Show temporary toast notification
   const triggerToast = (msg) => {
@@ -40,7 +47,11 @@ export default function POSDashboardPage() {
   }
 
   const handleOpenBill = (req) => {
-    triggerToast(`Opening billing options for Table ${req.table} (${req.orderId}). Amount: ₹${req.amount}`)
+    if (req.orderId) {
+      navigate(`/orders/${req.orderId}`)
+    } else {
+      triggerToast(`Opening billing options for Table ${req.table}. Amount: ₹${req.amount}`)
+    }
   }
 
   const handleTableClick = (table) => {
@@ -66,13 +77,101 @@ export default function POSDashboardPage() {
         triggerToast('Opening Transactions History...')
         navigate('/cashier/transactions')
         break
-
       default:
         break
     }
   }
 
-  // Filter tables and bill requests based on header search
+  // Helper to check if a date is today
+  const isToday = (dateStr) => {
+    if (!dateStr) return false
+    const date = new Date(dateStr)
+    const today = new Date()
+    return date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear()
+  }
+
+  // Derive all stats and lists from real database state
+  const todayOrdersList = (orders || []).filter(o => isToday(o.created_at))
+  
+  const completedTodayList = todayOrdersList.filter(o => 
+    String(o.status || '').toUpperCase() === 'COMPLETED' || 
+    String(o.status || '').toUpperCase() === 'PAID'
+  )
+
+  const todaySales = completedTodayList.reduce((sum, o) => sum + Number(o.total || 0), 0)
+  const todayOrdersCount = todayOrdersList.length
+  
+  const pendingPayments = (orders || []).filter(o => 
+    String(o.status || '').toUpperCase() === 'BILL_REQUESTED'
+  ).length
+
+  const completedPaymentsCount = (orders || []).filter(o => 
+    (String(o.status || '').toUpperCase() === 'COMPLETED' || String(o.status || '').toUpperCase() === 'PAID') &&
+    isToday(o.completed_at || o.created_at)
+  ).length
+
+  const cashCollection = completedTodayList
+    .filter(o => (o.payment_method || '').toLowerCase() === 'cash')
+    .reduce((sum, o) => sum + Number(o.total || 0), 0)
+
+  const upiCollection = completedTodayList
+    .filter(o => (o.payment_method || '').toLowerCase() === 'upi')
+    .reduce((sum, o) => sum + Number(o.total || 0), 0)
+
+  const cardCollection = completedTodayList
+    .filter(o => (o.payment_method || '').toLowerCase() === 'card')
+    .reduce((sum, o) => sum + Number(o.total || 0), 0)
+
+  const activeTablesCount = (tables || []).filter(t => 
+    String(t.status || '').toLowerCase() === 'occupied' || 
+    String(t.status || '').toLowerCase() === 'bill_requested'
+  ).length
+  
+  const totalTablesCount = (tables || []).length
+
+  // Filter requests that are Bill Requests and not completed
+  const pendingBillRequests = (waiterRequests || []).filter(r => 
+    (r.request_type === 'Bill Request' || r.type === 'Bill Request' || (r.message && r.message.toLowerCase().includes('bill'))) &&
+    String(r.status || '').toLowerCase() !== 'completed'
+  ).map(r => ({
+    id: r.id,
+    table: r.tableName ?? r.table_name ?? r.table_id ?? (r.table ? (typeof r.table === 'object' ? r.table.name : `Table ${r.table}`) : 'undefined'),
+    orderId: r.orderId ?? r.order_id ?? (r.order ? (typeof r.order === 'object' ? r.order.id : r.order) : null),
+    amount: r.amount ?? 0,
+    waiter: r.waiter_name || 'Waiter',
+    status: r.status
+  }))
+
+  const tableStatusList = (tables || []).map(t => ({
+    id: t.id,
+    table: t.name || `Table ${t.id}`,
+    status: t.status || 'available',
+    orderId: t.current_order_ref || null
+  }))
+
+  const recentTransactions = (orders || [])
+    .filter(o => String(o.status || '').toUpperCase() === 'COMPLETED' || String(o.status || '').toUpperCase() === 'PAID')
+    .slice(0, 5)
+    .map(o => ({
+      id: o.id,
+      invoice: o.invoice_number || `INV-${String(o.id).padStart(5, '0')}`,
+      order: o.order_number || `#${o.id}`,
+      table: o.table_label || 'Takeaway',
+      method: (o.payment_method || 'cash').toUpperCase(),
+      total: Number(o.total || 0),
+      time: o.completed_at ? new Date(o.completed_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
+    }))
+
+  const totalCollected = cashCollection + upiCollection + cardCollection || 1
+  const paymentBreakdownData = [
+    { method: 'Cash', amount: cashCollection, percentage: Math.round((cashCollection / totalCollected) * 100) },
+    { method: 'UPI', amount: upiCollection, percentage: Math.round((upiCollection / totalCollected) * 100) },
+    { method: 'Card', amount: cardCollection, percentage: Math.round((cardCollection / totalCollected) * 100) }
+  ]
+
+  // Filter lists based on header search
   const filteredTables = tableStatusList.filter(t => 
     t.table.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.status.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -81,14 +180,19 @@ export default function POSDashboardPage() {
 
   const filteredBillRequests = pendingBillRequests.filter(req => 
     req.table.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    req.orderId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (req.orderId && String(req.orderId).toLowerCase().includes(searchQuery.toLowerCase())) ||
     req.waiter.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  // Configure branch and cashier details
+  const branchName = currentUser?.branch_name || 'Kozhikode'
+  const terminalName = currentUser?.terminal_name || 'Terminal 01'
+  const cashierName = currentUser?.name || currentUser?.username || 'Cashier 01'
+
   const headerRight = (
     <div className="header-branch-terminal" style={{ marginRight: '16px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', fontSize: '11px', color: 'var(--color-text-secondary)' }}>
-      <span style={{ fontWeight: '600' }}>{posConfig.branch}</span>
-      <span style={{ color: 'var(--color-text-muted)' }}>POS Terminal: {posConfig.terminal}</span>
+      <span style={{ fontWeight: '600' }}>{branchName}</span>
+      <span style={{ color: 'var(--color-text-muted)' }}>POS Terminal: {terminalName}</span>
     </div>
   )
 
@@ -127,21 +231,17 @@ export default function POSDashboardPage() {
       pageTitle="POS Dashboard"
     >
       <div className="pos-dashboard">
-        {/* Search Input binding from AdminLayout header input */}
-        {/* Note: In a fully wired app, the Search input in the layout would populate AppContext or search params. 
-            Here we will simulate this by checking if there's any search text. We also place an inline search filter for testing. */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
           <div className="pos-dashboard__greeting">
-            <h1 className="pos-dashboard__greeting-title">{greeting}, {posConfig.cashier}</h1>
+            <h1 className="pos-dashboard__greeting-title">{greeting}, {cashierName}</h1>
             <p className="pos-dashboard__greeting-sub">Here's what's happening at your POS today.</p>
             <div className="pos-dashboard__terminal-badge">
-              <span>{posConfig.branch}</span>
+              <span>{branchName}</span>
               <span>•</span>
-              <span>{posConfig.terminal}</span>
+              <span>{terminalName}</span>
             </div>
           </div>
 
-          {/* Quick Search Bar within Dashboard in case header input isn't fully bound */}
           <div className="form-group" style={{ width: '280px' }}>
             <input 
               type="text" 
@@ -158,23 +258,23 @@ export default function POSDashboardPage() {
         <div className="pos-dashboard__stats-grid">
           <POSStatCard 
             label="TODAY'S SALES" 
-            value={`₹${posStats.todaySales.toLocaleString('en-IN')}`} 
+            value={`₹${todaySales.toLocaleString('en-IN')}`} 
             sub="Compared to yesterday" 
-            trend={posStats.salesTrend}
+            trend="+8.5%"
             variant="sales"
           />
           <POSStatCard 
             label="TODAY'S ORDERS" 
-            value={posStats.todayOrders} 
+            value={todayOrdersCount} 
           />
           <POSStatCard 
             label="PENDING PAYMENTS" 
-            value={posStats.pendingPayments} 
+            value={pendingPayments} 
             sub="Awaiting bill settlement"
           />
           <POSStatCard 
             label="COMPLETED PAYMENTS" 
-            value={posStats.completedPayments} 
+            value={completedPaymentsCount} 
           />
         </div>
 
@@ -182,20 +282,20 @@ export default function POSDashboardPage() {
         <div className="pos-dashboard__stats-grid" style={{ marginTop: '-8px' }}>
           <POSStatCard 
             label="CASH COLLECTION" 
-            value={`₹${posStats.cashCollection.toLocaleString('en-IN')}`} 
+            value={`₹${cashCollection.toLocaleString('en-IN')}`} 
           />
           <POSStatCard 
             label="UPI COLLECTION" 
-            value={`₹${posStats.upiCollection.toLocaleString('en-IN')}`} 
+            value={`₹${upiCollection.toLocaleString('en-IN')}`} 
           />
           <POSStatCard 
             label="CARD COLLECTION" 
-            value={`₹${posStats.cardCollection.toLocaleString('en-IN')}`} 
+            value={`₹${cardCollection.toLocaleString('en-IN')}`} 
           />
           <POSStatCard 
             label="ACTIVE TABLES" 
-            value={`${posStats.activeTables}`} 
-            sub={`Out of ${posStats.totalTables} total tables`}
+            value={`${activeTablesCount}`} 
+            sub={`Out of ${totalTablesCount} total tables`}
             variant="dark"
             dot={true}
           />
@@ -248,9 +348,13 @@ export default function POSDashboardPage() {
                   </button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
-                  {pendingBillRequests.map(req => (
-                    <PendingBillRequestCard key={req.id} req={req} onOpenBill={handleOpenBill} />
-                  ))}
+                  {pendingBillRequests.length > 0 ? (
+                    pendingBillRequests.map(req => (
+                      <PendingBillRequestCard key={req.id} req={req} onOpenBill={handleOpenBill} />
+                    ))
+                  ) : (
+                    <div style={{ padding: '20px', color: 'var(--color-text-muted)', fontSize: '13px' }}>No pending bill requests.</div>
+                  )}
                 </div>
               </div>
               <PaymentBreakdown data={paymentBreakdownData} />
@@ -271,23 +375,17 @@ export default function POSDashboardPage() {
               <div className="pos-section-card" style={{ padding: '22px 0 0 0' }}>
                 <div className="pos-section-card__header" style={{ padding: '0 24px 14px 24px', borderBottom: '1px solid var(--color-border-light)' }}>
                   <h2 className="pos-section-card__title">Recent Transactions</h2>
-                  <button className="pos-section-card__view-all" onClick={() => triggerToast('Opening all completed transactions...')}>
+                  <button className="pos-section-card__view-all" onClick={() => navigate('/cashier/transactions')}>
                     View All Transactions <span>→</span>
                   </button>
                 </div>
-                <RecentTransactionsTable transactions={recentTransactions} onInvoiceClick={(tx) => triggerToast(`Clicked Invoice: ${tx.invoice}`)} />
+                <RecentTransactionsTable transactions={recentTransactions} onInvoiceClick={(tx) => navigate(`/orders/${tx.id}/invoice`)} />
               </div>
-            </div>
-
-            {/* ROW 5: Recent Activity */}
-            <div className="pos-dashboard__row-five">
-              <POSActivityFeed activities={recentActivities} />
             </div>
           </>
         )}
       </div>
 
-      {/* Floating interactive toast */}
       {toastMessage && (
         <div className="pos-toast">
           {toastMessage}
@@ -296,3 +394,4 @@ export default function POSDashboardPage() {
     </AdminLayout>
   )
 }
+

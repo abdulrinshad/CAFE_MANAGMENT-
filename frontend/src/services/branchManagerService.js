@@ -1,240 +1,143 @@
-import {
-  BRANCH_INFO,
-  INITIAL_STAFF,
-  INITIAL_TABLES,
-  INITIAL_ORDERS,
-  INITIAL_PRODUCTS,
-  INITIAL_INVENTORY,
-  INITIAL_EXPENSES,
-  INITIAL_CUSTOMERS,
-  RECENT_ACTIVITIES
-} from '../data/branchMockData';
-
-// Helper to initialize localStorage
-const initStorage = (key, initialData) => {
-  if (!localStorage.getItem(key)) {
-    localStorage.setItem(key, JSON.stringify(initialData));
-  }
-  return JSON.parse(localStorage.getItem(key));
-};
+import { request } from '../api';
 
 export const branchManagerService = {
-  getBranchInfo() {
-    try {
-      const bmBranchStr = localStorage.getItem('artisan_bm_branch');
-      if (bmBranchStr) {
-        const bmBranch = JSON.parse(bmBranchStr);
-        return {
-          ...BRANCH_INFO,
-          id: bmBranch.id,
-          name: bmBranch.name,
-          city: bmBranch.name.split('—').pop().trim() || bmBranch.name,
-          address: bmBranch.address || '',
-          phone: bmBranch.phone || '',
-          code: bmBranch.code || ''
-        };
-      }
-    } catch (e) {
-      console.warn("Failed to parse bm branch info:", e);
-    }
-    return initStorage('kochi_branch_info', BRANCH_INFO);
+  async getDashboardStats() {
+    return request('GET', '/branch/dashboard/');
   },
 
-  updateBranchSettings(data) {
-    const info = this.getBranchInfo();
-    const updated = { ...info, ...data };
-    localStorage.setItem('kochi_branch_info', JSON.stringify(updated));
-    return updated;
+  async getBranchInfo() {
+    return request('GET', '/branch/settings/');
+  },
+
+  async updateBranchSettings(data) {
+    return request('PATCH', '/branch/settings/', data);
   },
 
   // ── Staff Management ──
-  getStaff() {
-    return initStorage('kochi_staff', INITIAL_STAFF);
+  async getStaff() {
+    return request('GET', '/branch/staff/');
   },
 
-  addStaff(member) {
-    const staff = this.getStaff();
-    const newMember = {
-      id: `STF-${100 + staff.length + 1}`,
-      joinedDate: new Date().toISOString().split('T')[0],
-      status: 'active',
-      ordersHandled: 0,
-      tablesServed: 0,
-      ...member
-    };
-    staff.push(newMember);
-    localStorage.setItem('kochi_staff', JSON.stringify(staff));
-    this.addActivity('staff', `Staff member ${newMember.name} added`, '👤');
-    return newMember;
+  async addStaff(member) {
+    return request('POST', '/branch/staff/', member);
   },
 
-  updateStaff(id, data) {
-    let staff = this.getStaff();
-    staff = staff.map(s => s.id === id ? { ...s, ...data } : s);
-    localStorage.setItem('kochi_staff', JSON.stringify(staff));
-    return staff.find(s => s.id === id);
+  async updateStaff(id, data) {
+    if (data.status) {
+      // status toggle endpoint shortcut or partial update
+      return request('PATCH', `/branch/staff/${id}/status/`, data);
+    }
+    return request('PATCH', `/branch/staff/${id}/`, data);
   },
 
-  deleteStaff(id) {
-    let staff = this.getStaff();
-    staff = staff.filter(s => s.id !== id);
-    localStorage.setItem('kochi_staff', JSON.stringify(staff));
+  async deleteStaff(id) {
+    // If deleted from cashier, waiter or kitchen
+    const roleType = id.split('_')[0];
+    const rawId = id.split('_')[1];
+    if (roleType === 'waiter') {
+      return request('DELETE', `/waiters/${rawId}/`);
+    } else if (roleType === 'cashier') {
+      return request('DELETE', `/cashiers/${rawId}/`);
+    } else {
+      return request('DELETE', `/branch/staff/${id}/`);
+    }
   },
 
   // ── Table Management ──
-  getTables() {
-    return initStorage('kochi_tables', INITIAL_TABLES);
+  async getTables() {
+    return request('GET', '/branch/tables/');
   },
 
-  addTable(table) {
-    const tables = this.getTables();
-    const newTable = {
-      id: table.number || `T-${tables.length + 1}`,
-      capacity: Number(table.capacity) || 4,
-      status: 'available',
-      qrStatus: 'active',
-      assignedWaiter: 'Rahul K. S.',
-      ...table
-    };
-    tables.push(newTable);
-    localStorage.setItem('kochi_tables', JSON.stringify(tables));
-    this.addActivity('table', `Table ${newTable.number} added`, '🪑');
-    return newTable;
+  async addTable(table) {
+    return request('POST', '/branch/tables/', table);
   },
 
-  updateTable(id, data) {
-    let tables = this.getTables();
-    tables = tables.map(t => t.id === id ? { ...t, ...data } : t);
-    localStorage.setItem('kochi_tables', JSON.stringify(tables));
-    return tables.find(t => t.id === id);
+  async updateTable(id, data) {
+    return request('PATCH', `/branch/tables/${id}/`, data);
   },
 
-  deleteTable(id) {
-    let tables = this.getTables();
-    tables = tables.filter(t => t.id !== id);
-    localStorage.setItem('kochi_tables', JSON.stringify(tables));
+  async deleteTable(id) {
+    return request('DELETE', `/branch/tables/${id}/`);
   },
 
   // ── Order Management ──
-  getOrders() {
-    return initStorage('kochi_orders', INITIAL_ORDERS);
+  async getOrders() {
+    return request('GET', '/branch/orders/');
   },
 
-  updateOrderStatus(id, newStatus) {
-    let orders = this.getOrders();
-    orders = orders.map(o => o.id === id ? { ...o, status: newStatus } : o);
-    localStorage.setItem('kochi_orders', JSON.stringify(orders));
+  async getKitchenOrders() {
+    return request('GET', '/branch/kitchen/orders/');
+  },
 
-    // Update table status if dine-in
-    const order = orders.find(o => o.id === id);
-    if (order && order.channel === 'Dine-In') {
-      const tableId = order.table;
-      let tStatus = 'available';
-      if (newStatus === 'NEW') tStatus = 'occupied';
-      else if (newStatus === 'PREPARING') tStatus = 'order_in_progress';
-      else if (newStatus === 'READY') tStatus = 'bill_requested';
-      else if (newStatus === 'COMPLETED') tStatus = 'available';
-      this.updateTable(tableId, { status: tStatus });
-    }
-
-    this.addActivity('order', `Order #${id} status updated to ${newStatus}`, '🔄');
-    return orders.find(o => o.id === id);
+  async updateOrderStatus(id, newStatus) {
+    return request('PATCH', `/branch/orders/${id}/status/`, { status: newStatus });
   },
 
   // ── Menu Availability ──
-  getProducts() {
-    return initStorage('kochi_products', INITIAL_PRODUCTS);
+  async getProducts() {
+    return request('GET', '/branch/menu/');
   },
 
-  toggleProductAvailability(id) {
-    let products = this.getProducts();
-    products = products.map(p => p.id === id ? { ...p, branchStatus: !p.branchStatus } : p);
-    localStorage.setItem('kochi_products', JSON.stringify(products));
-    const p = products.find(prod => prod.id === id);
-    this.addActivity('menu', `${p.name} is now ${p.branchStatus ? 'available' : 'unavailable'}`, '☕');
-    return products;
+  async toggleProductAvailability(id) {
+    return request('PATCH', `/branch/menu/${id}/`);
   },
 
   // ── Inventory ──
-  getInventory() {
-    return initStorage('kochi_inventory', INITIAL_INVENTORY);
+  async getInventory() {
+    return request('GET', '/branch/inventory/');
   },
 
-  addInventoryItem(item) {
-    const inv = this.getInventory();
-    const newItem = {
-      id: `INV-${10 + inv.length + 1}`,
-      lastUpdated: 'Just now',
-      currentStock: Number(item.currentStock) || 0,
-      minimumStock: Number(item.minimumStock) || 0,
-      cost: Number(item.cost) || 0,
-      ...item
-    };
-    inv.push(newItem);
-    localStorage.setItem('kochi_inventory', JSON.stringify(inv));
-    this.addActivity('stock', `Inventory item ${newItem.name} added`, '📦');
-    return newItem;
-  },
-
-  adjustStock(id, type, qty, reason) {
-    let inv = this.getInventory();
-    inv = inv.map(item => {
-      if (item.id === id) {
-        let newStock = item.currentStock;
-        if (type === 'add') newStock += Number(qty);
-        else if (type === 'remove') newStock = Math.max(0, newStock - Number(qty));
-        else if (type === 'correction') newStock = Number(qty);
-        return { ...item, currentStock: newStock, lastUpdated: 'Just now' };
-      }
-      return item;
+  async addInventoryItem(item) {
+    return request('POST', '/branch/inventory/', {
+      name: item.name,
+      currentStock: item.currentStock,
+      minimumStock: item.minimumStock,
+      unit: item.unit,
+      cost: item.cost,
+      category: item.category
     });
-    localStorage.setItem('kochi_inventory', JSON.stringify(inv));
-    const item = inv.find(i => i.id === id);
-    this.addActivity('stock', `Adjusted stock for ${item.name} to ${item.currentStock} ${item.unit}`, '⚠️');
-    return item;
+  },
+
+  async adjustStock(id, type, qty, reason) {
+    return request('PATCH', `/branch/inventory/${id}/`, { type, qty, reason });
   },
 
   // ── Expenses ──
-  getExpenses() {
-    return initStorage('kochi_expenses', INITIAL_EXPENSES);
+  async getExpenses() {
+    return request('GET', '/branch/expenses/');
   },
 
-  addExpense(expense) {
-    const expenses = this.getExpenses();
-    const newExpense = {
-      id: `EXP-${100 + expenses.length + 1}`,
-      status: 'Pending',
-      addedBy: 'Manager',
-      date: new Date().toISOString().split('T')[0],
-      reference: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
-      amount: Number(expense.amount) || 0,
-      ...expense
-    };
-    expenses.push(newExpense);
-    localStorage.setItem('kochi_expenses', JSON.stringify(expenses));
-    this.addActivity('expense', `Expense added: ${newExpense.description} (₹${newExpense.amount})`, '💵');
-    return newExpense;
+  async addExpense(expense) {
+    return request('POST', '/branch/expenses/', expense);
   },
 
   // ── Customers ──
-  getCustomers() {
-    return initStorage('kochi_customers', INITIAL_CUSTOMERS);
+  async getCustomers() {
+    return request('GET', '/branch/customers/');
   },
 
   // ── Recent Activities ──
-  getActivities() {
-    return initStorage('kochi_activities', RECENT_ACTIVITIES);
+  async getActivities() {
+    return [
+      { id: '1', type: 'system', description: 'System online & connected to backend', time: 'Just now', icon: '⚡' }
+    ];
   },
 
   addActivity(type, description, icon) {
-    const list = this.getActivities();
-    list.unshift({
-      id: `act-${Date.now()}`,
-      type,
-      description,
-      time: 'Just now',
-      icon
-    });
-    localStorage.setItem('kochi_activities', JSON.stringify(list.slice(0, 15)));
+    console.log(`Activity logged: ${type} - ${description}`);
+  },
+
+  // ── POS Terminals ──
+  async getPOSTerminals() {
+    return request('GET', '/branch/pos/');
+  },
+  async updatePOSTerminal(id, data) {
+    return request('PATCH', `/branch/pos/${id}/`, data);
+  },
+  async updatePOSTerminalStatus(id, status) {
+    return request('PATCH', `/branch/pos/${id}/status/`, { status });
+  },
+  async updatePOSTerminalCashier(id, cashierId) {
+    return request('PATCH', `/branch/pos/${id}/cashier/`, { assignedCashierId: cashierId });
   }
 };
