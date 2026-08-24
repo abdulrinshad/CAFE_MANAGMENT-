@@ -16,7 +16,7 @@ from .models import Notification
 from .serializers import NotificationSerializer
 
 
-from accounts.permissions import IsAdminOrManagerOrStaff
+from accounts.permissions import IsEmployeeOrAbove
 
 
 class NotificationViewSet(mixins.UpdateModelMixin, viewsets.ReadOnlyModelViewSet):
@@ -26,7 +26,7 @@ class NotificationViewSet(mixins.UpdateModelMixin, viewsets.ReadOnlyModelViewSet
     """
     queryset         = Notification.objects.all().order_by('-created_at')
     serializer_class = NotificationSerializer
-    permission_classes = [IsAdminOrManagerOrStaff]
+    permission_classes = [IsEmployeeOrAbove]
 
     def get_queryset(self):
         qs = super().get_queryset()

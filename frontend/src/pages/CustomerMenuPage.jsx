@@ -280,7 +280,20 @@ export default function CustomerMenuPage() {
                     {p.popular && <span className="popular-badge">POPULAR</span>}
                     {isUnavailable && <span className="unavailable-overlay-badge">CURRENTLY UNAVAILABLE</span>}
                     <div className={`qr-product-thumbnail ${isUnavailable ? 'grayscale' : ''}`}>
-                      {getCategoryName(p.category).toLowerCase().includes('coffee') ? '☕' : getCategoryName(p.category).toLowerCase().includes('tea') ? '🫖' : '🥐'}
+                      {p.image ? (
+                        <img
+                          src={p.image}
+                          alt={p.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8, display: 'block' }}
+                          onError={e => {
+                            e.target.style.display = 'none'
+                            e.target.nextSibling.style.display = 'flex'
+                          }}
+                        />
+                      ) : null}
+                      <span style={{ display: p.image ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', fontSize: 36 }}>
+                        {getCategoryName(p.category).toLowerCase().includes('coffee') ? '☕' : getCategoryName(p.category).toLowerCase().includes('tea') ? '🫖' : '🥐'}
+                      </span>
                     </div>
                   </div>
                   <div className="qr-card-body">
@@ -346,7 +359,20 @@ export default function CustomerMenuPage() {
                 <span className="sheet-unavailable-overlay">CURRENTLY UNAVAILABLE</span>
               )}
               <div className={`sheet-thumbnail-large ${(selectedProduct.soldOut || !selectedProduct.available) ? 'grayscale' : ''}`}>
-                {getCategoryName(selectedProduct.category).toLowerCase().includes('coffee') ? '☕' : getCategoryName(selectedProduct.category).toLowerCase().includes('tea') ? '🫖' : '🥐'}
+                {selectedProduct.image ? (
+                  <img
+                    src={selectedProduct.image}
+                    alt={selectedProduct.name}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 12, display: 'block' }}
+                    onError={e => {
+                      e.target.style.display = 'none'
+                      e.target.nextSibling.style.display = 'flex'
+                    }}
+                  />
+                ) : null}
+                <span style={{ display: selectedProduct.image ? 'none' : 'flex', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', fontSize: 64 }}>
+                  {getCategoryName(selectedProduct.category).toLowerCase().includes('coffee') ? '☕' : getCategoryName(selectedProduct.category).toLowerCase().includes('tea') ? '🫖' : '🥐'}
+                </span>
               </div>
             </div>
 

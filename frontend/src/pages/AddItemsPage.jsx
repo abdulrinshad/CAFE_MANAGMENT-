@@ -514,7 +514,20 @@ export default function AddItemsPage() {
                           <span className="aip-in-cart-badge">{inCart.qty}</span>
                         )}
                         <div className="aip-product-card__emoji">
-                          {getCategoryEmoji(getCategoryName(product))}
+                          {product.image ? (
+                            <img
+                              src={product.image}
+                              alt={product.name}
+                              style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', display: 'block' }}
+                              onError={e => {
+                                e.target.style.display = 'none'
+                                e.target.nextSibling.style.display = 'flex'
+                              }}
+                            />
+                          ) : null}
+                          <span style={{ display: product.image ? 'none' : 'flex', fontSize: 28, alignItems: 'center', justifyContent: 'center', width: 48, height: 48 }}>
+                            {getCategoryEmoji(getCategoryName(product))}
+                          </span>
                         </div>
                         <div className="aip-product-card__info">
                           <div className="aip-product-card__name">{product.name}</div>

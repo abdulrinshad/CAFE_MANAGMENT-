@@ -27,17 +27,18 @@ const EMPTY_CASHIER_FORM = {
 }
 
 export default function OwnerStaffPage() {
-  const [activeTab, setActiveTab]     = useState('all')   // 'all' | 'waiter' | 'cashier'
-  const [waiters, setWaiters]         = useState([])
-  const [cashiers, setCashiers]       = useState([])
-  const [branches, setBranches]       = useState([])
-  const [search, setSearch]           = useState('')
-  const [modal, setModal]             = useState(false)
-  const [editing, setEditing]         = useState(null)     // { id, type }
+  const [activeTab, setActiveTab]       = useState('all')   // 'all' | 'waiter' | 'cashier'
+  const [waiters, setWaiters]           = useState([])
+  const [cashiers, setCashiers]         = useState([])
+  const [branches, setBranches]         = useState([])
+  const [search, setSearch]             = useState('')
+  const [branchFilter, setBranchFilter] = useState('all')
+  const [modal, setModal]               = useState(false)
+  const [editing, setEditing]           = useState(null)     // { id, type }
   const [employeeType, setEmployeeType] = useState(EMPLOYEE_TYPE_WAITER)
-  const [form, setForm]               = useState(EMPTY_WAITER_FORM)
-  const [saving, setSaving]           = useState(false)
-  const [error, setError]             = useState(null)
+  const [form, setForm]                 = useState(EMPTY_WAITER_FORM)
+  const [saving, setSaving]             = useState(false)
+  const [error, setError]               = useState(null)
 
   const loadAll = async () => {
     try {
@@ -66,8 +67,9 @@ export default function OwnerStaffPage() {
     const matchSearch = e.name.toLowerCase().includes(search.toLowerCase()) ||
       (e.employee_id && e.employee_id.toLowerCase().includes(search.toLowerCase())) ||
       (e.branch_name && e.branch_name.toLowerCase().includes(search.toLowerCase()))
-    const matchTab = activeTab === 'all' || e._type === activeTab
-    return matchSearch && matchTab
+    const matchTab    = activeTab === 'all' || e._type === activeTab
+    const matchBranch = branchFilter === 'all' || String(e.branch) === branchFilter
+    return matchSearch && matchTab && matchBranch
   })
 
   const openAdd = (type = EMPLOYEE_TYPE_WAITER) => {
@@ -238,9 +240,21 @@ export default function OwnerStaffPage() {
                 placeholder="Search by name, employee ID, or branch..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                style={{ minWidth: 280, fontSize: 13, padding: '8px 14px' }}
+                style={{ minWidth: 240, fontSize: 13, padding: '8px 14px' }}
                 id="search-staff"
               />
+              <select
+                className="form-select"
+                value={branchFilter}
+                onChange={e => setBranchFilter(e.target.value)}
+                style={{ fontSize: 13, padding: '8px 14px', minWidth: 160 }}
+                id="filter-staff-branch"
+              >
+                <option value="all">All Branches</option>
+                {branches.filter(b => b.active).map(b => (
+                  <option key={b.id} value={String(b.id)}>{b.name}</option>
+                ))}
+              </select>
             </div>
             <span style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{filtered.length} employees</span>
           </div>
