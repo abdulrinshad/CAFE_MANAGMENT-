@@ -195,8 +195,6 @@ class POSTerminal(models.Model):
     def __str__(self):
         return f"{self.name} — {self.branch.name}"
 
-
-
 class OwnerSettings(models.Model):
     business_name = models.CharField(max_length=255, default='Artisan Brew')
     owner_name = models.CharField(max_length=255, default='Dilfa')
@@ -250,4 +248,3 @@ class OwnerSettings(models.Model):
     def load(cls):
         obj, created = cls.objects.get_or_create(pk=1)
         return obj
-

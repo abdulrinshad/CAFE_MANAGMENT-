@@ -264,7 +264,7 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/orders/:orderId/checkout" element={
-          <ProtectedRoute allowedRoles={['admin', 'branch_manager', 'cashier']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'branch_manager', 'pos', 'cashier', 'waiter']}>
             <CheckoutPage />
           </ProtectedRoute>
         } />

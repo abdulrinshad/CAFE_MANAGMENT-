@@ -898,10 +898,6 @@ class OrderViewSet(viewsets.ModelViewSet):
             if not cashier_name:
                 cashier_name = user.get_full_name() or user.username
 
-        amount_received = Decimal(str(request.data.get('amount_received') or 0))
-        change_returned = Decimal(str(request.data.get('change_returned') or 0))
-        transaction_ref = str(request.data.get('transaction_ref') or request.data.get('transactionReference') or '').strip()
-
         try:
             with transaction.atomic():
                 # Complete the order
@@ -909,10 +905,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                 order.completed_at = timezone.now()
                 order.payment_method = method
                 order.payment_status = pay_status
-                order.amount_received = amount_received
-                order.change_returned = change_returned
-                if transaction_ref:
-                    order.transaction_ref = transaction_ref
                 if cashier_name:
                     order.cashier_name = cashier_name
                 if pos_terminal_obj:
@@ -922,14 +914,10 @@ class OrderViewSet(viewsets.ModelViewSet):
 
                 order.save(update_fields=[
                     'status', 'completed_at', 'payment_method', 'payment_status',
-                    'cashier_name', 'pos_terminal', 'branch', 'amount_received',
-                    'change_returned', 'transaction_ref', 'updated_at'
+                    'cashier_name', 'pos_terminal', 'branch', 'updated_at'
                 ])
 
                 # ── Mark invoice paid ────────────────────────────────────────
-                # Use a savepoint so an IntegrityError on Invoice (OneToOneField)
-                # does not abort the outer atomic block, causing
-                # TransactionManagementError on subsequent queries.
                 invoice = None
                 _inv_sp = transaction.savepoint()
                 try:
@@ -939,7 +927,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                     invoice.save(update_fields=['status', 'paid_at', 'updated_at'])
                     transaction.savepoint_commit(_inv_sp)
                 except Invoice.DoesNotExist:
-                    # No invoice yet — create one inside its own savepoint
                     transaction.savepoint_rollback(_inv_sp)
                     _inv_create_sp = transaction.savepoint()
                     try:
@@ -953,25 +940,18 @@ class OrderViewSet(viewsets.ModelViewSet):
                         )
                         transaction.savepoint_commit(_inv_create_sp)
                     except Exception:
-                        # If creation also fails (e.g. race condition on OneToOne),
-                        # roll back the savepoint only — do NOT abort the outer block.
                         transaction.savepoint_rollback(_inv_create_sp)
-                        # Try one more time to fetch the now-existing invoice
                         try:
                             invoice = Invoice.objects.get(order=order)
                             invoice.status  = Invoice.STATUS_PAID
                             invoice.paid_at = timezone.now()
                             invoice.save(update_fields=['status', 'paid_at', 'updated_at'])
                         except Exception:
-                            pass  # Invoice failure must not block order completion
+                            pass
                 except Exception:
-                    # Any other unexpected error — roll back savepoint only
                     transaction.savepoint_rollback(_inv_sp)
 
                 # ── Create or update payment record ──────────────────────────
-                # Payment.order is also a OneToOneField; use a savepoint so that
-                # an IntegrityError from a race/duplicate does not abort the outer
-                # atomic block (which is the direct cause of TransactionManagementError).
                 payment = None
                 _pay_sp = transaction.savepoint()
                 try:
@@ -984,7 +964,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                             'amount':  order.total,
                         }
                     )
-                    # Always update to the current values
                     pay_update_fields = ['method', 'status']
                     payment.method = method
                     payment.status = pay_status
@@ -995,7 +974,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                     transaction.savepoint_commit(_pay_sp)
                 except Exception as pay_exc:
                     transaction.savepoint_rollback(_pay_sp)
-                    # Re-fetch in case of race condition
                     try:
                         payment = Payment.objects.get(order=order)
                         payment.method = method
@@ -1006,7 +984,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                             pay_update_fields.append('paid_at')
                         payment.save(update_fields=pay_update_fields)
                     except Exception:
-                        raise pay_exc  # Surface the original error
+                        raise pay_exc
 
                 # ── Release table ────────────────────────────────────────────
                 if order.table_id:
@@ -1026,7 +1004,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                         WaiterRequest.objects.filter(
                             table_id=order.table_id,
                             request_type='Bill Request',
-                            status__in=['requested', 'processing', 'ready']
+                            status__in=['requested', 'processing', 'ready', 'new', 'in_progress']
                         ).update(status='completed')
                     except Exception:
                         pass
@@ -1057,14 +1035,13 @@ class OrderViewSet(viewsets.ModelViewSet):
                         ),
                         order=order,
                         table=order.table,
+                        branch=order.branch,
+                        target_role='manager',
                     )
                 except Exception:
                     pass
 
         except Exception as exc:
-            # Return a proper JSON error response instead of Django's HTML debug page.
-            # This prevents TransactionManagementError (or any other DB error) from
-            # leaking through as an unhandled 500 HTML response.
             import logging
             logger = logging.getLogger(__name__)
             logger.exception('complete_order failed for order %s', pk)

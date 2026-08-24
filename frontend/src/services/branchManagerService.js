@@ -19,18 +19,15 @@ export const branchManagerService = {
   },
 
   async addStaff(member) {
-    // member: { role, name, employee_id, section, pin, confirm_pin, is_active }
     return request('POST', '/branch/staff/', member);
   },
 
   async editStaff(id, data) {
-    // id is e.g. "waiter_5" or "cashier_3"
     return request('PATCH', `/branch/staff/${id}/`, data);
   },
 
   async updateStaff(id, data) {
-    if (Object.prototype.hasOwnProperty.call(data, 'status')) {
-      // status toggle shortcut
+    if (Object.prototype.hasOwnProperty.call(data, 'status') || data.status) {
       return request('PATCH', `/branch/staff/${id}/status/`, data);
     }
     return request('PATCH', `/branch/staff/${id}/`, data);

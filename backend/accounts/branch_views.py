@@ -163,6 +163,8 @@ class BranchStaffView(APIView):
             "db_id":       member.id,
             "name":        member.name,
             "employee_id": member.employee_id or "",
+            "email":       getattr(member, 'email', f"{member.employee_id.lower()}@artisanbrew.internal" if member.employee_id else ''),
+            "phone":       getattr(member, 'phone', ''),
             "role":        "Waiter" if role_name == "WAITER" else ("Cashier" if role_name == "CASHIER" else "Kitchen Staff"),
             "role_key":    role_name.lower(),
             "branch":      member.branch_id,
@@ -172,40 +174,6 @@ class BranchStaffView(APIView):
             "status":      "active" if member.is_active else "inactive",
             "joinedDate":  member.created_at.strftime("%Y-%m-%d") if hasattr(member, 'created_at') and member.created_at else "",
         }
-
-    def _validate_post(self, data, branch):
-        """Shared server-side validation for employee creation."""
-        errors = {}
-
-        name = (data.get('name') or '').strip()
-        if not name:
-            errors['name'] = "Full name is required."
-        elif len(name) > 120:
-            errors['name'] = "Name is too long (max 120 characters)."
-
-        employee_id = (data.get('employee_id') or '').strip()
-        if not employee_id:
-            errors['employee_id'] = "Employee ID is required."
-        else:
-            # Cross-check across all employee namespaces
-            if Waiter.objects.filter(employee_id=employee_id).exists():
-                errors['employee_id'] = "This Employee ID is already in use by a Waiter."
-            elif Cashier.objects.filter(employee_id=employee_id).exists():
-                errors['employee_id'] = "This Employee ID is already in use by a Cashier."
-            elif KitchenStaff.objects.filter(employee_id=employee_id).exists():
-                errors['employee_id'] = "This Employee ID is already in use by Kitchen Staff."
-
-        pin = (data.get('pin') or '').strip()
-        confirm_pin = (data.get('confirm_pin') or '').strip()
-        if not pin:
-            errors['pin'] = "A 4-digit PIN is required."
-        elif not pin.isdigit() or len(pin) != 4:
-            errors['pin'] = "PIN must be exactly 4 numeric digits."
-        elif pin != confirm_pin:
-            errors['confirm_pin'] = "PINs do not match."
-
-        return errors, name, employee_id, pin
-
     def get(self, request, pk=None, *args, **kwargs):
         branch = get_manager_branch(request)
         if not branch:
@@ -239,7 +207,7 @@ class BranchStaffView(APIView):
 
     def post(self, request, *args, **kwargs):
         """
-        Create a Waiter or Cashier.
+        Create a Waiter, Cashier, or Kitchen staff.
         Security: branch is ALWAYS forced from the manager's JWT.
         The client cannot choose another branch.
         """
@@ -248,14 +216,17 @@ class BranchStaffView(APIView):
             return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
 
         role     = (request.data.get('role') or 'waiter').lower().strip()
+        if role in ('pos', 'cashier'): role = 'cashier'
+        elif role in ('kitchen staff', 'kitchen_staff', 'kitchen'): role = 'kitchen'
+
         section  = (request.data.get('section') or '').strip()
         is_active_raw = request.data.get('is_active', True)
         is_active = is_active_raw if isinstance(is_active_raw, bool) else str(is_active_raw).lower() not in ('false', '0', 'inactive')
 
         errors, name, employee_id, pin = self._validate_post(request.data, branch)
 
-        if role not in ('waiter', 'cashier'):
-            errors['role'] = "Role must be 'waiter' or 'cashier'."
+        if role not in ('waiter', 'cashier', 'kitchen'):
+            errors['role'] = "Role must be 'waiter', 'cashier', or 'kitchen'."
 
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
@@ -276,7 +247,7 @@ class BranchStaffView(APIView):
             member = serializer.save()
             return Response(self._serialize_member(member, "WAITER"), status=status.HTTP_201_CREATED)
 
-        else:  # cashier
+        elif role == 'cashier':
             data = {
                 'name':        name,
                 'employee_id': employee_id,
@@ -290,6 +261,21 @@ class BranchStaffView(APIView):
             member = serializer.save()
             return Response(self._serialize_member(member, "CASHIER"), status=status.HTTP_201_CREATED)
 
+        elif role == 'kitchen':
+            data = {
+                'name':        name,
+                'employee_id': employee_id,
+                'branch':      branch.id,
+                'is_active':   is_active,
+                'pin':         pin,
+                'confirm_pin': pin,
+            }
+            serializer = KitchenStaffSerializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            member = serializer.save()
+            return Response(self._serialize_member(member, "KITCHEN"), status=status.HTTP_201_CREATED)
+
+        return Response({"detail": f"Unsupported role: {role}"}, status=status.HTTP_400_BAD_REQUEST)
     def patch(self, request, pk, *args, **kwargs):
         branch = get_manager_branch(request)
         if not branch:
@@ -395,7 +381,6 @@ class BranchStaffView(APIView):
 
 
 # ── Table Management API ────────────────────────────────────────────────────────
-
 
 class BranchTableViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsBranchManager]
@@ -611,8 +596,6 @@ class BranchMenuView(APIView):
         from menu.models import Category
         category = get_object_or_404(Category, pk=category_id)
         
-        # Automatic image mapping based on category icon/name
-        # Fallback to a placeholder if no image exists
         image_path = None
         icon = category.icon.lower()
         if icon == 'coffee_tea' or 'coffee' in category.name.lower() or 'tea' in category.name.lower():
@@ -649,7 +632,6 @@ class BranchMenuView(APIView):
             "globalStatus": "Available",
             "branchStatus": product.available
         }, status=status.HTTP_201_CREATED)
-
 
 # ── Inventory API ────────────────────────────────────────────────────────────────
 
@@ -1012,6 +994,7 @@ class BranchReportsView(APIView):
                 "role": "Waiter",
                 "orders": ws['orders_served'],
                 "rating": "4.8★"
+
             })
 
         return Response({
@@ -1033,6 +1016,305 @@ class BranchReportsView(APIView):
 
 # ── Settings API ─────────────────────────────────────────────────────────────────
 
+class BranchSettingsView(APIView):
+    permission_classes = [IsAuthenticated, IsBranchManager]
+
+    def get(self, request, *args, **kwargs):
+        branch = get_manager_branch(request)
+        if not branch:
+            return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
+        return Response({
+            "id": branch.id,
+            "name": branch.name,
+            "code": branch.code,
+            "address": branch.address,
+            "phone": branch.phone,
+            "active": branch.active
+        })
+
+    def patch(self, request, *args, **kwargs):
+        branch = get_manager_branch(request)
+        if not branch:
+            return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        name = request.data.get('name')
+        address = request.data.get('address')
+        phone = request.data.get('phone')
+
+        if name: branch.name = name
+        if address is not None: branch.address = address
+        if phone is not None: branch.phone = phone
+
+        branch.save()
+        return Response({
+            "id": branch.id,
+            "name": branch.name,
+            "code": branch.code,
+            "address": branch.address,
+            "phone": branch.phone,
+            "active": branch.active
+        })
+
+    def put(self, request, *args, **kwargs):
+        return self.patch(request, *args, **kwargs)
+
+
+class BranchPOSTerminalViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, IsBranchManager]
+    serializer_class = POSTerminalSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        branch = get_manager_branch(self.request)
+        if not branch:
+            return POSTerminal.objects.none()
+        return POSTerminal.objects.filter(branch=branch).select_related('branch', 'assigned_cashier').order_by('name')
+
+    def partial_update(self, request, pk=None, *args, **kwargs):
+        branch = get_manager_branch(request)
+        if not branch:
+            return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
+        
+        terminal = get_object_or_404(POSTerminal, pk=pk, branch=branch)
+        
+        # Extract fields
+        status_val = request.data.get('status')
+        name_val = request.data.get('name') or request.data.get('terminal')
+        cashier_id = request.data.get('assigned_cashier')
+        if 'assignedCashierId' in request.data:
+            cashier_id = request.data.get('assignedCashierId')
+
+        # Validate cashier if provided
+        if cashier_id is not None:
+            if cashier_id in ['', 'null', 'None', None]:
+                terminal.assigned_cashier = None
+            else:
+                try:
+                    cashier = Cashier.objects.get(pk=cashier_id)
+                except (Cashier.DoesNotExist, ValueError, TypeError):
+                    return Response({"detail": "Invalid Cashier ID or Cashier does not exist."}, status=status.HTTP_400_BAD_REQUEST)
+                
+                if cashier.branch != branch:
+                    return Response({"detail": "Cannot assign a cashier from another branch."}, status=status.HTTP_400_BAD_REQUEST)
+                if not cashier.is_active:
+                    return Response({"detail": "Cannot assign an inactive cashier."}, status=status.HTTP_400_BAD_REQUEST)
+                
+                terminal.assigned_cashier = cashier
+
+        if status_val:
+            if status_val.lower() not in ['active', 'inactive', 'maintenance', 'offline']:
+                return Response({"detail": "Invalid status."}, status=status.HTTP_400_BAD_REQUEST)
+            if status_val.lower() == 'offline':
+                status_val = 'inactive'
+            terminal.status = status_val.lower()
+
+        if name_val:
+            terminal.name = name_val
+
+        terminal.save()
+        return Response(POSTerminalSerializer(terminal).data)
+
+    def update(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+    @action(detail=True, methods=['patch'], url_path='status')
+    def set_status(self, request, pk=None):
+        return self.partial_update(request, pk)
+
+    @action(detail=True, methods=['patch'], url_path='cashier')
+    def set_cashier(self, request, pk=None):
+        return self.partial_update(request, pk)
+
+
+class BranchReportsView(APIView):
+    permission_classes = [IsAuthenticated, IsBranchManager]
+
+    def get(self, request, *args, **kwargs):
+        branch = get_manager_branch(request)
+        if not branch:
+            return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        period = request.query_params.get('period', 'month').lower()
+        today = timezone.localtime(timezone.now()).date()
+
+        if period == 'today':
+            start_date = today
+            end_date = today
+        elif period == 'yesterday':
+            start_date = today - datetime.timedelta(days=1)
+            end_date = today - datetime.timedelta(days=1)
+        elif period == 'week':
+            start_date = today - datetime.timedelta(days=6)
+            end_date = today
+        else: # month
+            start_date = today - datetime.timedelta(days=29)
+            end_date = today
+
+        # Gross Sales & Orders
+        orders = Order.objects.filter(
+            branch=branch,
+            status='completed',
+            created_at__date__range=[start_date, end_date]
+        )
+        total_sales = orders.aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+        order_count = orders.count()
+
+        # Expenses
+        expenses_qs = Expense.objects.filter(
+            branch=branch,
+            date__range=[start_date, end_date],
+            status='approved'
+        )
+        total_expenses = expenses_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+
+        # Net Revenue & AOV
+        net_revenue = total_sales - total_expenses
+        avg_order_value = total_sales / order_count if order_count > 0 else Decimal('0.00')
+
+        # Sales Trend Data
+        sales_data = []
+        if period in ['today', 'yesterday']:
+            # Hourly grouping (00:00 to 23:00)
+            target_date = start_date
+            for h in range(24):
+                hour_sales = Order.objects.filter(
+                    branch=branch,
+                    status='completed',
+                    created_at__date=target_date,
+                    created_at__hour=h
+                ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+                sales_data.append({
+                    "label": f"{h:02d}:00",
+                    "value": float(hour_sales)
+                })
+        elif period == 'week':
+            # Daily grouping (last 7 days)
+            for i in range(6, -1, -1):
+                d = today - datetime.timedelta(days=i)
+                day_sales = Order.objects.filter(
+                    branch=branch,
+                    status='completed',
+                    created_at__date=d
+                ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+                sales_data.append({
+                    "label": d.strftime("%a"),
+                    "value": float(day_sales)
+                })
+        else: # month
+            # Weekly grouping (last 30 days split into 4 weeks)
+            for w in range(4):
+                w_start = today - datetime.timedelta(days=29 - w * 7)
+                w_end = today - datetime.timedelta(days=29 - (w + 1) * 7 + 1) if w < 3 else today
+                week_sales = Order.objects.filter(
+                    branch=branch,
+                    status='completed',
+                    created_at__date__range=[w_start, w_end]
+                ).aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+                sales_data.append({
+                    "label": f"Week {w+1}",
+                    "value": float(week_sales)
+                })
+
+        # Payment Method Breakdown
+        payment_summary = []
+        payment_methods = [
+            ('upi', 'UPI / QR Scan'),
+            ('card', 'Credit/Debit Card'),
+            ('cash', 'Cash drawer')
+        ]
+        for db_method, ui_name in payment_methods:
+            pm_orders = orders.filter(payment_method__iexact=db_method)
+            pm_count = pm_orders.count()
+            pm_val = pm_orders.aggregate(total=Sum('total'))['total'] or Decimal('0.00')
+            payment_summary.append({
+                "name": ui_name,
+                "count": pm_count,
+                "value": float(pm_val)
+            })
+
+        # Top Selling Products
+        from orders.models import OrderItem
+        top_products = OrderItem.objects.filter(
+            order__in=orders
+        ).values('product__name', 'product_name').annotate(
+            total_qty=Sum('quantity'),
+            total_rev=Sum('subtotal')
+        ).order_by('-total_qty')[:5]
+
+        top_selling_products = []
+        for tp in top_products:
+            name = tp['product_name'] or tp['product__name'] or 'Unknown Product'
+            top_selling_products.append({
+                "name": name,
+                "qty": tp['total_qty'],
+                "revenue": float(tp['total_rev'] or 0)
+            })
+
+        # Order Channels
+        dine_in_orders = orders.exclude(table__isnull=True)
+        takeaway_orders = orders.filter(table__isnull=True).exclude(customer_name__icontains='swiggy').exclude(customer_name__icontains='zomato')
+        swiggy_orders = orders.filter(customer_name__icontains='swiggy')
+        zomato_orders = orders.filter(customer_name__icontains='zomato')
+
+        channel_breakdown = [
+            {
+                "name": "Dine-In",
+                "orders": dine_in_orders.count(),
+                "value": float(dine_in_orders.aggregate(total=Sum('total'))['total'] or 0),
+                "color": "var(--color-espresso)"
+            },
+            {
+                "name": "Takeaway",
+                "orders": takeaway_orders.count(),
+                "value": float(takeaway_orders.aggregate(total=Sum('total'))['total'] or 0),
+                "color": "var(--color-tan-dark)"
+            },
+            {
+                "name": "Swiggy",
+                "orders": swiggy_orders.count(),
+                "value": float(swiggy_orders.aggregate(total=Sum('total'))['total'] or 0),
+                "color": "#e65300"
+            },
+            {
+                "name": "Zomato",
+                "orders": zomato_orders.count(),
+                "value": float(zomato_orders.aggregate(total=Sum('total'))['total'] or 0),
+                "color": "#b81414"
+            }
+        ]
+
+        # Waiter performance (group completed orders by waiter_name)
+        waiter_stats = orders.exclude(waiter_name='').values('waiter_name').annotate(
+            orders_served=Count('id')
+        ).order_by('-orders_served')[:5]
+
+        staff_performance = []
+        for ws in waiter_stats:
+            staff_performance.append({
+                "name": ws['waiter_name'],
+                "role": "Waiter",
+                "orders": ws['orders_served'],
+                "rating": "4.8★"
+            })
+
+        return Response({
+            "period": period,
+            "metrics": {
+                "totalSales": float(total_sales),
+                "expenses": float(total_expenses),
+                "netSales": float(net_revenue),
+                "avgOrder": float(avg_order_value),
+                "totalOrders": order_count,
+            },
+            "sales_data": sales_data,
+            "payment_breakdown": payment_summary,
+            "top_selling_products": top_selling_products,
+            "channel_breakdown": channel_breakdown,
+            "staff_performance": staff_performance
+        })
+
+
+# ── Settings API ─────────────────────────────────────────────────────────────────
 class BranchSettingsView(APIView):
     permission_classes = [IsAuthenticated, IsBranchManager]
 

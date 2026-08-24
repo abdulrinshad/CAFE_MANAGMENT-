@@ -70,7 +70,6 @@ export default function CheckoutPage() {
     load()
     return () => { cancelled = true }
   }, [orderId])
-
   // ── Derived ────────────────────────────────────────────────────────────────
   const amountDue   = invoice ? Number(invoice.total) : (order ? Number(order.total) : 0)
   const orderNumber = order   ? (order.order_number || `#${orderId}`) : `#${orderId}`
@@ -89,6 +88,8 @@ export default function CheckoutPage() {
     setCompleting(true)
     setError('')
     try {
+      // Use AppContext.completeOrder which calls the API AND refreshes
+      // tables + orders + notifications so the floor plan updates immediately
       const result = await completeOrder(orderId, {
         method: paymentMethod,
         status: 'paid',
@@ -140,7 +141,7 @@ export default function CheckoutPage() {
           <div className="checkout-card-header">
             <button
               className="checkout-back-btn"
-              onClick={() => navigate(`/orders/${orderId}`)}
+              onClick={() => navigate(`/orders/${orderId}/invoice`)}
               aria-label="Go back"
             >←</button>
             <div>

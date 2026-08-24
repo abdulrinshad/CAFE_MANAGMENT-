@@ -146,7 +146,6 @@ export default function BranchMenu() {
       alert(err.message || 'Failed to save category');
     }
   };
-
   if (loading) {
     return (
       <BranchManagerLayout>
@@ -366,7 +365,6 @@ export default function BranchMenu() {
                     </span>
                   </label>
                 </div>
-
               </div>
             );
           })}
