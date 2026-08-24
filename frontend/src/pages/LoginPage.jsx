@@ -19,10 +19,7 @@ export default function LoginPage() {
   const [loading,  setLoading]  = useState(false)
 
   // ── Waiter PIN credentials ─────────────────────────────────────────────────
-  const [waiters,            setWaiters]           = useState([])
-  const [waitersLoading,     setWaitersLoading]    = useState(true)
-  const [waitersError,       setWaitersError]      = useState('')
-  const [selectedWaiter,     setSelectedWaiter]    = useState(null)
+  const [waiterEmpId,        setWaiterEmpId]       = useState('')
   const [pin,                setPin]               = useState('')
   const [pinError,           setPinError]          = useState('')
   const [waiterLoginLoading, setWaiterLoginLoading] = useState(false)
@@ -39,24 +36,6 @@ export default function LoginPage() {
   const [cashierError,  setCashierError]  = useState('')
   const [cashierLoading,setCashierLoading]= useState(false)
 
-  // Load waiters when waiter tab is active
-  useEffect(() => {
-    async function loadWaiters() {
-      try {
-        setWaitersLoading(true)
-        const data = await authApi.getWaiters()
-        setWaiters(data)
-        if (data.length > 0) setSelectedWaiter(data[0])
-      } catch (err) {
-        console.error(err)
-        setWaitersError('Unable to connect to the server. Please try again.')
-      } finally {
-        setWaitersLoading(false)
-      }
-    }
-    if (loginMode === 'waiter') loadWaiters()
-  }, [loginMode])
-
   // Clear errors when switching tabs
   const switchMode = (mode) => {
     setLoginMode(mode)
@@ -64,6 +43,7 @@ export default function LoginPage() {
     setPinError('')
     setBmError('')
     setCashierError('')
+    setWaiterEmpId('')
     setPin('')
     setBmId('')
     setBmPin('')
@@ -97,13 +77,19 @@ export default function LoginPage() {
   }
 
   // ── Waiter PIN login ───────────────────────────────────────────────────────
-  const handleWaiterLogin = async () => {
-    if (!selectedWaiter) return
+  const handleWaiterLogin = async (e) => {
+    if (e) e.preventDefault()
+    if (!waiterEmpId.trim()) { setPinError('Please enter your Employee ID.'); return }
+    if (!pin.trim())         { setPinError('Please enter your PIN.'); return }
     setWaiterLoginLoading(true)
     setPinError('')
     try {
-      await loginWaiter(selectedWaiter.id, pin)
-      navigate('/dashboard')
+      const res = await loginEmployee(waiterEmpId.trim(), pin.trim())
+      if (res.role === 'waiter') {
+        navigate('/dashboard')
+      } else {
+        setPinError('Unauthorized role. Not a registered Waiter.')
+      }
     } catch (err) {
       console.error(err)
       setPinError(err.message || 'Incorrect PIN. Please try again.')
@@ -112,13 +98,6 @@ export default function LoginPage() {
       setWaiterLoginLoading(false)
     }
   }
-
-  const handleKeyPress = (num) => {
-    setPinError('')
-    if (pin.length < 4) setPin(prev => prev + num)
-  }
-  const handleBackspace = () => setPin(prev => prev.slice(0, -1))
-  const handleClear = () => { setPin(''); setPinError('') }
 
   // ── Branch Manager login ───────────────────────────────────────────────────
   const handleBranchManagerLogin = async (e) => {
@@ -162,7 +141,7 @@ export default function LoginPage() {
 
   const subtitleMap = {
     admin:          'Admin Portal',
-    waiter:         'Waiter PIN Login',
+    waiter:         'Waiter Access',
     branch_manager: 'Branch Manager Portal',
     cashier:        'Cashier & POS Desk',
   }
@@ -268,69 +247,37 @@ export default function LoginPage() {
 
         {/* ── Waiter PIN form ── */}
         {loginMode === 'waiter' && (
-          <div className="waiter-login-wrap">
-            <div className="waiter-profiles">
-              {waitersLoading && (
-                <div style={{ color: '#fff', textAlign: 'center', width: '100%', padding: '1rem' }}>
-                  Loading waiters...
-                </div>
-              )}
-              {waitersError && (
-                <div style={{ color: '#ff4d4d', textAlign: 'center', width: '100%', padding: '1rem' }}>
-                  {waitersError}
-                </div>
-              )}
-              {!waitersLoading && !waitersError && waiters.length === 0 && (
-                <div style={{ color: '#aaa', textAlign: 'center', width: '100%', padding: '1rem' }}>
-                  No active waiters are currently available.
-                </div>
-              )}
-              {!waitersLoading && !waitersError && waiters.map(w => (
-                <button
-                  key={w.id}
-                  className={`waiter-profile-item ${selectedWaiter?.id === w.id ? 'active' : ''}`}
-                  onClick={() => { setSelectedWaiter(w); setPin(''); setPinError('') }}
-                >
-                  <span className="waiter-profile-avatar">
-                    {w.photo
-                      ? <img src={w.photo} alt={w.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                      : '👤'}
-                  </span>
-                  <span className="waiter-profile-name">{w.name}</span>
-                  <span className="waiter-profile-station">{w.section}</span>
-                </button>
-              ))}
+          <form className="login-card__form" onSubmit={handleWaiterLogin} id="waiter-login-form">
+            <div className="login-form__field">
+              <label className="login-form__label" htmlFor="waiter-emp-id">Employee ID</label>
+              <input
+                id="waiter-emp-id"
+                type="text"
+                className="login-form__input"
+                placeholder="e.g. EMP-001"
+                value={waiterEmpId}
+                onChange={e => setWaiterEmpId(e.target.value)}
+                autoComplete="username"
+              />
             </div>
-
-            <div className="pin-display">
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} className={`pin-dot ${pin.length > i ? 'filled' : ''}`} />
-              ))}
+            <div className="login-form__field">
+              <label className="login-form__label" htmlFor="waiter-pin-input">4-Digit PIN</label>
+              <input
+                id="waiter-pin-input"
+                type="password"
+                className="login-form__input"
+                placeholder="••••"
+                maxLength={4}
+                value={pin}
+                onChange={e => setPin(e.target.value)}
+                autoComplete="current-password"
+              />
             </div>
-
-            {pinError && <div className="pin-error-msg">{pinError}</div>}
-
-            <div className="pin-keypad">
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-                <button key={num} type="button" className="keypad-btn" onClick={() => handleKeyPress(num.toString())} disabled={waiterLoginLoading}>
-                  {num}
-                </button>
-              ))}
-              <button type="button" className="keypad-btn keypad-btn--clear" onClick={handleClear} disabled={waiterLoginLoading}>Clear</button>
-              <button type="button" className="keypad-btn" onClick={() => handleKeyPress('0')} disabled={waiterLoginLoading}>0</button>
-              <button type="button" className="keypad-btn keypad-btn--del" onClick={handleBackspace} disabled={waiterLoginLoading}>⌫</button>
-            </div>
-
-            <button
-              type="button"
-              className="login-form__submit waiter-submit-btn"
-              onClick={handleWaiterLogin}
-              disabled={waiterLoginLoading || pin.length !== 4}
-            >
-              {waiterLoginLoading ? 'Verifying PIN...' : 'Access Waiter Terminal'}
-              <span className="login-form__submit-arrow">→</span>
+            {pinError && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{pinError}</div>}
+            <button type="submit" className="login-form__submit" id="btn-waiter-login" disabled={waiterLoginLoading}>
+              {waiterLoginLoading ? 'Verifying...' : 'Login as Waiter →'}
             </button>
-          </div>
+          </form>
         )}
 
         {/* ── Branch Manager form ── */}

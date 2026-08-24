@@ -27,6 +27,8 @@ import SettingsMenuPage     from './pages/SettingsMenuPage'
 import WaitersPage          from './pages/WaitersPage'
 import POSDashboardPage     from './pages/POSDashboardPage'
 import POSTransactionsPage  from './pages/POSTransactionsPage'
+import TakeawayPage         from './pages/TakeawayPage'
+import OnlineOrdersPage     from './pages/OnlineOrdersPage'
 
 
 // ── Owner Module ────────────────────────────────────────────────────
@@ -176,9 +178,10 @@ export default function App() {
         <Route path="/cashier/orders"     element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><OrdersPage /></ProtectedRoute>} />
         <Route path="/cashier/tables"     element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><TablesPage /></ProtectedRoute>} />
         <Route path="/cashier/bill-requests" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><BillRequestsPage /></ProtectedRoute>} />
-        <Route path="/cashier/billing/:id" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><InvoicePreviewPage /></ProtectedRoute>} />
-        <Route path="/cashier/payment/:id" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><CheckoutPage /></ProtectedRoute>} />
-        <Route path="/cashier/success/:id" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier', 'waiter']}><SuccessPage /></ProtectedRoute>} />
+        <Route path="/cashier/billing/:id" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}><InvoicePreviewPage /></ProtectedRoute>} />
+        <Route path="/cashier/payment/:id" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}><CheckoutPage /></ProtectedRoute>} />
+        <Route path="/cashier/success/:id" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}><SuccessPage /></ProtectedRoute>} />
+        <Route path="/cashier/online-orders" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}><OnlineOrdersPage /></ProtectedRoute>} />
         <Route path="/cashier/transactions" element={<ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}><POSTransactionsPage /></ProtectedRoute>} />
 
 
@@ -233,17 +236,17 @@ export default function App() {
           </ProtectedRoute>
         } />
         <Route path="/orders/:id/invoice"  element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}>
             <InvoicePreviewPage />
           </ProtectedRoute>
         } />
         <Route path="/orders/:orderId/checkout" element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}>
             <CheckoutPage />
           </ProtectedRoute>
         } />
         <Route path="/orders/:id/success"  element={
-          <ProtectedRoute allowedRoles={['admin', 'manager', 'waiter', 'pos', 'cashier']}>
+          <ProtectedRoute allowedRoles={['admin', 'manager', 'pos', 'cashier']}>
             <SuccessPage />
           </ProtectedRoute>
         } />

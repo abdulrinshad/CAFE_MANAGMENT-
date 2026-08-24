@@ -146,11 +146,13 @@ export default function OrdersPage() {
           <table className="orders-table">
             <thead>
               <tr>
-                <th><span className="orders-th-sort">ORDER ID <SortIcon /></span></th>
+                <th>ORDER ID</th>
+                <th>ORDER TYPE</th>
                 <th>TABLE</th>
                 <th>WAITER</th>
                 <th>ITEMS SUMMARY</th>
                 <th>AMOUNT</th>
+                <th>PAYMENT</th>
                 <th>STATUS</th>
                 <th>TIME</th>
                 <th>ACTION</th>
@@ -158,13 +160,44 @@ export default function OrdersPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} style={{ textAlign: 'center', padding: 32, color: '#6b7280' }}>Loading orders…</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: 32, color: '#6b7280' }}>Loading orders…</td></tr>
               ) : paged.length === 0 ? (
-                <tr><td colSpan={8} className="orders-empty">No orders found.</td></tr>
+                <tr><td colSpan={11} className="orders-empty">No orders found.</td></tr>
               ) : (
                 paged.map((order) => {
                   const meta    = STATUS_META[order.status] || STATUS_META.PENDING
                   const isDone  = order.status === 'COMPLETED'
+                  
+                  // Payment Badge helper
+                  const renderPaymentBadge = (method, status) => {
+                    const s = (status || '').toLowerCase()
+                    const m = (method || '').toUpperCase()
+                    if (!s || s === 'unpaid' || s === 'pending') {
+                      return (
+                        <span className="order-badge" style={{ background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', fontWeight: 'bold', fontSize: '10px' }}>
+                          UNPAID
+                        </span>
+                      )
+                    }
+                    let bg = '#e0f2fe', text = '#0369a1', border = '#bae6fd'
+                    if (m === 'CASH') { bg = '#dcfce7'; text = '#15803d'; border = '#bbf7d0' }
+                    else if (m === 'UPI') { bg = '#faf5ff'; text = '#7e22ce'; border = '#e9d5ff' }
+                    else if (m === 'CARD') { bg = '#fef3c7'; text = '#b45309'; border = '#fde68a' }
+                    return (
+                      <span className="order-badge" style={{ background: bg, color: text, border: `1px solid ${border}`, fontWeight: 'bold', fontSize: '10px' }}>
+                        {m}
+                      </span>
+                    )
+                  }
+
+                  const renderChannelLabel = (channel) => {
+                    const c = (channel || 'DINE_IN').toUpperCase()
+                    if (c === 'TAKEAWAY') return '🥡 Takeaway'
+                    if (c === 'SWIGGY') return '🛵 Swiggy'
+                    if (c === 'ZOMATO') return '🛵 Zomato'
+                    return '🍽️ Dine-In'
+                  }
+
                   return (
                     <tr
                       key={order.id}
@@ -174,10 +207,12 @@ export default function OrdersPage() {
                       id={`order-row-${order.id}`}
                     >
                       <td className="orders-cell orders-cell--id">{order.orderId}</td>
-                      <td className="orders-cell">{order.table}</td>
-                      <td className="orders-cell">{order.waiter}</td>
+                      <td className="orders-cell" style={{ fontSize: '13px', fontWeight: '500' }}>{renderChannelLabel(order.channel)}</td>
+                      <td className="orders-cell">{order.table || '—'}</td>
+                      <td className="orders-cell">{order.waiter || '—'}</td>
                       <td className="orders-cell orders-cell--summary">{order.itemsSummary}</td>
                       <td className="orders-cell orders-cell--amount">₹{Number(order.amount).toLocaleString('en-IN')}</td>
+                      <td className="orders-cell">{renderPaymentBadge(order.payment_method, order.payment_status)}</td>
                       <td className="orders-cell">
                         <span className={`order-badge ${meta.cls}`}>
                           {meta.label !== 'DONE' && <span className={`order-dot ${meta.dot}`} />}

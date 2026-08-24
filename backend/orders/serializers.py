@@ -56,13 +56,17 @@ class OrderSerializer(serializers.ModelSerializer):
             'status', 'subtotal', 'tax_amount', 'total',
             'item_count', 'items_summary',
             'items', 'created_at', 'updated_at', 'completed_at',
-            'receipt_method', 'receipt_status',
+            'receipt_method', 'receipt_status', 'channel',
+            'payment_method', 'payment_status', 'transaction_ref',
+            'amount_received', 'change_returned',
         ]
         read_only_fields = [
             'id', 'order_number', 'branch_name', 'branch_code', 'table_label', 'item_count', 'items_summary',
             'subtotal', 'tax_amount', 'total',
             'created_at', 'updated_at', 'completed_at',
-            'receipt_method', 'receipt_status', 'cashier_name', 'pos_terminal'
+            'receipt_method', 'receipt_status', 'cashier_name', 'pos_terminal',
+            'payment_method', 'payment_status', 'transaction_ref',
+            'amount_received', 'change_returned',
         ]
 
     def get_receipt_method(self, obj):
@@ -135,7 +139,9 @@ class OrderListSerializer(serializers.ModelSerializer):
             'customer_name', 'waiter_name', 'cashier_name', 'pos_terminal', 'whatsapp_number',
             'status', 'total', 'item_count', 'items_summary',
             'items', 'created_at', 'completed_at',
-            'receipt_method', 'receipt_status',
+            'receipt_method', 'receipt_status', 'channel',
+            'payment_method', 'payment_status', 'transaction_ref',
+            'amount_received', 'change_returned',
         ]
         read_only_fields = fields
 

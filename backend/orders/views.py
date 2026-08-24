@@ -156,7 +156,24 @@ class OrderViewSet(viewsets.ModelViewSet):
                 if prod and prod.branch and waiter_branch and prod.branch != waiter_branch:
                     raise PermissionDenied(f"Product '{prod.name}' belongs to another branch.")
 
-        serializer.save(branch=waiter_branch)
+        extra_fields = {}
+        user = self.request.user
+        if user and user.is_authenticated:
+            if user.username.startswith('cashier_'):
+                try:
+                    from accounts.models import Cashier
+                    cashier_id = int(user.username.split('_')[1])
+                    cashier = Cashier.objects.filter(pk=cashier_id).first()
+                    if cashier:
+                        extra_fields['cashier_name'] = cashier.name
+                        from accounts.models import POSTerminal
+                        term = POSTerminal.objects.filter(assigned_cashier=cashier).first()
+                        if term:
+                            extra_fields['pos_terminal'] = term
+                except Exception:
+                    pass
+
+        serializer.save(branch=waiter_branch, **extra_fields)
 
     @action(detail=True, methods=['patch'], url_path='set_status')
     def set_status(self, request, pk=None):
@@ -881,12 +898,20 @@ class OrderViewSet(viewsets.ModelViewSet):
             if not cashier_name:
                 cashier_name = user.get_full_name() or user.username
 
+        amount_received = Decimal(str(request.data.get('amount_received') or 0))
+        change_returned = Decimal(str(request.data.get('change_returned') or 0))
+        transaction_ref = str(request.data.get('transaction_ref') or request.data.get('transactionReference') or '').strip()
+
         with transaction.atomic():
             # Complete the order
             order.status = Order.STATUS_COMPLETED
             order.completed_at = timezone.now()
             order.payment_method = method
             order.payment_status = pay_status
+            order.amount_received = amount_received
+            order.change_returned = change_returned
+            if transaction_ref:
+                order.transaction_ref = transaction_ref
             if cashier_name:
                 order.cashier_name = cashier_name
             if pos_terminal_obj:
@@ -894,7 +919,11 @@ class OrderViewSet(viewsets.ModelViewSet):
             if not order.branch and pos_terminal_obj and pos_terminal_obj.branch:
                 order.branch = pos_terminal_obj.branch
 
-            order.save(update_fields=['status', 'completed_at', 'payment_method', 'payment_status', 'cashier_name', 'pos_terminal', 'branch', 'updated_at'])
+            order.save(update_fields=[
+                'status', 'completed_at', 'payment_method', 'payment_status', 
+                'cashier_name', 'pos_terminal', 'branch', 'amount_received', 
+                'change_returned', 'transaction_ref', 'updated_at'
+            ])
 
             # Mark invoice paid
             invoice = None
@@ -903,8 +932,19 @@ class OrderViewSet(viewsets.ModelViewSet):
                 invoice.status  = Invoice.STATUS_PAID
                 invoice.paid_at = timezone.now()
                 invoice.save(update_fields=['status', 'paid_at', 'updated_at'])
-            except Invoice.DoesNotExist:
-                pass
+            except Exception:
+                try:
+                    from orders.models import Invoice
+                    invoice = Invoice.objects.create(
+                        order=order,
+                        subtotal=order.subtotal,
+                        tax_amount=order.tax_amount,
+                        total=order.total,
+                        status='paid',
+                        paid_at=timezone.now(),
+                    )
+                except Exception:
+                    pass
 
             # Create or update payment
             payment, _ = Payment.objects.get_or_create(

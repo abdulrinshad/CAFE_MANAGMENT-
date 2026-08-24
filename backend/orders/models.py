@@ -33,6 +33,18 @@ class Order(models.Model):
         (STATUS_BILL_REQUESTED, 'Bill Requested'),
     ]
 
+    CHANNEL_DINE_IN  = 'DINE_IN'
+    CHANNEL_TAKEAWAY = 'TAKEAWAY'
+    CHANNEL_SWIGGY   = 'SWIGGY'
+    CHANNEL_ZOMATO   = 'ZOMATO'
+
+    CHANNEL_CHOICES = [
+        (CHANNEL_DINE_IN,  'Dine-In'),
+        (CHANNEL_TAKEAWAY, 'Takeaway'),
+        (CHANNEL_SWIGGY,   'Swiggy'),
+        (CHANNEL_ZOMATO,   'Zomato'),
+    ]
+
     # Human-readable unique order number, e.g. ORD-0001
     order_number  = models.CharField(max_length=20, unique=True, blank=True)
 
@@ -67,12 +79,21 @@ class Order(models.Model):
     payment_method   = models.CharField(max_length=20, blank=True, default='pending')
     payment_status   = models.CharField(max_length=20, blank=True, default='unpaid')
     transaction_ref  = models.CharField(max_length=50, blank=True, default='')
+    amount_received  = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    change_returned  = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
 
     # Status
     status        = models.CharField(
         max_length=20, choices=STATUS_CHOICES,
         default=STATUS_PENDING, db_index=True,
+    )
+
+    channel = models.CharField(
+        max_length=20,
+        choices=CHANNEL_CHOICES,
+        default=CHANNEL_DINE_IN,
+        db_index=True,
     )
 
     # Financials (stored as snapshots; computed from items on save)

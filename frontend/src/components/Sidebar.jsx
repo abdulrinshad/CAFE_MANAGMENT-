@@ -75,12 +75,13 @@ export default function Sidebar({ isOpen, onClose }) {
   const isCashier = currentRole === 'cashier' || currentRole === 'pos'
 
   const cashierItems = [
-    { path: '/pos/dashboard',        label: 'POS Dashboard',     icon: <DashboardIcon />, exact: true },
-    { path: '/cashier/tables',       label: 'Active Tables',     icon: <TablesIcon /> },
-    { path: '/cashier/bill-requests',label: 'Bill Requests',    icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
-    { path: '/orders/new',           label: 'New POS Order',     icon: <PlusIcon />, isPrimaryCta: true },
+    { path: '/pos/dashboard',        label: 'Dashboard',         icon: <DashboardIcon />, exact: true },
+    { path: '/orders/new',           label: '+ New Order',       icon: <PlusIcon /> },
+    { path: '/cashier/online-orders',label: 'Online Orders',     icon: <RequestsIcon /> },
+    { path: '/cashier/bill-requests',label: 'Bill Requests',     icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
     { path: '/cashier/orders',       label: 'Orders',            icon: <OrdersIcon /> },
-    { path: '/cashier/transactions', label: 'Transactions',     icon: <PaymentsIcon /> },
+    { path: '/cashier/transactions', label: 'Transactions',      icon: <PaymentsIcon /> },
+    { path: '/settings/profile',     label: 'Settings',          icon: <SettingsIcon />, matchPath: '/settings' },
   ]
 
   const items = isCashier

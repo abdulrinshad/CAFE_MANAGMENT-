@@ -336,12 +336,35 @@ export default function OrderDetailPage() {
     )
   }
 
-  const currentStep     = stepIndex(order.status)
-  const nextStep        = NEXT_STATUS[order.status]   // null for COMPLETED, BILL_REQUESTED, CANCELLED
+  const isTakeaway = (order.orderType || order.channel) === 'TAKEAWAY'
+  const steps = isTakeaway
+    ? ['PENDING', 'PREPARING', 'READY', 'COMPLETED']
+    : ['PENDING', 'PREPARING', 'READY', 'COMPLETED', 'BILL_REQUESTED']
+
+  const STEP_LABELS = {
+    PENDING:        'NEW',
+    PREPARING:      'PREPARING',
+    READY:          isTakeaway ? 'READY FOR PICKUP' : 'READY',
+    COMPLETED:      isTakeaway ? 'COMPLETED' : 'SERVED',
+    BILL_REQUESTED: 'BILL REQUESTED',
+  }
+
+  const currentStep     = steps.indexOf(order.status) === -1 ? 0 : steps.indexOf(order.status)
+  
+  let nextStep = null
+  if (isTakeaway) {
+    if (order.status === 'PENDING') {
+      nextStep = { api: 'preparing', label: 'Send to Kitchen' }
+    } else if (order.status === 'PREPARING') {
+      nextStep = { api: 'ready', label: 'Mark Ready for Pickup' }
+    }
+  } else {
+    nextStep = NEXT_STATUS[order.status]
+  }
+
   const isCompleted     = order.status === 'COMPLETED'
   const isCancelled     = order.status === 'CANCELLED'
   const isBillRequested = order.status === 'BILL_REQUESTED'
-  // Editable = waiter can change qty / edit / remove items before "Finalize / Request Bill"
   const isEditable      = !isCancelled && !isBillRequested && !order.invoice_number
 
   // Bill request display status
@@ -362,8 +385,12 @@ export default function OrderDetailPage() {
             <div>
               <h1 className="order-detail__title">Order {order.orderId}</h1>
               <div className="order-detail__meta">
-                {order.table && (
+                {order.table ? (
                   <span className="order-detail__meta-item"><TableIcon /> {order.table}</span>
+                ) : (
+                  <span className="order-detail__meta-item" style={{ color: 'var(--color-text-muted)', fontSize: '13px', fontWeight: '500' }}>
+                    🥡 Takeaway order — no table assigned.
+                  </span>
                 )}
                 {order.waiter && (
                   <>
@@ -380,7 +407,7 @@ export default function OrderDetailPage() {
               Print Receipt
             </button>
 
-            {/* Kitchen step-advance: pending→preparing→ready→completed */}
+            {/* Kitchen step-advance */}
             {nextStep && (
               <button
                 className="advance-status-btn"
@@ -404,8 +431,19 @@ export default function OrderDetailPage() {
               </button>
             )}
 
+            {/* Proceed to Payment (Takeaway, Ready status) */}
+            {isTakeaway && order.status === 'READY' && !isWaiter && (
+              <button
+                className="btn-primary"
+                onClick={() => navigate(`/orders/${order.id}/checkout`)}
+                id="proceed-to-payment-btn"
+              >
+                Proceed to Payment
+              </button>
+            )}
+
             {/* Generate Bill — cashier/admin/manager only, ONLY after Completed or Bill Requested */}
-            {(isCompleted || isBillRequested) && !isWaiter && (
+            {!isTakeaway && (isCompleted || isBillRequested) && !isWaiter && (
               <button
                 className="btn-primary"
                 onClick={() => {
@@ -439,7 +477,7 @@ export default function OrderDetailPage() {
         <div className="order-detail__status-card">
           <h2 className="order-detail__section-title">Status</h2>
           <div className="status-stepper">
-            {STATUS_STEPS.map((step, i) => {
+            {steps.map((step, i) => {
               const isDone    = i < currentStep
               const isCurrent = i === currentStep
               const isFuture  = i > currentStep
@@ -468,7 +506,7 @@ export default function OrderDetailPage() {
             })}
           </div>
 
-          {/* Kitchen next-step CTA below stepper (pending→preparing→ready→completed) */}
+          {/* Kitchen next-step CTA below stepper */}
           {nextStep && (
             <div className="stepper-advance-wrap">
               <button
@@ -490,9 +528,9 @@ export default function OrderDetailPage() {
                 )}
               </button>
               <span className="stepper-advance-hint">
-                {order.status === 'PENDING'   && 'Kitchen received? Mark as Preparing.'}
-                {order.status === 'PREPARING' && 'Food ready? Mark as Ready.'}
-                {order.status === 'READY'     && 'Delivered to customer’s table? Mark as Served.'}
+                {order.status === 'PENDING'   && (isTakeaway ? 'Kitchen received? Send to Kitchen.' : 'Kitchen received? Mark as Preparing.')}
+                {order.status === 'PREPARING' && (isTakeaway ? 'Food ready? Mark Ready for Pickup.' : 'Food ready? Mark as Ready.')}
+                {order.status === 'READY'     && !isTakeaway && 'Delivered to customer’s table? Mark as Served.'}
               </span>
             </div>
           )}
@@ -685,8 +723,59 @@ export default function OrderDetailPage() {
               </div>
             )}
 
+            {order.payment_status?.toLowerCase() === 'paid' && (
+              <div className="order-detail__payment-card" style={{ marginTop: 16, background: '#fdfdfd', border: '1px solid var(--color-border)', borderRadius: '12px', padding: '16px' }}>
+                <h3 className="order-detail__card-title" style={{ fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-espresso)', marginBottom: '10px' }}>
+                  💳 Payment Details
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>Payment Method:</span>
+                    <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{order.payment_method}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>Payment Status:</span>
+                    <span className="order-badge" style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px', fontSize: '10px' }}>
+                      PAID
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--color-border-light)', paddingTop: '6px', marginTop: '4px' }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>Order Total:</span>
+                    <span style={{ fontWeight: 'bold' }}>₹{Number(order.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  
+                  {order.payment_method?.toLowerCase() === 'cash' && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--color-text-muted)' }}>Amount Received:</span>
+                        <span style={{ fontWeight: 'bold' }}>₹{Number(order.amount_received || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: 'var(--color-text-muted)' }}>Change Returned:</span>
+                        <span style={{ fontWeight: 'bold', color: 'var(--color-green)' }}>₹{Number(order.change_returned || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    </>
+                  )}
+
+                  {order.payment_method?.toLowerCase() !== 'cash' && order.transaction_ref && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderTop: '1px dashed var(--color-border-light)', paddingTop: '6px' }}>
+                      <span style={{ color: 'var(--color-text-muted)' }}>Transaction Reference:</span>
+                      <span style={{ fontWeight: 'bold', fontSize: '12px', wordBreak: 'break-all' }}>{order.transaction_ref}</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', borderTop: '1px dashed var(--color-border-light)', paddingTop: '6px' }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>Paid At:</span>
+                    <span style={{ fontWeight: '500', color: 'var(--color-text-secondary)' }}>
+                      {order.completed_at ? new Date(order.completed_at).toLocaleString('en-IN') : '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* ── Waiter: COMPLETED state — Add Extra Item + Finalize / Request Bill ── */}
-            {isCompleted && !isCancelled && (
+            {isCompleted && !isCancelled && !isTakeaway && (
               <div style={{ marginTop: 16 }}>
                 {/* Add Extra Item button */}
                 <button
@@ -775,7 +864,7 @@ export default function OrderDetailPage() {
             )}
 
             {/* Generate Bill — cashier/admin/manager only, when completed or bill_requested */}
-            {(isCompleted || isBillRequested) && !isWaiter && (
+            {!isTakeaway && (isCompleted || isBillRequested) && !isWaiter && (
               <button
                 className="btn-primary"
                 style={{ width: '100%', marginTop: 8 }}

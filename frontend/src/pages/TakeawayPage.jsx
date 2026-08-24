@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
-import './NewOrderPOSPage.css'
+import './NewOrderPOSPage.css' // Reuse NewOrderPOSPage.css for identical layout styling
 
 const CATEGORIES = ['All', 'Coffee', 'Tea', 'Pastries', 'Desserts', 'Cold Beverages', 'Snacks']
 
@@ -32,25 +32,12 @@ const getCategoryIcon = (product) => {
   return '🥐'
 }
 
-export default function NewOrderPOSPage() {
+export default function TakeawayPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
-  const { products, createOrder, currentUser, tables, currentRole } = useApp()
+  const { products, createOrder, currentUser } = useApp()
 
-  const tableId = searchParams.get('table')
-  const isDineIn = !!tableId
-  const tableObj = tables && tableId ? tables.find(t => String(t.id) === String(tableId)) : null
-
-  // Enforce Dine-In table selection for Waiters
-
-  useEffect(() => {
-    if (currentRole === 'waiter' && !tableId) {
-      navigate('/tables')
-    }
-  }, [currentRole, tableId, navigate])
-
-  const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState('All')
+  const [searchQuery, setSearchQuery] = useState('')
   const [cart, setCart] = useState([])
   const [orderNotes, setOrderNotes] = useState('')
   const [customerName, setCustomerName] = useState('')
@@ -127,12 +114,10 @@ export default function NewOrderPOSPage() {
     setSubmitError('')
     try {
       const orderPayload = {
-        table:            isDineIn ? Number(tableId) : null,
-        customer_name:    isDineIn ? '' : customerName.trim(),
-        whatsapp_number:  isDineIn ? '' : customerPhone.trim(),
-        waiter_name:      isDineIn ? (currentUser?.name || '') : '',
+        customer_name:    customerName.trim(),
+        whatsapp_number:  customerPhone.trim(),
         notes:            orderNotes,
-        channel:          isDineIn ? 'DINE_IN' : 'TAKEAWAY',
+        channel:          'TAKEAWAY',
         items: cart.map((item) => ({
           product:    item.id,
           quantity:   item.qty,
@@ -141,8 +126,8 @@ export default function NewOrderPOSPage() {
       const created = await createOrder(orderPayload)
       navigate(`/orders/${created.id}`)
     } catch (err) {
-      console.error('createOrder failed:', err)
-      setSubmitError('Failed to send order to kitchen. Please try again.')
+      console.error('createOrder takeaway failed:', err)
+      setSubmitError('Failed to create takeaway order. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -151,8 +136,14 @@ export default function NewOrderPOSPage() {
   return (
     <AdminLayout
       searchPlaceholder="Search menu..."
-      pageTitle={isDineIn ? `New Dine-In Order – Table ${tableObj?.label || tableId}` : 'New Takeaway Order'}
-      pageIcon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>}
+      pageTitle="Takeaway Order"
+      pageIcon={
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="2" y="3" width="20" height="14" rx="2"/>
+          <line x1="8" y1="21" x2="16" y2="21"/>
+          <line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+      }
     >
       <div className="pos-layout-container">
         {/* Left Category Selection */}
@@ -220,135 +211,106 @@ export default function NewOrderPOSPage() {
 
         {/* Right Active Order/Cart Panel */}
         <div className="pos-active-order-panel">
-          <div className="pos-order-header" style={{ paddingBottom: '14px', borderBottom: '1px solid var(--color-border-light)' }}>
+          <div className="pos-order-header">
             <div>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-espresso)', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Order Type: {isDineIn ? 'DINE-IN' : 'TAKEAWAY'}
+                TAKEAWAY ORDER
               </span>
-              {isDineIn && (
-                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-muted)', display: 'block', marginTop: '2px' }}>
-                  📍 Table: {tableObj?.label || tableId}
-                </span>
-              )}
             </div>
             <div className="pos-order-meta">
-              <span>{isDineIn ? `Server: ${currentUser?.name || 'Waiter'}` : `Cashier: ${currentUser?.name || 'Cashier'}`}</span>
+              <span>Cashier: {currentUser?.name || 'Cashier'}</span>
             </div>
           </div>
 
-          <hr className="pos-panel-divider" />
+          {/* Customer Details Form */}
+          <div style={{ padding: '12px 16px', background: 'rgba(255,255,255,0.5)', borderBottom: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div>
+              <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>CUSTOMER NAME (OPTIONAL)</label>
+              <input
+                type="text"
+                placeholder="Guest Customer"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--color-border)', fontSize: '13px', outline: 'none' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '10px', fontWeight: 600, color: 'var(--color-text-muted)', display: 'block', marginBottom: '2px' }}>PHONE / WHATSAPP (OPTIONAL)</label>
+              <input
+                type="text"
+                placeholder="e.g. 9876543210"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                style={{ width: '100%', padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--color-border)', fontSize: '13px', outline: 'none' }}
+              />
+            </div>
+          </div>
 
-          {/* Cart items */}
+          {/* Cart items list */}
           <div className="pos-cart-items-list">
             {cart.map((item) => (
-              <div key={item.id} className="pos-cart-row">
-                <div className="pos-cart-item-info">
+              <div key={item.id} className="pos-cart-item">
+                <span className="pos-cart-item-icon">{item.icon}</span>
+                <div className="pos-cart-item-details">
                   <span className="pos-cart-item-name">{item.name}</span>
-                  <span className="pos-cart-item-unit-price">₹{item.unitPrice.toLocaleString('en-IN')}</span>
+                  <span className="pos-cart-item-price">₹{item.unitPrice} each</span>
                 </div>
-                <div className="pos-cart-qty-wrap">
-                  <div className="item-qty-controls">
-                    <button className="qty-btn" onClick={() => updateQty(item.id, -1)}>−</button>
-                    <span className="qty-val">{item.qty}</span>
-                    <button className="qty-btn" onClick={() => updateQty(item.id, 1)}>+</button>
-                  </div>
+                <div className="pos-cart-item-qty-actions">
+                  <button type="button" className="qty-btn" onClick={() => updateQty(item.id, -1)}>-</button>
+                  <span className="qty-val">{item.qty}</span>
+                  <button type="button" className="qty-btn" onClick={() => updateQty(item.id, 1)}>+</button>
                 </div>
-                <span className="pos-cart-item-total">₹{item.total.toLocaleString('en-IN')}</span>
-                <button
-                  type="button"
-                  className="pos-cart-delete-btn"
-                  onClick={() => deleteItem(item.id)}
-                  aria-label="Remove item"
-                >
-                  🗑️
-                </button>
+                <span className="pos-cart-item-total">₹{item.total}</span>
+                <button type="button" className="pos-cart-item-delete" onClick={() => deleteItem(item.id)}>×</button>
               </div>
             ))}
             {cart.length === 0 && (
               <div className="pos-cart-empty">
-                <div className="empty-cart-icon">🛒</div>
-                <p>Order Cart is empty</p>
-                <span>Select products from the menu to add items.</span>
+                <span style={{ fontSize: '24px', display: 'block', marginBottom: '8px' }}>🛒</span>
+                <span>Order is empty. Add menu items.</span>
               </div>
             )}
           </div>
 
-          {/* Customer Details — Only for Takeaway */}
-          {!isDineIn && (
-            <div className="pos-order-notes-wrap">
-              <label className="section-title">Customer Details</label>
-              <input
-                className="pos-notes-textarea"
-                style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--color-border)', fontSize: 13, background: 'var(--color-cream, #faf7f4)', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', outline: 'none' }}
-                id="pos-customer-name"
-                type="text"
-                placeholder="Customer Name (optional)"
-                value={customerName}
-                onChange={e => setCustomerName(e.target.value)}
-              />
-              <input
-                className="pos-notes-textarea"
-                style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--color-border)', fontSize: 13, background: 'var(--color-cream, #faf7f4)', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', outline: 'none' }}
-                id="pos-customer-phone"
-                type="tel"
-                placeholder="Phone Number (optional)"
-                value={customerPhone}
-                onChange={e => setCustomerPhone(e.target.value)}
+          {/* Summary & Place Order */}
+          <div className="pos-cart-summary-footer">
+            <div className="pos-summary-notes">
+              <textarea
+                placeholder="Kitchen notes (e.g. extra spicy, no ice)..."
+                value={orderNotes}
+                onChange={(e) => setOrderNotes(e.target.value)}
+                style={{ width: '100%', height: '40px', padding: '6px 10px', borderRadius: '4px', border: '1px solid var(--color-border)', fontSize: '12px', outline: 'none', resize: 'none' }}
               />
             </div>
-          )}
 
-          {/* Order Notes */}
-          <div className="pos-order-notes-wrap">
-            <label className="section-title" htmlFor="pos-notes-input">Add Notes (optional)</label>
-            <textarea
-              id="pos-notes-input"
-              className="pos-notes-textarea"
-              placeholder="Special instructions for kitchen (e.g. Extra hot, no sugar)"
-              value={orderNotes}
-              onChange={(e) => setOrderNotes(e.target.value)}
-            />
-          </div>
+            <div className="pos-summary-totals">
+              <div className="pos-total-row">
+                <span>Subtotal</span>
+                <span>₹{subtotal}</span>
+              </div>
+              <div className="pos-total-row">
+                <span>GST (5%)</span>
+                <span>₹{tax}</span>
+              </div>
+              <div className="pos-total-row grand-total">
+                <span>Total Amount</span>
+                <span>₹{total}</span>
+              </div>
+            </div>
 
-          {/* Totals Summary */}
-          <div className="pos-totals-summary">
-            <div className="pos-summary-row">
-              <span>Subtotal</span>
-              <span>₹{subtotal.toLocaleString('en-IN')}</span>
-            </div>
-            <div className="pos-summary-row">
-              <span>Tax (5% GST)</span>
-              <span>₹{tax.toLocaleString('en-IN')}</span>
-            </div>
-            <hr className="pos-summary-divider" />
-            <div className="pos-summary-row pos-grand-total">
-              <span>Cart Total</span>
-              <span>₹{total.toLocaleString('en-IN')}</span>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="pos-bottom-actions">
             {submitError && (
-              <div style={{ color: '#ef4444', fontSize: 12, marginBottom: 8, textAlign: 'center', fontWeight: 600 }}>
+              <div className="pos-submit-error" style={{ color: 'var(--color-red)', fontSize: '12px', marginBottom: '8px', textAlign: 'center', fontWeight: 600 }}>
                 {submitError}
               </div>
             )}
+
             <button
               type="button"
-              className="btn-outline pos-action-btn"
-              onClick={() => navigate(isDineIn ? '/tables' : '/pos/dashboard')}
-              disabled={submitting}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn-primary pos-action-btn"
+              className="pos-btn-submit-order"
               onClick={handleSendOrder}
-              disabled={cart.length === 0 || submitting}
+              disabled={submitting || cart.length === 0}
             >
-              {submitting ? 'Sending…' : 'Send Order to Kitchen'}
+              {submitting ? 'Creating Takeaway Order...' : 'Send Takeaway Order to Kitchen'}
             </button>
           </div>
         </div>

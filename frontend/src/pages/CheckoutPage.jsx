@@ -1,12 +1,12 @@
 /**
  * CheckoutPage — /orders/:id/checkout
  *
- * Waiter selects payment method + marks as paid.
+ * Cashier selects payment method + marks as paid.
  * Calls POST /orders/:id/complete_order/ which atomically:
  *   - marks order completed
  *   - marks invoice paid
  *   - creates payment record
- *   - releases table
+ *   - releases table (for dine-in)
  */
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -31,6 +31,9 @@ export default function CheckoutPage() {
   const [invoice,       setInvoice]       = useState(null)
   const [loading,       setLoading]       = useState(true)
   const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [amountReceived, setAmountReceived] = useState('')
+  const [transactionRef, setTransactionRef] = useState('')
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [completing,    setCompleting]    = useState(false)
   const [error,         setError]         = useState('')
 
@@ -67,25 +70,39 @@ export default function CheckoutPage() {
     return () => { cancelled = true }
   }, [orderId])
 
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const amountDue   = invoice ? Number(invoice.total) : (order ? Number(order.total) : 0)
+  const orderNumber = order   ? (order.order_number || `#${orderId}`) : `#${orderId}`
+  const tableLabel  = order   ? (order.table_label  || '')       : ''
+
+  const parsedReceived = parseFloat(amountReceived) || 0
+  const changeReturned = paymentMethod === 'cash' ? Math.max(0, parsedReceived - amountDue) : 0
+  const isCashInsufficient = paymentMethod === 'cash' && parsedReceived < amountDue
+
+  // Quick select bill options
+  const QUICK_AMOUNTS = [100, 200, 500, 1000].filter(amt => amt >= amountDue)
+
   // ── Complete order ─────────────────────────────────────────────────────────
   const handleCompleteOrder = async () => {
     if (!orderId || orderId === 'null' || orderId === 'undefined') return
     setCompleting(true)
     setError('')
     try {
-      // Use AppContext.completeOrder which calls the API AND refreshes
-      // tables + orders + notifications so the floor plan updates immediately
       const result = await completeOrder(orderId, {
         method: paymentMethod,
         status: 'paid',
+        amount_received: paymentMethod === 'cash' ? parsedReceived : amountDue,
+        change_returned: paymentMethod === 'cash' ? changeReturned : 0,
+        transaction_ref: paymentMethod !== 'cash' ? transactionRef : '',
       })
       const payment = result.payment || {}
+      setShowConfirmModal(false)
       navigate(`/cashier/success/${orderId}`, {
         state: {
-          transaction_ref: payment.transaction_ref || '',
+          transaction_ref: payment.transaction_ref || transactionRef || '',
           invoice_number:  invoice?.invoice_number  || '',
           payment_method:  paymentMethod,
-          total:           order?.total             || 0,
+          total:           amountDue,
           whatsapp_opened: false,
           invoice:         invoice,
         }
@@ -93,15 +110,11 @@ export default function CheckoutPage() {
     } catch (err) {
       console.error('completeOrder error:', err)
       setError('Payment could not be completed. Please try again.')
+      setShowConfirmModal(false)
     } finally {
       setCompleting(false)
     }
   }
-
-  // ── Derived ────────────────────────────────────────────────────────────────
-  const amountDue   = invoice ? Number(invoice.total) : (order ? Number(order.total) : 0)
-  const orderNumber = order   ? (order.order_number || `#${orderId}`) : `#${orderId}`
-  const tableLabel  = order   ? (order.table_label  || '')       : ''
 
   if (loading) {
     return (
@@ -126,7 +139,7 @@ export default function CheckoutPage() {
           <div className="checkout-card-header">
             <button
               className="checkout-back-btn"
-              onClick={() => navigate(`/orders/${orderId}/invoice`)}
+              onClick={() => navigate(`/orders/${orderId}`)}
               aria-label="Go back"
             >←</button>
             <div>
@@ -153,7 +166,12 @@ export default function CheckoutPage() {
                 <button
                   key={m.id}
                   className={`checkout-method-btn ${paymentMethod === m.id ? 'active' : ''}`}
-                  onClick={() => setPaymentMethod(m.id)}
+                  onClick={() => {
+                    setPaymentMethod(m.id)
+                    setAmountReceived('')
+                    setTransactionRef('')
+                    setError('')
+                  }}
                   id={`pay-method-${m.id}`}
                   disabled={completing}
                 >
@@ -163,6 +181,106 @@ export default function CheckoutPage() {
               ))}
             </div>
           </div>
+
+          {/* Cash Payment Section */}
+          {paymentMethod === 'cash' && (
+            <div className="checkout-section" style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label className="checkout-section-title" htmlFor="amount-received-input">Amount Received</label>
+              <input
+                id="amount-received-input"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Enter amount customer paid"
+                value={amountReceived}
+                onChange={(e) => setAmountReceived(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-border)',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  background: 'var(--color-cream, #faf7f4)',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+              
+              {/* Quick Select Buttons */}
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setAmountReceived(amountDue.toFixed(2))}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-white)',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Exact (₹{amountDue.toFixed(2)})
+                </button>
+                {QUICK_AMOUNTS.map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setAmountReceived(amt.toFixed(2))}
+                    style={{
+                      padding: '6px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--color-border)',
+                      background: 'var(--color-white)',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ₹{amt}
+                  </button>
+                ))}
+              </div>
+
+              {/* Message Outputs */}
+              {amountReceived && !isCashInsufficient && (
+                <div style={{ marginTop: '8px', padding: '10px 12px', background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.2)', borderRadius: '6px', color: '#16a34a', fontWeight: 'bold', fontSize: '13px' }}>
+                  Change to Return: ₹{changeReturned.toFixed(2)}
+                </div>
+              )}
+              {isCashInsufficient && (
+                <div style={{ marginTop: '8px', padding: '10px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '6px', color: '#ef4444', fontWeight: 'bold', fontSize: '12px' }}>
+                  Insufficient amount. Please collect at least ₹{amountDue.toFixed(2)}.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Non-Cash Transaction Reference */}
+          {paymentMethod !== 'cash' && (
+            <div className="checkout-section" style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label className="checkout-section-title" htmlFor="transaction-ref-input">Transaction Reference</label>
+              <input
+                id="transaction-ref-input"
+                type="text"
+                placeholder="Enter UPI / Card Transaction ID"
+                value={transactionRef}
+                onChange={(e) => setTransactionRef(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-border)',
+                  fontSize: '13px',
+                  background: 'var(--color-cream, #faf7f4)',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          )}
 
           <hr className="checkout-divider" />
 
@@ -196,14 +314,98 @@ export default function CheckoutPage() {
           {/* Complete button */}
           <button
             className="btn-primary checkout-complete-btn"
-            onClick={handleCompleteOrder}
-            disabled={completing}
+            onClick={() => setShowConfirmModal(true)}
+            disabled={completing || isCashInsufficient}
             id="complete-order-btn"
           >
-            {completing ? 'Processing…' : 'Complete Order'}
+            Proceed to Payment
           </button>
         </div>
       </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.6)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            background: 'var(--color-white, #fff)',
+            border: '1px solid var(--color-border)',
+            borderRadius: '12px',
+            padding: '24px',
+            maxWidth: '380px',
+            width: '90%',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px'
+          }}>
+            <h3 style={{ margin: 0, color: 'var(--color-espresso)', fontSize: '18px', fontWeight: 'bold', borderBottom: '1px solid var(--color-border-light)', paddingBottom: '10px' }}>
+              Confirm Payment
+            </h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>Order Total:</span>
+                <span style={{ fontWeight: 'bold' }}>₹{amountDue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--color-text-muted)' }}>Payment Method:</span>
+                <span style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>{paymentMethod}</span>
+              </div>
+              
+              {paymentMethod === 'cash' && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>Amount Received:</span>
+                    <span style={{ fontWeight: 'bold' }}>₹{parsedReceived.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--color-border-light)', paddingTop: '8px' }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>Change Returned:</span>
+                    <span style={{ fontWeight: 'bold', color: 'var(--color-green)' }}>₹{changeReturned.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </>
+              )}
+              {paymentMethod !== 'cash' && transactionRef && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderTop: '1px dashed var(--color-border-light)', paddingTop: '8px' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>Transaction Reference:</span>
+                  <span style={{ fontWeight: 'bold', fontSize: '12px', wordBreak: 'break-all' }}>{transactionRef}</span>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+              <button
+                type="button"
+                className="btn-outline"
+                style={{ flex: 1, padding: '10px' }}
+                onClick={() => setShowConfirmModal(false)}
+                disabled={completing}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                style={{ flex: 1, padding: '10px' }}
+                onClick={handleCompleteOrder}
+                disabled={completing}
+              >
+                {completing ? 'Processing…' : 'Complete Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   )
 }
