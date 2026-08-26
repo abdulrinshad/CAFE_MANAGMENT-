@@ -195,7 +195,6 @@ export default function App() {
         } />
 
         {/* POS & Cashier Module */}
-        {/* POS & Cashier Module */}
         <Route path="/pos/dashboard"      element={<ProtectedRoute allowedRoles={['admin', 'manager', 'branch_manager', 'pos', 'cashier']}><POSDashboardPage /></ProtectedRoute>} />
         <Route path="/cashier/dashboard"  element={<ProtectedRoute allowedRoles={['admin', 'manager', 'branch_manager', 'pos', 'cashier']}><POSDashboardPage /></ProtectedRoute>} />
         <Route path="/cashier/orders"     element={<ProtectedRoute allowedRoles={['admin', 'manager', 'branch_manager', 'pos', 'cashier', 'waiter']}><OrdersPage /></ProtectedRoute>} />

@@ -296,7 +296,6 @@ export default function POSDashboardPage() {
     (req.orderId && String(req.orderId).toLowerCase().includes(searchQuery.toLowerCase())) ||
     req.waiter.toLowerCase().includes(searchQuery.toLowerCase())
   )
-
   // Welcome / Greeting
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
