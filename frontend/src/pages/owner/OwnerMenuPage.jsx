@@ -243,9 +243,9 @@ export default function OwnerMenuPage() {
                 <tr>
                   <th style={{ width: 52 }}>Image</th>
                   <th>Product</th>
-                  <th>Category</th>
+                  <th className="hide-mobile">Category</th>
                   <th>Price</th>
-                  <th>Status</th>
+                  <th className="hide-mobile">Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -282,9 +282,9 @@ export default function OwnerMenuPage() {
                       )}
                     </td>
                     <td className="td-name">{item.name}</td>
-                    <td className="td-muted">{item.category_name || item.categoryLabel || 'Default'}</td>
+                    <td className="td-muted hide-mobile">{item.category_name || item.categoryLabel || 'Default'}</td>
                     <td style={{ fontWeight: 500 }}>₹{Number(item.price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                    <td>
+                    <td className="hide-mobile">
                       <span className={`owner-badge owner-badge--${item.available ? 'active' : 'inactive'}`}>
                         {item.available ? 'ACTIVE' : 'INACTIVE'}
                       </span>

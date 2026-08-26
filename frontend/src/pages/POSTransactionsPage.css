@@ -1,8 +1,8 @@
-/* POSTransactionsPage.css — Styling matching dark artisan theme */
+/* POSTransactionsPage.css — Styling matching the light cream POS theme */
 .pos-transactions-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
   padding-bottom: 40px;
 }
 
@@ -10,48 +10,49 @@
 .pos-transactions-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
+  gap: 20px;
 }
 
 .pos-tx-stat-card {
-  background: var(--color-surface, #1e2535);
-  border: 1px solid var(--color-border, #2d3748);
-  border-radius: 10px;
-  padding: 16px;
+  background: var(--color-white, #ffffff);
+  border: 1px solid var(--color-border, #e8ddd5);
+  border-radius: 12px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(44, 24, 16, 0.02);
 }
 
 .pos-tx-stat-card__label {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
-  color: var(--color-text-secondary, #9ca3af);
+  color: var(--color-text-secondary, #6b5a4e);
   text-transform: uppercase;
 }
 
 .pos-tx-stat-card__value {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--color-text-primary, #f3f4f6);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--color-espresso, #2c1810);
 }
 
 .pos-tx-stat-card__sub {
   font-size: 11px;
-  color: var(--color-text-muted, #6b7280);
+  color: var(--color-text-muted, #9c857a);
 }
 
 /* Filter Bar */
 .pos-transactions-filters {
-  background: var(--color-surface, #1e2535);
-  border: 1px solid var(--color-border, #2d3748);
+  background: var(--color-bg-alt, #fef9f5);
+  border: 1px solid var(--color-border, #e8ddd5);
   border-radius: 10px;
   padding: 16px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   justify-content: space-between;
 }
 
@@ -59,7 +60,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .pos-filter-control {
@@ -70,25 +71,27 @@
 
 .pos-filter-control label {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-secondary, #9ca3af);
+  font-weight: 700;
+  color: var(--color-text-secondary, #6b5a4e);
   white-space: nowrap;
 }
 
 .pos-filter-select,
 .pos-search-input {
-  background: var(--color-bg-dark, #111315);
-  border: 1px solid var(--color-border, #2d3748);
+  background: var(--color-white, #ffffff);
+  border: 1px solid var(--color-border, #e8ddd5);
   border-radius: 6px;
-  color: var(--color-text-primary, #f3f4f6);
+  color: var(--color-text-primary, #2c1810);
   padding: 8px 12px;
   font-size: 13px;
   outline: none;
+  font-family: var(--font-sans, sans-serif);
 }
 
 .pos-filter-select:focus,
 .pos-search-input:focus {
-  border-color: var(--color-accent, #f3c623);
+  border-color: var(--color-tan-dark, #b8935a);
+  box-shadow: 0 0 0 2px rgba(184, 147, 90, 0.15);
 }
 
 .pos-search-input {
@@ -97,10 +100,11 @@
 
 /* Transactions Table */
 .pos-transactions-table-wrap {
-  background: var(--color-surface, #1e2535);
-  border: 1px solid var(--color-border, #2d3748);
-  border-radius: 10px;
+  background: var(--color-white, #ffffff);
+  border: 1px solid var(--color-border, #e8ddd5);
+  border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(44, 24, 16, 0.02);
 }
 
 .pos-tx-table {
@@ -111,24 +115,24 @@
 }
 
 .pos-tx-table th {
-  background: rgba(0, 0, 0, 0.2);
-  color: var(--color-text-secondary, #9ca3af);
-  font-weight: 600;
+  background: var(--color-cream, #f5ede4);
+  color: var(--color-text-secondary, #6b5a4e);
+  font-weight: 700;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 14px 16px;
-  border-bottom: 1px solid var(--color-border, #2d3748);
+  border-bottom: 1px solid var(--color-border, #e8ddd5);
 }
 
 .pos-tx-table td {
   padding: 14px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  color: var(--color-text-primary, #f3f4f6);
+  border-bottom: 1px solid var(--color-border-light, #ede3da);
+  color: var(--color-text-primary, #2c1810);
 }
 
 .pos-tx-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--color-bg-alt, #fef9f5);
 }
 
 /* Badges */
@@ -139,14 +143,14 @@
   padding: 3px 8px;
   border-radius: 4px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
-.pos-channel-badge--dine-in { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
-.pos-channel-badge--takeaway { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-.pos-channel-badge--swiggy   { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
-.pos-channel-badge--zomato   { background: rgba(220, 38, 38, 0.15); color: #ef4444; border: 1px solid rgba(220, 38, 38, 0.3); }
+.pos-channel-badge--dine-in { background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.2); }
+.pos-channel-badge--takeaway { background: rgba(245, 158, 11, 0.1); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.2); }
+.pos-channel-badge--swiggy   { background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.2); }
+.pos-channel-badge--zomato   { background: rgba(220, 38, 38, 0.1); color: #b91c1c; border: 1px solid rgba(220, 38, 38, 0.2); }
 
 .pos-method-badge {
   display: inline-flex;
@@ -157,8 +161,8 @@
   font-size: 11px;
   font-weight: 600;
   text-transform: capitalize;
-  background: rgba(255, 255, 255, 0.06);
-  color: #d1d5db;
+  background: var(--color-cream, #f5ede4);
+  color: var(--color-espresso, #2c1810);
 }
 
 .pos-status-badge {
@@ -167,14 +171,23 @@
   padding: 3px 8px;
   border-radius: 4px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
-.pos-status-badge--completed { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
-.pos-status-badge--pending   { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+.pos-status-badge--completed { 
+  background: rgba(74, 124, 89, 0.1); 
+  color: var(--color-green, #4a7c59); 
+  border: 1px solid rgba(74, 124, 89, 0.2); 
+}
+.pos-status-badge--pending { 
+  background: rgba(212, 96, 26, 0.1); 
+  color: var(--color-orange, #d4601a); 
+  border: 1px solid rgba(212, 96, 26, 0.2); 
+}
 
 .pos-tx-empty {
   padding: 60px 20px;
   text-align: center;
-  color: var(--color-text-secondary, #9ca3af);
+  color: var(--color-text-muted, #9c857a);
+  font-weight: 600;
 }

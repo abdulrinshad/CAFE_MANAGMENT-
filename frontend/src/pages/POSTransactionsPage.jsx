@@ -117,7 +117,7 @@ export default function POSTransactionsPage() {
         <div className="pos-transactions-stats">
           <div className="pos-tx-stat-card">
             <span className="pos-tx-stat-card__label">TOTAL REVENUE</span>
-            <span className="pos-tx-stat-card__value" style={{ color: '#4ade80' }}>
+            <span className="pos-tx-stat-card__value" style={{ color: 'var(--color-green)' }}>
               ₹{totalRevenue.toLocaleString('en-IN')}
             </span>
             <span className="pos-tx-stat-card__sub">{completedList.length} completed payments</span>
@@ -233,7 +233,7 @@ export default function POSTransactionsPage() {
               <tbody>
                 {filteredTransactions.map((tx) => (
                   <tr key={tx.id}>
-                    <td style={{ fontWeight: 600, color: 'var(--color-accent, #f3c623)' }}>
+                    <td style={{ fontWeight: 600, color: 'var(--color-tan-dark)' }}>
                       {tx.invoiceNumber}
                     </td>
                     <td>{tx.orderNumber}</td>

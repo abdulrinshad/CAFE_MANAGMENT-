@@ -5,6 +5,16 @@ import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi
 
 const AppContext = createContext(null)
 
+export const normalizeRole = (role) => {
+  if (!role) return 'admin'
+  const r = role.toLowerCase().trim()
+  if (r === 'cashier' || r === 'pos' || r === 'cashier / pos' || r === 'cashier_pos') return 'cashier'
+  if (r === 'branch_manager' || r === 'branch manager' || r === 'manager') return 'branch_manager'
+  if (r === 'staff' || r === 'waiter') return 'waiter'
+  if (r === 'owner' || r === 'admin') return 'admin'
+  return r
+}
+
 export function AppProvider({ children }) {
   // ── API-backed state ─────────────────────────────────────────────────────
   const [products,       setProducts]      = useState([])
@@ -31,7 +41,7 @@ export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true)
 
   const [currentRole, setCurrentRoleRaw] = useState(() => {
-    try { return localStorage.getItem('artisan_role') || 'admin' } catch { return 'admin' }
+    try { return normalizeRole(localStorage.getItem('artisan_role') || 'admin') } catch { return 'admin' }
   })
   const [currentWaiter, setCurrentWaiterRaw] = useState(() => {
     try {
@@ -82,8 +92,9 @@ export function AppProvider({ children }) {
 
 
   const setCurrentRole = (role) => {
-    try { localStorage.setItem('artisan_role', role) } catch {}
-    setCurrentRoleRaw(role)
+    const norm = normalizeRole(role)
+    try { localStorage.setItem('artisan_role', norm) } catch {}
+    setCurrentRoleRaw(norm)
   }
   const setCurrentWaiter = (waiter) => {
     try {
@@ -139,7 +150,6 @@ export function AppProvider({ children }) {
     localStorage.setItem('artisan_access', res.access)
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
-    localStorage.setItem('artisan_role', 'branch_manager')
     setCurrentUser(res.user)
     setCurrentRole('branch_manager')
     setCurrentBranchManager(res.manager)
@@ -165,9 +175,7 @@ export function AppProvider({ children }) {
       try {
         const user = await authApi.me()
         setCurrentUser(user)
-        const roleLower = user.role.toLowerCase()
-        const frontendRole = roleLower === 'staff' ? 'waiter' : roleLower
-        setCurrentRole(frontendRole)
+        setCurrentRole(user.role)
       } catch (err) {
         console.error("Failed to load user profile:", err)
         logout()
@@ -186,9 +194,7 @@ export function AppProvider({ children }) {
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
     setCurrentUser(res.user)
-    const roleLower = res.user.role.toLowerCase()
-    const frontendRole = roleLower === 'staff' ? 'waiter' : roleLower
-    setCurrentRole(frontendRole)
+    setCurrentRole(res.user.role)
     return res.user
   }
 
@@ -325,6 +331,11 @@ export function AppProvider({ children }) {
 
   // Load on mount + start notification and request polling
   useEffect(() => {
+    if (!isAuthenticated) {
+      if (pollRef.current) clearInterval(pollRef.current)
+      return
+    }
+
     fetchCategories()
     fetchProducts()
     fetchTables()
@@ -342,7 +353,7 @@ export function AppProvider({ children }) {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
-  }, [fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications, fetchWaiterRequests])
+  }, [isAuthenticated, fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications, fetchWaiterRequests])
 
 
   // ─────────────────────────────────────────────────────────────────────────

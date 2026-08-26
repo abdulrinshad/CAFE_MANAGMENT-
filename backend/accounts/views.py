@@ -329,6 +329,16 @@ class EmployeeLoginView(APIView):
         profile.save()
 
         refresh = RefreshToken.for_user(shadow_user)
+        from accounts.models import POSTerminal
+        terminal = POSTerminal.objects.filter(assigned_cashier=cashier, status='active').first()
+        terminal_info = None
+        if terminal:
+            terminal_info = {
+                "id": terminal.id,
+                "name": terminal.name,
+                "status": terminal.status,
+            }
+
         return Response({
             "success": True,
             "role": "cashier",
@@ -338,6 +348,7 @@ class EmployeeLoginView(APIView):
                 "employee_id": cashier.employee_id,
                 "branch_id": cashier.branch_id,
                 "branch_name": cashier.branch.name if cashier.branch else None,
+                "terminal": terminal_info,
             },
             "access": str(refresh.access_token),
             "refresh": str(refresh),

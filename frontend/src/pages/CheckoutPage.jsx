@@ -23,7 +23,8 @@ const PAYMENT_METHODS = [
 ]
 
 export default function CheckoutPage() {
-  const { orderId } = useParams()
+  const params = useParams()
+  const orderId = params.orderId || params.id
   const navigate = useNavigate()
   const { completeOrder } = useApp()
 
@@ -109,7 +110,7 @@ export default function CheckoutPage() {
       })
     } catch (err) {
       console.error('completeOrder error:', err)
-      setError('Payment could not be completed. Please try again.')
+      setError(err.message || 'Payment could not be completed. Please try again.')
       setShowConfirmModal(false)
     } finally {
       setCompleting(false)

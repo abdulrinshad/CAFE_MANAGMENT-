@@ -134,10 +134,25 @@ class BranchMinimalSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     role = serializers.SerializerMethodField()
     branch = BranchMinimalSerializer(source='profile.branch', read_only=True)
+    terminal_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'role', 'branch', 'is_staff', 'is_superuser')
+        fields = ('id', 'username', 'email', 'role', 'branch', 'is_staff', 'is_superuser', 'terminal_name')
+
+    def get_terminal_name(self, obj):
+        if obj.username.startswith('cashier_'):
+            try:
+                cashier_id = int(obj.username.split('_')[1])
+                from accounts.models import Cashier, POSTerminal
+                cashier = Cashier.objects.filter(id=cashier_id).first()
+                if cashier:
+                    terminal = POSTerminal.objects.filter(assigned_cashier=cashier).first()
+                    if terminal:
+                        return terminal.name
+            except Exception:
+                pass
+        return None
 
     def get_role(self, obj):
         if obj.username.startswith('bm_'):

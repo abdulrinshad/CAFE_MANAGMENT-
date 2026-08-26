@@ -1,223 +1,175 @@
-# Cafe Manager — POS System
+# Cafe Management System (POS & Digital Menu)
 
-A browser-based point-of-sale system for cafés. Owners manage menus and tables; waiters take orders and process payments; customers scan a QR code to view the digital menu.
-
----
-
-## How It Works
-
-1. Owner sets up categories, menu items, and tables.
-2. Waiter logs in, creates an order for a table, and adds items.
-3. Order moves through: **Pending → Preparing → Ready → Completed**.
-4. Waiter generates a bill (invoice with 5% GST) and optionally sends it to the customer via WhatsApp.
-5. Payment is recorded and the table is freed.
-6. Owner views live dashboard stats and sales reports.
+A comprehensive, multi-branch Cafe Management and Point-of-Sale (POS) System. The platform features role-based access for Owners, Branch Managers, Cashiers, and Waiters, alongside a public self-service digital menu for Customers accessed via table-specific QR codes.
 
 ---
 
-## User Roles
+## 🏛️ System Architecture & Roles
 
-| Role | Access |
-|---|---|
-| Admin | Everything — menu, orders, tables, waiters, reports, settings |
-| Manager | Same as Admin, except waiter management |
-| Waiter | Dashboard, orders, tables, requests |
-| Customer | Public digital menu (no login, QR scan only) |
+The system is designed for multi-branch operations, allowing isolated administration for branch managers while giving owners/admins global oversight.
 
-Waiters log in with a name and PIN. Admins/Managers log in with email and password.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, React Router 7, Vite 8 |
-| Backend | Python, Django 6.0.6, Django REST Framework |
-| Auth | JWT (djangorestframework-simplejwt) |
-| Database | PostgreSQL |
-| Other | django-cors-headers, Pillow, qrcode, python-dotenv |
+| Role | Access & Key Responsibilities |
+| :--- | :--- |
+| **Owner / Admin** | Global control over all branches. Manages global menus, system-wide staff (Branch Managers, Cashiers, Waiters, Kitchen Staff), branch configurations, global billing, inventory, corporate expenses, and consolidated analytics. |
+| **Branch Manager** | Operational lead for a specific branch. Manages branch-level staff, POS terminal setups, tables, localized menu availability, active inventory, local expenses, and branch-specific reports. |
+| **Cashier** | Operates the POS Dashboard to process Dine-In, Takeaway, and Online orders. Generates invoices, records payments (Cash, Card, UPI), prints/shares receipts via WhatsApp, and handles table bill requests. |
+| **Waiter** | Table-side assistance. Manages tables, logs new orders, adds items to active orders, tracks preparation status, and responds to real-time customer service requests. |
+| **Customer** | Self-service dining. Scans a physical table QR code to view the live digital menu (supports dietary filters like Vegan, Gluten-Free, etc.) and submits service requests (e.g., Call Waiter, Refill, Bill Request). |
 
 ---
 
-## Requirements
+## ✨ Key Features
 
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL 14+
-
----
-
-## Local Setup
-
-### 1. Clone the project
-
-```bash
-git clone <repository-url> Cafe_manager
-cd Cafe_manager
-```
-
-### 2. Create the database
-
-Open `psql` and run:
-
-```sql
-CREATE DATABASE cafe_manager_db;
-```
-
-### 3. Set up the backend
-
-```bash
-cd backend
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-### 4. Configure environment variables
-
-```bash
-# Windows
-copy .env.example .env
-# macOS / Linux
-cp .env.example .env
-```
-
-Edit `backend/.env`:
-
-```env
-SECRET_KEY=any-long-random-string
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
-
-DB_NAME=cafe_manager_db
-DB_USER=postgres
-DB_PASSWORD=your_postgres_password
-DB_HOST=localhost
-DB_PORT=5432
-
-CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-```
-
-### 5. Run migrations and create admin account
-
-```bash
-python manage.py migrate
-python manage.py createsuperuser
-```
-
-### 6. Start the backend
-
-```bash
-python manage.py runserver
-```
-
-Backend runs at `http://127.0.0.1:8000`.
-
-### 7. Set up and start the frontend
-
-Open a second terminal:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend runs at `http://localhost:5173`.
+- **Multi-Branch Operations**: Complete isolation of data (orders, staff, tables, inventory) per branch with centralized owner controls.
+- **Dynamic POS Interface**: Quick-action order placement, category browsing, and order customizer designed for cashiers and POS desk terminals.
+- **Real-time Table Management**: Live table status tracking (Available, Occupied, Bill Requested, Needs Attention) with seats and current bill amounts.
+- **QR Code Digital Menu**: Automatic QR code image generation for newly created dining tables, pointing directly to a secure, public digital menu URL.
+- **Service Request Panel**: Seamless messaging system where customer requests (Call Waiter, Refill, Bill) appear instantly on the Waiter and Cashier dashboards.
+- **Inventory & Expenses Tracker**: Track stock levels, cost, minimum stock warnings, and log operational expenses (Rent, Utilities, Supplies) per branch.
+- **Analytics & Reporting**: Live sales statistics, transaction history, charts, payment method distribution, and exportable reports.
 
 ---
 
-## URLs
+## 💻 Tech Stack
 
-| URL | Purpose |
-|---|---|
-| `http://localhost:5173` | Application (login page) |
-| `http://localhost:5173/dashboard` | Dashboard |
-| `http://127.0.0.1:8000/admin/` | Django admin panel |
-| `http://127.0.0.1:8000/api/v1/` | REST API (browsable) |
+### Backend
+- **Core Framework**: [Django 6.0.6](https://docs.djangoproject.com/)
+- **API Engine**: [Django REST Framework 3.17.1](https://www.django-rest-framework.org/)
+- **Authentication**: JWT Auth via [djangorestframework-simplejwt 5.3.1](https://django-rest-framework-simplejwt.readthedocs.io/)
+- **Database**: [PostgreSQL](https://www.postgresql.org/) (via `psycopg2-binary`)
+- **Key Packages**: `qrcode` (for automatic table menu QR code generation), `Pillow` (for product and waiter photos), `python-dotenv` (for settings environment configuration).
+
+### Frontend
+- **Framework**: [React 19](https://react.dev/) (bundled with [Vite 8](https://vite.dev/))
+- **Routing**: [React Router 7](https://reactrouter.com/)
+- **Styles**: Custom Vanilla CSS with responsive design patterns, modular variables, and modern dark aesthetics.
 
 ---
 
-## Project Structure
+## 📂 Project Structure
 
 ```
-Cafe_manager/
+cafe_management/
 ├── backend/
-│   ├── accounts/        # Auth, user roles, waiter management
-│   ├── menu/            # Categories, products, tables, QR codes
-│   ├── orders/          # Orders, invoices, payments
-│   ├── notifications/   # System notifications
-│   ├── config/          # Django settings and URL routing
+│   ├── accounts/        # Branch, Manager, UserProfile, Waiter, Cashier, KitchenStaff models & auth views
+│   ├── menu/            # Category, Product, Table, QRCode, WaiterRequest, Inventory models
+│   ├── orders/          # Order, OrderItem, Invoice, Payment, Expense models & financial logic
+│   ├── notifications/   # System notifications & alerts
+│   ├── config/          # Django core settings (Asia/Kolkata timezone, media configurations) & routing
 │   ├── manage.py
 │   ├── requirements.txt
 │   └── .env.example
 │
 └── frontend/
     ├── src/
-    │   ├── pages/       # One file per screen
-    │   ├── components/  # Shared UI components
-    │   ├── context/     # Global app state (AppContext)
-    │   └── api.js       # All API calls to Django
+    │   ├── pages/       # Portal pages (owner dashboard, cashier POS, waiter tables, customer menu)
+    │   ├── components/  # Reusable UI elements (charts, tables, cards, payment forms)
+    │   ├── context/     # AppContext for shared global states, API integrations, and auth sessions
+    │   ├── api.js       # Centralized Axios wrapper targeting the Django REST endpoints
+    │   └── App.jsx      # Router configuration and Role-based Route Protection
     ├── package.json
-    └── vite.config.js   # Proxies /api to Django on port 8000
+    └── vite.config.js   # Vite config with API proxy mappings to port 8000
 ```
 
 ---
 
-## Database Tables
+## ⚙️ Local Setup and Installation
 
-| Table | Stores |
-|---|---|
-| `auth_user` | Admin/Manager accounts |
-| `accounts_userprofile` | Role per user |
-| `accounts_waiter` | Waiter name, section, PIN |
-| `menu_category` | Menu categories |
-| `menu_product` | Menu items, prices, images |
-| `menu_table` | Dining tables and status |
-| `menu_qrcode` | QR code per table |
-| `menu_waiterrequest` | Customer/staff requests |
-| `orders_order` | Order header and status |
-| `orders_orderitem` | Items within an order |
-| `orders_invoice` | Generated bill per order |
-| `orders_payment` | Payment record per order |
-| `notifications_notification` | System notifications |
+### Prerequisites
+- **Python** 3.10+
+- **Node.js** 18+
+- **PostgreSQL** 14+
 
 ---
 
-## Troubleshooting
-
-**PostgreSQL connection error**
-Check that PostgreSQL is running and that `DB_*` values in `.env` are correct. Confirm the database exists (`\l` in psql).
-
-**`SECRET_KEY` error on startup**
-`backend/.env` is missing or does not contain `SECRET_KEY`. The file must be inside the `backend/` folder.
-
-**Migration error — column does not exist**
-Run `python manage.py migrate` to apply any unapplied migrations.
-
-**Frontend cannot reach backend**
-Confirm Django is running on port 8000. Check `CORS_ALLOWED_ORIGINS` in `.env` includes `http://localhost:5173`.
-
-**Port already in use**
-Django: `python manage.py runserver 8001` (and update `vite.config.js` target).
-Vite: it picks the next available port automatically.
-
-**401 Unauthorized**
-Session expired. Log out and log in again.
+### Step 1: Database Setup
+Create a PostgreSQL database on your local server:
+```sql
+CREATE DATABASE cafe_manager_db;
+```
 
 ---
 
-## Important Notes
+### Step 2: Backend Configuration & Run
 
-- Both servers must run at the same time. Use two terminal windows.
-- The `.env` file is not committed to version control. Never share it.
-- Waiter accounts are created by the Admin in the **Waiters** page before they can log in.
-- WhatsApp bill sending opens WhatsApp Web — the waiter clicks Send manually.
-- Media files (images, QR codes) are stored in `backend/media/` and are not committed to version control.
-- The time zone is set to `Asia/Kolkata` (IST) in `backend/config/settings.py`.
+1. Navigate to the backend directory and set up a virtual environment:
+   ```bash
+   cd backend
+   python -m venv venv
+   ```
+2. Activate the virtual environment:
+   - **Windows (CMD/PowerShell)**:
+     ```powershell
+     venv\Scripts\activate
+     ```
+   - **macOS / Linux**:
+     ```bash
+     source venv/bin/activate
+     ```
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. Configure environment variables:
+   ```bash
+   copy .env.example .env   # Windows
+   cp .env.example .env     # macOS / Linux
+   ```
+   Open `backend/.env` and update the database credentials to match your local setup:
+   ```env
+   SECRET_KEY=your_secure_random_secret_key
+   DEBUG=True
+   ALLOWED_HOSTS=localhost,127.0.0.1
+   DB_NAME=cafe_manager_db
+   DB_USER=postgres
+   DB_PASSWORD=your_postgres_password
+   DB_HOST=127.0.0.1
+   DB_PORT=5432
+   CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+   ```
+5. Apply database migrations and load sample seed data (if applicable):
+   ```bash
+   python manage.py migrate
+   python manage.py createsuperuser
+   ```
+6. Run the server:
+   ```bash
+   python manage.py runserver
+   ```
+   The backend API will run at `http://127.0.0.1:8000`.
+
+---
+
+### Step 3: Frontend Configuration & Run
+
+1. Open a new terminal and navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+2. Install package dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the Vite development server:
+   ```bash
+   npm run dev
+   ```
+   The frontend application will be accessible at `http://localhost:5173`.
+
+---
+
+## 🔗 Key Endpoints & Routing
+
+- **Frontend Login**: `http://localhost:5173/login`
+- **Customer Menu**: `http://localhost:5173/customer/menu?table=<Table_Name>`
+- **API Browsable root**: `http://127.0.0.1:8000/api/v1/`
+- **Django Admin panel**: `http://127.0.0.1:8000/admin/`
+
+---
+
+## ⚠️ Important Implementation Notes
+
+- **Timezone Settings**: The system records timestamps in the `Asia/Kolkata` (IST) zone (`backend/config/settings.py`).
+- **GST / Tax Snapshots**: Orders utilize a standard 5% tax configuration. During order completion, prices and tax rates are snapshotted in `OrderItem` and `Invoice` objects so that historical sales metrics remain unaffected by subsequent product price or catalog adjustments.
+- **PIN Hashing**: Waiters, Cashiers, Kitchen Staff, and Branch Managers authenticate using unique employee IDs/manager IDs + PINs, which are stored using PBKDF2 hashing (`make_password`) in Django for top-tier security.
+- **QR Code Generation**: Table QR Codes are generated locally and stored inside `backend/media/qr_codes/`. Make sure that media permissions allow write operations.

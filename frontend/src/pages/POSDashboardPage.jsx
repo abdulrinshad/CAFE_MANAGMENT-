@@ -14,7 +14,7 @@ import './POSDashboardPage.css'
 
 export default function POSDashboardPage() {
   const navigate = useNavigate()
-  const { orders, fetchOrders, tables, fetchTables, waiterRequests, fetchWaiterRequests, currentUser } = useApp()
+  const { orders, fetchOrders, tables, fetchTables, waiterRequests, fetchWaiterRequests, currentUser, currentCashier } = useApp()
   
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -185,9 +185,9 @@ export default function POSDashboardPage() {
   )
 
   // Configure branch and cashier details
-  const branchName = currentUser?.branch_name || 'Kozhikode'
-  const terminalName = currentUser?.terminal_name || 'Terminal 01'
-  const cashierName = currentUser?.name || currentUser?.username || 'Cashier 01'
+  const branchName = currentCashier?.branch_name || currentUser?.branch?.name || 'Kozhikode'
+  const terminalName = currentCashier?.terminal?.name || currentUser?.terminal_name || 'Terminal 01'
+  const cashierName = currentCashier?.name || currentUser?.username || 'Cashier 01'
 
   const headerRight = (
     <div className="header-branch-terminal" style={{ marginRight: '16px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', fontSize: '11px', color: 'var(--color-text-secondary)' }}>

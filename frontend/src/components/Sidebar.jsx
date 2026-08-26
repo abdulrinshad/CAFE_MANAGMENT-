@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
+import { getSettingsRoute } from '../utils/routes'
 import './Sidebar.css'
 
 const NAV_ITEMS = [
@@ -81,7 +82,7 @@ export default function Sidebar({ isOpen, onClose }) {
     { path: '/cashier/bill-requests',label: 'Bill Requests',     icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
     { path: '/cashier/orders',       label: 'Orders',            icon: <OrdersIcon /> },
     { path: '/cashier/transactions', label: 'Transactions',      icon: <PaymentsIcon /> },
-    { path: '/settings/profile',     label: 'Settings',          icon: <SettingsIcon />, matchPath: '/settings' },
+    { path: getSettingsRoute(currentRole),     label: 'Settings',          icon: <SettingsIcon />, matchPath: '/settings' },
   ]
 
   const items = isCashier

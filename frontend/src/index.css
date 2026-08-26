@@ -179,10 +179,13 @@ body {
 .form-textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 
 /* ── Global Responsive Safeguards ── */
-.table-wrap, .table-container {
+.table-wrap, .table-container, .owner-table-wrap, .pos-transactions-table-wrap {
   width: 100%;
+  max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  display: block;
+  min-width: 0;
 }
 
 @media (max-width: 767px) {
