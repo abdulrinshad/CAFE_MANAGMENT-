@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
+import { useApp } from '../../context/AppContext'
 import './owner.css'
 
 const SETTINGS_SECTIONS = [
@@ -34,32 +35,80 @@ function Toggle({ checked, onChange, id }) {
 }
 
 export default function OwnerSettingsPage() {
+  const { api } = useApp()
   const [section, setSection] = useState('business')
-  const [businessForm, setBusinessForm] = useState({
-    businessName:  'Artisan Brew',
-    ownerName:     'Dilfa',
-    email:         'dilfa@artisanbrew.com',
-    phone:         '+91 98765 43200',
-    gstin:         '29ARTBR1234F1Z9',
-    address:       'Bengaluru, Karnataka',
-    website:       'www.artisanbrew.com',
-    currency:      'INR',
-  })
-  const [notifSettings, setNotifSettings] = useState({
-    newOrder:      true,
-    paymentDone:   true,
-    lowStock:      true,
-    expenseAdded:  false,
-    branchReport:  true,
-    emailDigest:   false,
-  })
-  const [secSettings, setSecSettings] = useState({
-    twoFA:          false,
-    loginAlerts:    true,
-    sessionTimeout: '60',
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  
+  const [settings, setSettings] = useState({
+    business_name: '',
+    owner_name: '',
+    email: '',
+    phone: '',
+    gstin: '',
+    address: '',
+    website: '',
+    currency: 'INR',
+    auto_disable_inactive_branches: false,
+    cross_branch_inventory_sharing: true,
+    unified_menu_across_branches: false,
+    require_email_verification: true,
+    allow_managers_create_staff: true,
+    allow_managers_view_reports: false,
+    default_tax_rate: '5.00',
+    service_charge: '0.00',
+    invoice_footer_text: '',
+    pm_cash: true,
+    pm_upi: true,
+    pm_card: true,
+    pm_swiggy: true,
+    pm_zomato: true,
+    notif_new_order: true,
+    notif_payment_done: true,
+    notif_low_stock: true,
+    notif_expense_added: false,
+    notif_branch_report: true,
+    notif_email_digest: false,
+    sec_two_fa: false,
+    sec_login_alerts: true,
+    sec_session_timeout: '60',
   })
 
-  const bf = (key) => (e) => setBusinessForm(prev => ({ ...prev, [key]: e.target.value }))
+  useEffect(() => {
+    fetchSettings()
+  }, [])
+
+  const fetchSettings = async () => {
+    try {
+      const res = await api.get('/accounts/owner/settings/')
+      setSettings(res.data)
+      setLoading(false)
+    } catch (err) {
+      console.error('Failed to fetch settings', err)
+      setError('Failed to load settings')
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      await api.put('/accounts/owner/settings/', settings)
+      alert('Settings saved successfully!')
+    } catch (err) {
+      console.error('Failed to save settings', err)
+      setError('Failed to save settings')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const sf = (key) => (e) => setSettings(prev => ({ ...prev, [key]: e.target.value }))
+  const setToggle = (key) => (v) => setSettings(prev => ({ ...prev, [key]: v }))
+
+  if (loading) return <AdminLayout pageTitle="Settings" pageIcon="⚙️"><div>Loading settings...</div></AdminLayout>
 
   return (
     <AdminLayout pageTitle="Settings" pageIcon="⚙️">
@@ -71,6 +120,8 @@ export default function OwnerSettingsPage() {
             <p className="owner-page-header__sub">Manage your business configuration and system preferences.</p>
           </div>
         </div>
+
+        {error && <div style={{color: 'red', marginBottom: 10}}>{error}</div>}
 
         <div className="owner-settings-layout">
           {/* Nav */}
@@ -101,27 +152,27 @@ export default function OwnerSettingsPage() {
                 <div className="owner-form-grid">
                   <div className="form-group">
                     <label className="form-label">Business Name</label>
-                    <input className="form-input" value={businessForm.businessName} onChange={bf('businessName')} id="settings-business-name" />
+                    <input className="form-input" value={settings.business_name} onChange={sf('business_name')} id="settings-business-name" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Owner Name</label>
-                    <input className="form-input" value={businessForm.ownerName} onChange={bf('ownerName')} id="settings-owner-name" />
+                    <input className="form-input" value={settings.owner_name} onChange={sf('owner_name')} id="settings-owner-name" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Email</label>
-                    <input className="form-input" type="email" value={businessForm.email} onChange={bf('email')} id="settings-email" />
+                    <input className="form-input" type="email" value={settings.email} onChange={sf('email')} id="settings-email" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Phone</label>
-                    <input className="form-input" value={businessForm.phone} onChange={bf('phone')} id="settings-phone" />
+                    <input className="form-input" value={settings.phone} onChange={sf('phone')} id="settings-phone" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">GSTIN</label>
-                    <input className="form-input" value={businessForm.gstin} onChange={bf('gstin')} id="settings-gstin" />
+                    <input className="form-input" value={settings.gstin} onChange={sf('gstin')} id="settings-gstin" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Currency</label>
-                    <select className="form-select" value={businessForm.currency} onChange={bf('currency')} id="settings-currency">
+                    <select className="form-select" value={settings.currency} onChange={sf('currency')} id="settings-currency">
                       <option value="INR">INR — Indian Rupee</option>
                       <option value="USD">USD — US Dollar</option>
                       <option value="EUR">EUR — Euro</option>
@@ -129,15 +180,15 @@ export default function OwnerSettingsPage() {
                   </div>
                   <div className="form-group owner-form-grid--full">
                     <label className="form-label">Address</label>
-                    <input className="form-input" value={businessForm.address} onChange={bf('address')} id="settings-address" />
+                    <input className="form-input" value={settings.address} onChange={sf('address')} id="settings-address" />
                   </div>
                   <div className="form-group owner-form-grid--full">
                     <label className="form-label">Website</label>
-                    <input className="form-input" value={businessForm.website} onChange={bf('website')} id="settings-website" />
+                    <input className="form-input" value={settings.website} onChange={sf('website')} id="settings-website" />
                   </div>
                 </div>
                 <div style={{ marginTop: 20 }}>
-                  <button className="btn-primary" id="settings-save-business">Save Changes</button>
+                  <button className="btn-primary" id="settings-save-business" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Changes'}</button>
                 </div>
               </div>
             )}
@@ -151,21 +202,24 @@ export default function OwnerSettingsPage() {
                     <div className="owner-settings-row__label">Auto-disable inactive branches</div>
                     <div className="owner-settings-row__sub">Automatically mark branches as inactive after 30 days of no activity.</div>
                   </div>
-                  <Toggle checked={false} onChange={() => {}} id="toggle-auto-disable" />
+                  <Toggle checked={settings.auto_disable_inactive_branches} onChange={setToggle('auto_disable_inactive_branches')} id="toggle-auto-disable" />
                 </div>
                 <div className="owner-settings-row">
                   <div>
                     <div className="owner-settings-row__label">Cross-branch inventory sharing</div>
                     <div className="owner-settings-row__sub">Allow branches to share inventory records.</div>
                   </div>
-                  <Toggle checked={true} onChange={() => {}} id="toggle-inv-share" />
+                  <Toggle checked={settings.cross_branch_inventory_sharing} onChange={setToggle('cross_branch_inventory_sharing')} id="toggle-inv-share" />
                 </div>
                 <div className="owner-settings-row">
                   <div>
                     <div className="owner-settings-row__label">Unified menu across branches</div>
                     <div className="owner-settings-row__sub">Changes to the menu apply to all branches by default.</div>
                   </div>
-                  <Toggle checked={false} onChange={() => {}} id="toggle-unified-menu" />
+                  <Toggle checked={settings.unified_menu_across_branches} onChange={setToggle('unified_menu_across_branches')} id="toggle-unified-menu" />
+                </div>
+                <div style={{ marginTop: 20 }}>
+                  <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Branch Settings'}</button>
                 </div>
               </div>
             )}
@@ -178,19 +232,22 @@ export default function OwnerSettingsPage() {
                   <div>
                     <div className="owner-settings-row__label">Require email verification for new staff</div>
                   </div>
-                  <Toggle checked={true} onChange={() => {}} id="toggle-email-verify" />
+                  <Toggle checked={settings.require_email_verification} onChange={setToggle('require_email_verification')} id="toggle-email-verify" />
                 </div>
                 <div className="owner-settings-row">
                   <div>
                     <div className="owner-settings-row__label">Allow managers to create staff accounts</div>
                   </div>
-                  <Toggle checked={true} onChange={() => {}} id="toggle-manager-create-staff" />
+                  <Toggle checked={settings.allow_managers_create_staff} onChange={setToggle('allow_managers_create_staff')} id="toggle-manager-create-staff" />
                 </div>
                 <div className="owner-settings-row">
                   <div>
                     <div className="owner-settings-row__label">Allow managers to view financial reports</div>
                   </div>
-                  <Toggle checked={false} onChange={() => {}} id="toggle-manager-reports" />
+                  <Toggle checked={settings.allow_managers_view_reports} onChange={setToggle('allow_managers_view_reports')} id="toggle-manager-reports" />
+                </div>
+                <div style={{ marginTop: 20 }}>
+                  <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save User Settings'}</button>
                 </div>
               </div>
             )}
@@ -198,7 +255,7 @@ export default function OwnerSettingsPage() {
             {/* Permissions */}
             {section === 'permissions' && (
               <div className="owner-settings-block">
-                <div className="owner-settings-block__title">Permissions Matrix</div>
+                <div className="owner-settings-block__title">Permissions Matrix (Read-Only)</div>
                 <div className="owner-table-wrap">
                   <table className="owner-table" style={{ minWidth: 400 }}>
                     <thead><tr><th>Permission</th><th>Owner</th><th>Manager</th><th>POS</th><th>Waiter</th></tr></thead>
@@ -231,19 +288,19 @@ export default function OwnerSettingsPage() {
                 <div className="owner-form-grid">
                   <div className="form-group">
                     <label className="form-label">Default Tax Rate (%)</label>
-                    <input className="form-input" type="number" defaultValue="5" id="settings-tax-rate" />
+                    <input className="form-input" type="number" value={settings.default_tax_rate} onChange={sf('default_tax_rate')} id="settings-tax-rate" />
                   </div>
                   <div className="form-group">
                     <label className="form-label">Service Charge (%)</label>
-                    <input className="form-input" type="number" defaultValue="0" id="settings-service-charge" />
+                    <input className="form-input" type="number" value={settings.service_charge} onChange={sf('service_charge')} id="settings-service-charge" />
                   </div>
                   <div className="form-group owner-form-grid--full">
                     <label className="form-label">Invoice Footer Text</label>
-                    <textarea className="form-textarea" defaultValue="Thank you for visiting Artisan Brew! Your satisfaction is our priority." id="settings-invoice-footer" />
+                    <textarea className="form-textarea" value={settings.invoice_footer_text} onChange={sf('invoice_footer_text')} id="settings-invoice-footer" />
                   </div>
                 </div>
                 <div style={{ marginTop: 20 }}>
-                  <button className="btn-primary" id="settings-save-tax">Save Tax Settings</button>
+                  <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Tax Settings'}</button>
                 </div>
               </div>
             )}
@@ -253,20 +310,23 @@ export default function OwnerSettingsPage() {
               <div className="owner-settings-block">
                 <div className="owner-settings-block__title">Accepted Payment Methods</div>
                 {[
-                  { id: 'pm-cash',   label: 'Cash',          sub: 'Accept cash payments at POS' },
-                  { id: 'pm-upi',    label: 'UPI',           sub: 'GPay, PhonePe, Paytm, etc.' },
-                  { id: 'pm-card',   label: 'Debit/Credit Card', sub: 'Visa, Mastercard, RuPay' },
-                  { id: 'pm-swiggy', label: 'Swiggy Online', sub: 'Online payments from Swiggy orders' },
-                  { id: 'pm-zomato', label: 'Zomato Online', sub: 'Online payments from Zomato orders' },
+                  { id: 'pm_cash',   label: 'Cash',          sub: 'Accept cash payments at POS' },
+                  { id: 'pm_upi',    label: 'UPI',           sub: 'GPay, PhonePe, Paytm, etc.' },
+                  { id: 'pm_card',   label: 'Debit/Credit Card', sub: 'Visa, Mastercard, RuPay' },
+                  { id: 'pm_swiggy', label: 'Swiggy Online', sub: 'Online payments from Swiggy orders' },
+                  { id: 'pm_zomato', label: 'Zomato Online', sub: 'Online payments from Zomato orders' },
                 ].map(pm => (
                   <div key={pm.id} className="owner-settings-row">
                     <div>
                       <div className="owner-settings-row__label">{pm.label}</div>
                       <div className="owner-settings-row__sub">{pm.sub}</div>
                     </div>
-                    <Toggle checked={true} onChange={() => {}} id={pm.id} />
+                    <Toggle checked={settings[pm.id]} onChange={setToggle(pm.id)} id={pm.id} />
                   </div>
                 ))}
+                <div style={{ marginTop: 20 }}>
+                  <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Payment Settings'}</button>
+                </div>
               </div>
             )}
 
@@ -275,12 +335,12 @@ export default function OwnerSettingsPage() {
               <div className="owner-settings-block">
                 <div className="owner-settings-block__title">Notification Preferences</div>
                 {[
-                  { key: 'newOrder',     label: 'New Orders',          sub: 'Get notified when a new order is placed' },
-                  { key: 'paymentDone',  label: 'Payment Completed',   sub: 'Alert when payment is confirmed' },
-                  { key: 'lowStock',     label: 'Low Stock Alerts',    sub: 'Notify when stock falls below minimum' },
-                  { key: 'expenseAdded', label: 'Expense Added',       sub: 'When a branch manager adds an expense' },
-                  { key: 'branchReport', label: 'Daily Branch Report', sub: 'End-of-day summary from each branch' },
-                  { key: 'emailDigest',  label: 'Weekly Email Digest', sub: 'Summary sent every Monday morning' },
+                  { key: 'notif_new_order',     label: 'New Orders',          sub: 'Get notified when a new order is placed' },
+                  { key: 'notif_payment_done',  label: 'Payment Completed',   sub: 'Alert when payment is confirmed' },
+                  { key: 'notif_low_stock',     label: 'Low Stock Alerts',    sub: 'Notify when stock falls below minimum' },
+                  { key: 'notif_expense_added', label: 'Expense Added',       sub: 'When a branch manager adds an expense' },
+                  { key: 'notif_branch_report', label: 'Daily Branch Report', sub: 'End-of-day summary from each branch' },
+                  { key: 'notif_email_digest',  label: 'Weekly Email Digest', sub: 'Summary sent every Monday morning' },
                 ].map(n => (
                   <div key={n.key} className="owner-settings-row">
                     <div>
@@ -288,12 +348,15 @@ export default function OwnerSettingsPage() {
                       <div className="owner-settings-row__sub">{n.sub}</div>
                     </div>
                     <Toggle
-                      checked={notifSettings[n.key]}
-                      onChange={v => setNotifSettings(prev => ({ ...prev, [n.key]: v }))}
+                      checked={settings[n.key]}
+                      onChange={setToggle(n.key)}
                       id={`notif-${n.key}`}
                     />
                   </div>
                 ))}
+                <div style={{ marginTop: 20 }}>
+                  <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Notification Settings'}</button>
+                </div>
               </div>
             )}
 
@@ -306,21 +369,21 @@ export default function OwnerSettingsPage() {
                     <div className="owner-settings-row__label">Two-Factor Authentication</div>
                     <div className="owner-settings-row__sub">Require OTP at every login</div>
                   </div>
-                  <Toggle checked={secSettings.twoFA} onChange={v => setSecSettings(p => ({ ...p, twoFA: v }))} id="toggle-2fa" />
+                  <Toggle checked={settings.sec_two_fa} onChange={setToggle('sec_two_fa')} id="toggle-2fa" />
                 </div>
                 <div className="owner-settings-row">
                   <div>
                     <div className="owner-settings-row__label">Login Alerts</div>
                     <div className="owner-settings-row__sub">Email alert on new login from unknown device</div>
                   </div>
-                  <Toggle checked={secSettings.loginAlerts} onChange={v => setSecSettings(p => ({ ...p, loginAlerts: v }))} id="toggle-login-alerts" />
+                  <Toggle checked={settings.sec_login_alerts} onChange={setToggle('sec_login_alerts')} id="toggle-login-alerts" />
                 </div>
                 <div className="owner-settings-row">
                   <div>
                     <div className="owner-settings-row__label">Session Timeout</div>
                     <div className="owner-settings-row__sub">Automatically log out after inactivity</div>
                   </div>
-                  <select className="form-select" style={{ width: 'auto' }} value={secSettings.sessionTimeout} onChange={e => setSecSettings(p => ({ ...p, sessionTimeout: e.target.value }))} id="settings-session-timeout">
+                  <select className="form-select" style={{ width: 'auto' }} value={settings.sec_session_timeout} onChange={sf('sec_session_timeout')} id="settings-session-timeout">
                     <option value="30">30 minutes</option>
                     <option value="60">1 hour</option>
                     <option value="240">4 hours</option>
@@ -328,7 +391,7 @@ export default function OwnerSettingsPage() {
                   </select>
                 </div>
                 <div style={{ marginTop: 20, display: 'flex', gap: 8 }}>
-                  <button className="btn-primary" id="settings-save-security">Save Security Settings</button>
+                  <button className="btn-primary" id="settings-save-security" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Security Settings'}</button>
                   <button className="btn-outline" id="settings-change-password">Change Password</button>
                 </div>
               </div>

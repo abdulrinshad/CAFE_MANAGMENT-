@@ -41,6 +41,18 @@ class CategoryViewSet(viewsets.ModelViewSet):
     ordering_fields  = ['display_order', 'name', 'created_at']
     ordering         = ['display_order', 'name']
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        waiter_branch = get_waiter_branch(self.request)
+        if waiter_branch:
+            from django.db.models import Q
+            qs = qs.filter(Q(branch=waiter_branch) | Q(branch__isnull=True))
+        return qs
+
+    def perform_create(self, serializer):
+        waiter_branch = get_waiter_branch(self.request)
+        serializer.save(branch=waiter_branch)
+
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset        = Product.objects.select_related('category', 'branch').all()
@@ -49,6 +61,14 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering_fields = ['display_order', 'price', 'name', 'created_at']
     ordering        = ['display_order', 'name']
     parser_classes  = [MultiPartParser, FormParser, JSONParser]
+
+    def get_permissions(self):
+        from rest_framework.permissions import AllowAny, IsAuthenticated
+        from accounts.permissions import IsManager, IsEmployeeOrAbove
+        
+        if self.action in ['create', 'update', 'partial_update', 'destroy', 'set_availability', 'set_popular']:
+            return [IsAuthenticated(), IsManager()]
+        return [IsAuthenticated(), IsEmployeeOrAbove()]
 
     def get_queryset(self):
         qs = super().get_queryset()

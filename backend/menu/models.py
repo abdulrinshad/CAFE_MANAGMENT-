@@ -19,16 +19,20 @@ class Category(models.Model):
     """
 
     ICON_CHOICES = [
-        ('coffee',  'Coffee'),
-        ('tea',     'Tea'),
-        ('pastry',  'Pastry'),
-        ('dessert', 'Dessert'),
-        ('cold',    'Cold Beverage'),
-        ('default', 'Default'),
+        ('coffee_tea', 'Coffee & Tea'),
+        ('pastries',   'Pastries'),
+        ('meals',      'Meals'),
+        ('juice',      'Juice'),
+        ('dinner',     'Dinner'),
+        ('breakfast',  'Breakfast'),
+        ('snacks',     'Snacks'),
+        ('desserts',   'Desserts'),
+        ('default',    'Default'),
     ]
 
     name          = models.CharField(max_length=120, unique=True)
     icon          = models.CharField(max_length=30, choices=ICON_CHOICES, default='default')
+    branch        = models.ForeignKey('accounts.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='categories')
     display_order = models.PositiveSmallIntegerField(default=0, db_index=True)
     active        = models.BooleanField(default=True)
     created_at    = models.DateTimeField(auto_now_add=True)

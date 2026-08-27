@@ -572,7 +572,11 @@ class BranchMenuView(APIView):
     permission_classes = [IsAuthenticated, IsBranchManager]
 
     def get(self, request, *args, **kwargs):
-        products = Product.objects.all()
+        branch = get_manager_branch(request)
+        if not branch:
+            return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
+            
+        products = Product.objects.filter(branch=branch)
         data = [{
             "id": p.id,
             "name": p.name,
@@ -586,10 +590,65 @@ class BranchMenuView(APIView):
         return Response(data)
 
     def patch(self, request, pk=None, *args, **kwargs):
-        p = get_object_or_404(Product, pk=pk)
+        branch = get_manager_branch(request)
+        p = get_object_or_404(Product, pk=pk, branch=branch)
         p.available = not p.available
         p.save()
         return Response({"id": p.id, "available": p.available, "branchStatus": p.available})
+
+    def post(self, request, *args, **kwargs):
+        branch = get_manager_branch(request)
+        if not branch:
+            return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        name = request.data.get('name')
+        price = request.data.get('price')
+        category_id = request.data.get('category')
+        
+        if not name or not price or not category_id:
+            return Response({"detail": "Name, price, and category are required."}, status=status.HTTP_400_BAD_REQUEST)
+            
+        from menu.models import Category
+        category = get_object_or_404(Category, pk=category_id)
+        
+        # Automatic image mapping based on category icon/name
+        # Fallback to a placeholder if no image exists
+        image_path = None
+        icon = category.icon.lower()
+        if icon == 'coffee_tea' or 'coffee' in category.name.lower() or 'tea' in category.name.lower():
+            image_path = 'products/coffee_placeholder.jpg'
+        elif icon == 'pastries' or 'pastry' in category.name.lower():
+            image_path = 'products/pastry_placeholder.jpg'
+        elif icon == 'juice' or 'juice' in category.name.lower():
+            image_path = 'products/juice_placeholder.jpg'
+        elif icon in ['meals', 'dinner', 'breakfast'] or 'meal' in category.name.lower():
+            image_path = 'products/meals_placeholder.jpg'
+        elif icon == 'snacks' or 'snack' in category.name.lower():
+            image_path = 'products/snacks_placeholder.jpg'
+        elif icon == 'desserts' or 'dessert' in category.name.lower():
+            image_path = 'products/dessert_placeholder.jpg'
+        else:
+            image_path = 'products/default_placeholder.jpg'
+            
+        product = Product.objects.create(
+            name=name,
+            price=price,
+            category=category,
+            branch=branch,
+            available=True,
+            image=image_path
+        )
+        
+        return Response({
+            "id": product.id,
+            "name": product.name,
+            "category": product.category.name,
+            "price": float(product.price),
+            "basePrice": float(product.price),
+            "available": product.available,
+            "globalStatus": "Available",
+            "branchStatus": product.available
+        }, status=status.HTTP_201_CREATED)
 
 
 # ── Inventory API ────────────────────────────────────────────────────────────────

@@ -32,6 +32,7 @@ class ProductFilter(django_filters.FilterSet):
     featured        = django_filters.BooleanFilter(field_name='featured')
     available_on_pos = django_filters.BooleanFilter(field_name='available_on_pos')
     available_on_qr  = django_filters.BooleanFilter(field_name='available_on_qr')
+    branch           = django_filters.NumberFilter(field_name='branch__id')
 
     # Price range filters
     min_price = django_filters.NumberFilter(field_name='price', lookup_expr='gte')
@@ -50,4 +51,5 @@ class ProductFilter(django_filters.FilterSet):
             'available_on_qr',
             'min_price',
             'max_price',
+            'branch',
         ]

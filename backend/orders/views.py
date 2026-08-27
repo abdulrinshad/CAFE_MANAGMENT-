@@ -1586,9 +1586,17 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Expense.objects.select_related('branch').order_by('-date', '-created_at')
 
-        branch = self.request.query_params.get('branch')
-        if branch:
-            qs = qs.filter(branch_id=branch)
+        from accounts.utils import get_waiter_branch
+        waiter_branch = get_waiter_branch(self.request)
+        
+        # If user is a branch manager (waiter_branch is not None), force filter
+        if waiter_branch:
+            qs = qs.filter(branch=waiter_branch)
+        else:
+            # For owner, optionally filter by query param
+            branch = self.request.query_params.get('branch')
+            if branch:
+                qs = qs.filter(branch_id=branch)
 
         category = self.request.query_params.get('category')
         if category:
@@ -1619,3 +1627,11 @@ class ExpenseViewSet(viewsets.ModelViewSet):
                 pass
 
         return qs
+
+    def perform_create(self, serializer):
+        from accounts.utils import get_waiter_branch
+        waiter_branch = get_waiter_branch(self.request)
+        if waiter_branch:
+            serializer.save(branch=waiter_branch)
+        else:
+            serializer.save()

@@ -38,7 +38,6 @@ const OWNER_NAV_SECTIONS = [
       { path: '/owner/orders',    label: 'Orders',    icon: <OrdersIcon /> },
       { path: '/owner/billing',   label: 'Billing',   icon: <BillingIcon /> },
       { path: '/owner/payments',  label: 'Payments',  icon: <PaymentsIcon /> },
-      { path: '/owner/inventory', label: 'Inventory', icon: <InventoryIcon /> },
       { path: '/owner/expenses',  label: 'Expenses',  icon: <ExpensesIcon /> },
       { path: '/owner/customers', label: 'Customers', icon: <WaitersIcon /> },
     ],

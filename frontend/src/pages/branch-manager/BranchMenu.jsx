@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import BranchManagerLayout from '../../layouts/BranchManagerLayout';
 import { branchManagerService } from '../../services/branchManagerService';
+import { categoryApi } from '../../api';
+import Modal from '../../components/Modal';
 import '../../pages/owner/owner.css';
 
 export default function BranchMenu() {
@@ -10,11 +12,22 @@ export default function BranchMenu() {
   const [statusFilter, setStatusFilter] = useState('ALL');
 
   const [loading, setLoading] = useState(true);
+  
+  const [allCategories, setAllCategories] = useState([]);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemPrice, setNewItemPrice] = useState('');
+  const [newItemCategory, setNewItemCategory] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryIcon, setNewCategoryIcon] = useState('coffee_tea');
 
   const loadProducts = async () => {
     try {
       const data = await branchManagerService.getProducts();
       setProducts(data || []);
+      const cats = await categoryApi.list();
+      setAllCategories(Array.isArray(cats) ? cats : (cats.results || []));
     } catch (err) {
       console.error(err);
     } finally {
@@ -32,6 +45,46 @@ export default function BranchMenu() {
       await loadProducts();
     } catch (err) {
       alert(err.message || 'Failed to update product availability');
+    }
+  };
+
+  const handleAddSubmit = async (e) => {
+    e.preventDefault();
+    if (!newItemName || !newItemPrice || !newItemCategory) {
+      alert("Name, price, and category are required.");
+      return;
+    }
+    try {
+      await branchManagerService.addProduct({
+        name: newItemName,
+        price: newItemPrice,
+        category: newItemCategory
+      });
+      setIsAddModalOpen(false);
+      setNewItemName('');
+      setNewItemPrice('');
+      setNewItemCategory('');
+      await loadProducts();
+    } catch (err) {
+      alert(err.message || 'Failed to add product');
+    }
+  };
+
+  const handleAddCategorySubmit = async (e) => {
+    e.preventDefault();
+    if (!newCategoryName) {
+      alert("Category name is required.");
+      return;
+    }
+    try {
+      await categoryApi.create({ name: newCategoryName, icon: newCategoryIcon });
+      setIsAddCategoryModalOpen(false);
+      setNewCategoryName('');
+      setNewCategoryIcon('coffee_tea');
+      const cats = await categoryApi.list();
+      setAllCategories(Array.isArray(cats) ? cats : (cats.results || []));
+    } catch (err) {
+      alert(err.message || 'Failed to add category');
     }
   };
 
@@ -66,7 +119,23 @@ export default function BranchMenu() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h1 className="owner-page-header__title">Branch Menu Settings</h1>
-            <p className="owner-page-header__sub">Enable or disable items from the global menu specifically for Kochi Branch.</p>
+            <p className="owner-page-header__sub">Manage menu items specifically for your branch.</p>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button 
+              className="btn btn-secondary"
+              onClick={() => setIsAddCategoryModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              + Add Category
+            </button>
+            <button 
+              className="btn btn-primary"
+              onClick={() => setIsAddModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              + Add Item
+            </button>
           </div>
         </div>
 
@@ -183,6 +252,120 @@ export default function BranchMenu() {
             </div>
           ))}
         </div>
+        
+        {/* Add Item Modal */}
+        <Modal 
+          open={isAddModalOpen} 
+          onClose={() => setIsAddModalOpen(false)}
+          title="Add New Item"
+        >
+          <form onSubmit={handleAddSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="form-group">
+              <label>Name</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                value={newItemName}
+                onChange={e => setNewItemName(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div className="form-group">
+              <label>Category</label>
+              <select 
+                className="form-select"
+                value={newItemCategory}
+                onChange={e => setNewItemCategory(e.target.value)}
+                required
+              >
+                <option value="">Select a category...</option>
+                {allCategories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="form-group">
+              <label>Price (₹)</label>
+              <input 
+                type="number" 
+                step="0.01"
+                min="0"
+                className="form-input" 
+                value={newItemPrice}
+                onChange={e => setNewItemPrice(e.target.value)}
+                required
+              />
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setIsAddModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary">
+                Add Item
+              </button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* Add Category Modal */}
+        <Modal 
+          open={isAddCategoryModalOpen} 
+          onClose={() => setIsAddCategoryModalOpen(false)}
+          title="Add New Category"
+        >
+          <form onSubmit={handleAddCategorySubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="form-group">
+              <label>Category Name</label>
+              <input 
+                type="text" 
+                className="form-input" 
+                value={newCategoryName}
+                onChange={e => setNewCategoryName(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Default Picture Suggestion</label>
+              <select
+                className="form-select"
+                value={newCategoryIcon}
+                onChange={e => setNewCategoryIcon(e.target.value)}
+                required
+              >
+                <option value="coffee_tea">Coffee & Tea</option>
+                <option value="pastries">Pastries</option>
+                <option value="meals">Meals</option>
+                <option value="juice">Juice</option>
+                <option value="dinner">Dinner</option>
+                <option value="breakfast">Breakfast</option>
+                <option value="snacks">Snacks</option>
+                <option value="desserts">Desserts</option>
+                <option value="default">Other (Default)</option>
+              </select>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setIsAddCategoryModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary">
+                Add Category
+              </button>
+            </div>
+          </form>
+        </Modal>
       </div>
     </BranchManagerLayout>
   );
