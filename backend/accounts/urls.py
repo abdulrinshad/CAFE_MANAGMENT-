@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework.routers import DefaultRouter
 from .views import (
+    OwnerSettingsView,
     CustomTokenObtainPairView,
     LogoutView,
     CurrentUserView,
@@ -53,6 +54,7 @@ urlpatterns = [
     path('auth/waiter-login/', WaiterLoginView.as_view(), name='auth_waiter_login'),
     path('auth/employee-login/', EmployeeLoginView.as_view(), name='auth_employee_login'),
     path('auth/branch-manager-login/', BranchManagerLoginView.as_view(), name='auth_branch_manager_login'),
+    path('owner/settings/', OwnerSettingsView.as_view(), name='owner_settings'),
 
     # Branch Manager URLs
     path('branch/dashboard/', BranchDashboardView.as_view(), name='branch_dashboard'),

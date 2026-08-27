@@ -84,6 +84,10 @@ export const branchManagerService = {
     return request('GET', '/branch/menu/');
   },
 
+  async addProduct(product) {
+    return request('POST', '/branch/menu/', product);
+  },
+
   async toggleProductAvailability(id) {
     return request('PATCH', `/branch/menu/${id}/`);
   },

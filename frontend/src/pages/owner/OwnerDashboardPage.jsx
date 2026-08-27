@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../layouts/AdminLayout'
 import { useApp } from '../../context/AppContext'
-import { dashboardApi, reportsApi } from '../../api'
+import { dashboardApi } from '../../api'
 import '../DashboardPage.css'
 import './owner.css'
 
@@ -68,22 +68,30 @@ function KPICard({ label, value, sub, badge, badgeType = 'green' }) {
 
 export default function OwnerDashboardPage() {
   const navigate = useNavigate()
-  const { currentUser, orders, tables, waiterRequests } = useApp()
+  const { currentUser, orders, tables, waiterRequests, api } = useApp()
   const [stats, setStats] = useState(null)
   const [chartData, setChartData] = useState([])
   const [chartPeriod, setChartPeriod] = useState('weekly')
   const [loading, setLoading] = useState(true)
+  const [branches, setBranches] = useState([])
+  const [branchFilter, setBranchFilter] = useState('All')
 
   const userName = currentUser?.name || currentUser?.username || 'Owner'
+
+  useEffect(() => {
+    fetchBranches()
+  }, [])
 
   useEffect(() => {
     let active = true
     async function loadData() {
       try {
         setLoading(true)
+        const branchQuery = branchFilter !== 'All' ? `?branch=${branchFilter}` : ''
+        
         const [statsRes, chartRes] = await Promise.all([
-          dashboardApi.stats().catch(() => null),
-          dashboardApi.salesChart(chartPeriod).catch(() => null),
+          dashboardApi.stats(branchQuery).catch(() => null),
+          dashboardApi.salesChart(chartPeriod + branchQuery).catch(() => null),
         ])
         if (!active) return
         setStats(statsRes)
@@ -100,13 +108,26 @@ export default function OwnerDashboardPage() {
     }
     loadData()
     return () => { active = false }
-  }, [chartPeriod])
+  }, [chartPeriod, branchFilter])
 
-  const todaySales = stats?.today_sales ?? (orders ?? []).filter(o => o.status === 'COMPLETED').reduce((sum, o) => sum + (o.amount || 0), 0)
-  const totalOrdersCount = stats?.today_orders ?? (orders ?? []).length
-  const activeTablesCount = stats?.active_tables ?? (tables ?? []).filter(t => t.status !== 'available').length
-  const totalTablesCount = stats?.total_tables ?? (tables ?? []).length
-  const activeRequestsCount = stats?.active_requests ?? (waiterRequests ?? []).filter(r => r.status === 'new' || r.status === 'in_progress').length
+  const fetchBranches = async () => {
+    try {
+      const res = await api.get('/accounts/branches/')
+      setBranches(res.data)
+    } catch (err) {
+      console.error('Failed to fetch branches', err)
+    }
+  }
+
+  const filteredOrders = branchFilter === 'All' ? orders : orders.filter(o => o.branch === parseInt(branchFilter))
+  const filteredTables = branchFilter === 'All' ? tables : tables.filter(t => t.branch === parseInt(branchFilter))
+  const filteredRequests = branchFilter === 'All' ? waiterRequests : waiterRequests.filter(r => r.branch === parseInt(branchFilter))
+
+  const todaySales = stats?.today_sales ?? filteredOrders.filter(o => o.status === 'COMPLETED').reduce((sum, o) => sum + (o.amount || 0), 0)
+  const totalOrdersCount = stats?.today_orders ?? filteredOrders.length
+  const activeTablesCount = stats?.active_tables ?? filteredTables.filter(t => t.status !== 'available').length
+  const totalTablesCount = stats?.total_tables ?? filteredTables.length
+  const activeRequestsCount = stats?.active_requests ?? filteredRequests.filter(r => r.status === 'new' || r.status === 'in_progress').length
 
   const PERIODS = [
     { key: 'daily',   label: 'Daily' },
@@ -119,9 +140,19 @@ export default function OwnerDashboardPage() {
       <div className="owner-page">
 
         {/* Greeting */}
-        <div>
-          <h1 className="dashboard__greeting-title">{getGreeting()}, {userName} ☕</h1>
-          <p className="dashboard__greeting-sub">Live database overview for your cafe business.</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div>
+            <h1 className="dashboard__greeting-title">{getGreeting()}, {userName} ☕</h1>
+            <p className="dashboard__greeting-sub">Live database overview for your cafe business.</p>
+          </div>
+          <div>
+             <select className="form-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} style={{width: 200}}>
+                <option value="All">All Branches</option>
+                {branches.map(b => (
+                   <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+             </select>
+          </div>
         </div>
 
         {/* KPI Row 1 */}
@@ -157,13 +188,13 @@ export default function OwnerDashboardPage() {
           <div className="owner-section-card">
             <div className="owner-section-card__header">
               <span className="owner-section-card__title">Recent Database Orders</span>
-              <button className="btn-outline" style={{ padding: '6px 14px', fontSize: 12 }} onClick={() => navigate('/orders')}>
+              <button className="btn-outline" style={{ padding: '6px 14px', fontSize: 12 }} onClick={() => navigate('/owner/orders')}>
                 View All
               </button>
             </div>
             <div className="owner-section-card__body--no-pad">
               <div style={{ padding: '0 20px' }}>
-                {orders.slice(0, 5).map(o => (
+                {filteredOrders.slice(0, 5).map(o => (
                   <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid var(--color-border-subtle, #f0e6df)' }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{o.orderId || `ORD-${o.id}`}</div>
@@ -175,7 +206,7 @@ export default function OwnerDashboardPage() {
                     </div>
                   </div>
                 ))}
-                {orders.length === 0 && (
+                {filteredOrders.length === 0 && (
                   <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--color-text-muted)' }}>No live orders in database.</div>
                 )}
               </div>

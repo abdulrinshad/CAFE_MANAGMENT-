@@ -43,7 +43,6 @@ import OwnerMenuPage         from './pages/owner/OwnerMenuPage'
 import OwnerOrdersPage       from './pages/owner/OwnerOrdersPage'
 import OwnerBillingPage      from './pages/owner/OwnerBillingPage'
 import OwnerPaymentsPage     from './pages/owner/OwnerPaymentsPage'
-import OwnerInventoryPage    from './pages/owner/OwnerInventoryPage'
 import OwnerExpensesPage     from './pages/owner/OwnerExpensesPage'
 import OwnerCustomersPage    from './pages/owner/OwnerCustomersPage'
 import OwnerReportsPage      from './pages/owner/OwnerReportsPage'
@@ -394,11 +393,6 @@ export default function App() {
         <Route path="/owner/payments" element={
           <ProtectedRoute allowedRoles={['owner', 'admin']}>
             <OwnerPaymentsPage />
-          </ProtectedRoute>
-        } />
-        <Route path="/owner/inventory" element={
-          <ProtectedRoute allowedRoles={['owner', 'admin']}>
-            <OwnerInventoryPage />
           </ProtectedRoute>
         } />
         <Route path="/owner/expenses" element={
