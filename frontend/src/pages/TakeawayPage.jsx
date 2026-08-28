@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
 import './NewOrderPOSPage.css' // Reuse NewOrderPOSPage.css for identical layout styling
 
-const CATEGORIES = ['All', 'Coffee', 'Tea', 'Pastries', 'Desserts', 'Cold Beverages', 'Snacks']
 
 const getCategoryName = (product) => {
   if (product.category_name && typeof product.category_name === 'string') {
@@ -36,7 +35,20 @@ export default function TakeawayPage() {
   const navigate = useNavigate()
   const { products, createOrder, currentUser } = useApp()
 
+  const derivedCategories = useMemo(() => {
+    if (!products) return ['All']
+    const cats = new Set(products.map(getCategoryName).filter(Boolean))
+    return ['All', ...Array.from(cats)]
+  }, [products])
+
   const [activeCategory, setActiveCategory] = useState('All')
+
+  useEffect(() => {
+    if (!derivedCategories.includes(activeCategory)) {
+      setActiveCategory('All')
+    }
+  }, [derivedCategories, activeCategory])
+
   const [searchQuery, setSearchQuery] = useState('')
   const [cart, setCart] = useState([])
   const [orderNotes, setOrderNotes] = useState('')
@@ -165,7 +177,7 @@ export default function TakeawayPage() {
               outline: 'none'
             }}
           />
-          {CATEGORIES.map((cat) => (
+          {derivedCategories.map((cat) => (
             <button
               key={cat}
               className={`pos-category-pill ${activeCategory === cat ? 'active' : ''}`}
@@ -203,9 +215,11 @@ export default function TakeawayPage() {
                 </button>
               )
             })}
-            {filteredProducts.length === 0 && (
+            {products.length === 0 ? (
+              <div className="pos-empty-products">No menu items are currently available.</div>
+            ) : filteredProducts.length === 0 ? (
               <div className="pos-empty-products">No items found matching filter.</div>
-            )}
+            ) : null}
           </div>
         </div>
 

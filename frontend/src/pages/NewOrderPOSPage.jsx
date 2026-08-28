@@ -1,10 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { useApp } from '../context/AppContext'
 import './NewOrderPOSPage.css'
 
-const CATEGORIES = ['All', 'Coffee', 'Tea', 'Pastries', 'Desserts', 'Cold Beverages', 'Snacks']
 
 const getCategoryName = (product) => {
   if (product.category_name && typeof product.category_name === 'string') {
@@ -49,8 +48,21 @@ export default function NewOrderPOSPage() {
     }
   }, [currentRole, tableId, navigate])
 
+  const derivedCategories = useMemo(() => {
+    if (!products) return ['All']
+    const cats = new Set(products.map(getCategoryName).filter(Boolean))
+    return ['All', ...Array.from(cats)]
+  }, [products])
+
   const [searchQuery, setSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState('All')
+
+  useEffect(() => {
+    if (!derivedCategories.includes(activeCategory)) {
+      setActiveCategory('All')
+    }
+  }, [derivedCategories, activeCategory])
+
   const [cart, setCart] = useState([])
   const [orderNotes, setOrderNotes] = useState('')
   const [customerName, setCustomerName] = useState('')
@@ -174,7 +186,7 @@ export default function NewOrderPOSPage() {
               outline: 'none'
             }}
           />
-          {CATEGORIES.map((cat) => (
+          {derivedCategories.map((cat) => (
             <button
               key={cat}
               className={`pos-category-pill ${activeCategory === cat ? 'active' : ''}`}
@@ -212,9 +224,11 @@ export default function NewOrderPOSPage() {
                 </button>
               )
             })}
-            {filteredProducts.length === 0 && (
+            {products.length === 0 ? (
+              <div className="pos-empty-products">No menu items are currently available.</div>
+) : filteredProducts.length === 0 ? (
               <div className="pos-empty-products">No items found matching filter.</div>
-            )}
+            ) : null}
           </div>
         </div>
 

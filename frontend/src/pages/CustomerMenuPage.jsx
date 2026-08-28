@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { getCategoryName } from '../utils/categoryHelper'
 import { waiterRequestApi } from '../api'
 import './CustomerMenuPage.css'
 
-const CATEGORIES = ['All', 'Coffee', 'Tea', 'Pastries', 'Desserts', 'Cold Beverages', 'Snacks']
 
 export default function CustomerMenuPage() {
   const [searchParams] = useSearchParams()
@@ -19,7 +18,21 @@ export default function CustomerMenuPage() {
 
   // View States: 'splash' | 'menu' | 'request_loading' | 'request_sent' | 'empty'
   const [viewState, setViewState] = useState('splash')
+
+  const derivedCategories = useMemo(() => {
+    if (!products) return ['All']
+    const cats = new Set(products.map(p => getCategoryName(p.category || p.category_name || p.categoryLabel)).filter(Boolean))
+    return ['All', ...Array.from(cats)]
+  }, [products])
+
   const [activeCategory, setActiveCategory] = useState('All')
+
+  useEffect(() => {
+    if (!derivedCategories.includes(activeCategory)) {
+      setActiveCategory('All')
+    }
+  }, [derivedCategories, activeCategory])
+
   const [selectedProduct, setSelectedProduct] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [activeRequest, setActiveRequest] = useState(null)
@@ -242,7 +255,7 @@ export default function CustomerMenuPage() {
 
         {/* Horizontal Category Navigation */}
         <div className="qr-categories-bar">
-          {CATEGORIES.map((cat) => (
+          {derivedCategories.map((cat) => (
             <button
               key={cat}
               className={`qr-category-pill ${activeCategory === cat ? 'active' : ''}`}
