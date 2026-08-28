@@ -19,19 +19,46 @@ class Category(models.Model):
     """
 
     ICON_CHOICES = [
-        ('coffee_tea', 'Coffee & Tea'),
-        ('pastries',   'Pastries'),
-        ('meals',      'Meals'),
-        ('juice',      'Juice'),
-        ('dinner',     'Dinner'),
-        ('breakfast',  'Breakfast'),
-        ('snacks',     'Snacks'),
-        ('desserts',   'Desserts'),
-        ('default',    'Default'),
+        ('desserts_cake',     'Desserts — Cake'),
+        ('desserts_cupcake',  'Desserts — Cupcake'),
+        ('desserts_pastry',   'Desserts — Pastry'),
+        ('meals_plate',       'Meals — Plate'),
+        ('meals_rice',        'Meals — Rice Meal'),
+        ('meals_thali',       'Meals — Thali'),
+        ('juices_glass',      'Juices — Juice Glass'),
+        ('juices_smoothie',   'Juices — Smoothie'),
+        ('breakfast_dosa',    'Breakfast — Dosa'),
+        ('breakfast_idli',    'Breakfast — Idli'),
+        ('breakfast_plate',   'Breakfast — Breakfast Plate'),
+        ('snacks_sandwich',   'Snacks — Sandwich'),
+        ('snacks_fries',      'Snacks — Fries'),
+        ('snacks_burger',     'Snacks — Burger'),
+        ('dinner_plate',      'Dinner — Dinner Plate'),
+        ('dinner_curry',      'Dinner — Curry'),
+        ('dinner_rice',       'Dinner — Rice Dish'),
+        ('beverages_coffee',  'Beverages — Coffee Cup'),
+        ('beverages_tea',     'Beverages — Tea Cup'),
+        ('beverages_drink',   'Beverages — Drink Glass'),
+        ('bakery_bread',      'Bakery — Bread'),
+        ('bakery_croissant',  'Bakery — Croissant'),
+        ('bakery_pastry',     'Bakery — Pastry'),
+        ('salads_bowl',       'Salads — Salad Bowl'),
+        ('salads_green',      'Salads — Green Salad'),
+        ('coffee_tea',        'Coffee & Tea'),
+        ('pastries',          'Pastries'),
+        ('meals',             'Meals'),
+        ('juice',             'Juice'),
+        ('dinner',            'Dinner'),
+        ('breakfast',         'Breakfast'),
+        ('snacks',            'Snacks'),
+        ('desserts',          'Desserts'),
+        ('default_utensils',  'Default — Utensils'),
+        ('default_chef',      'Default — Chef Hat'),
+        ('default',           'Default'),
     ]
 
     name          = models.CharField(max_length=120, unique=True)
-    icon          = models.CharField(max_length=30, choices=ICON_CHOICES, default='default')
+    icon          = models.CharField(max_length=50, choices=ICON_CHOICES, default='default')
     branch        = models.ForeignKey('accounts.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='categories')
     display_order = models.PositiveSmallIntegerField(default=0, db_index=True)
     active        = models.BooleanField(default=True)
