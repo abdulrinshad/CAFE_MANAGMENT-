@@ -1030,19 +1030,20 @@ class OrderViewSet(viewsets.ModelViewSet):
                 # ── Notification ──────────────────────────────────────────────
                 try:
                     from notifications.models import Notification
-                    Notification.objects.create(
-                        type='payment_completed',
-                        title=f'Payment Complete: {order.order_number}',
-                        message=(
-                            f'Order {order.order_number} paid via {method.title()}. '
-                            f'Total: ₹{order.total}. '
-                            f'Table {order.table_label} is now available.'
-                        ),
-                        order=order,
-                        table=order.table,
-                        branch=order.branch,
-                        target_role='manager',
-                    )
+                    if not Notification.objects.filter(type='payment_completed', order=order).exists():
+                        cashier_info = f"Cashier {cashier_name}" if cashier_name else "Staff"
+                        Notification.objects.create(
+                            type='payment_completed',
+                            target_role='manager',
+                            branch=order.branch,
+                            title=f'Payment Processed: {order.order_number}',
+                            message=(
+                                f'{cashier_info} processed payment for Order #{order.order_number} via {method.upper()}. '
+                                f'Total: ₹{order.total}.'
+                            ),
+                            order=order,
+                            table=order.table,
+                        )
                 except Exception:
                     pass
 

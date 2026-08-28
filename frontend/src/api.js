@@ -400,6 +400,25 @@ export const notificationApi = {
   markAllRead: () => request('POST', '/notifications/mark_all_read/'),
 }
 
+// ── Conversation & Manager-Owner Messaging API ─────────────────────────────
+
+export const conversationApi = {
+  /** GET /conversations/ — list manager/owner conversations */
+  list: () => request('GET', '/conversations/'),
+
+  /** POST /conversations/ — create conversation / alert owner */
+  create: (data) => request('POST', '/conversations/', data),
+
+  /** GET /conversations/{id}/messages/ — get message thread & mark seen */
+  getMessages: (id) => request('GET', `/conversations/${id}/messages/`),
+
+  /** POST /conversations/{id}/messages/ — send reply to conversation */
+  reply: (id, data) => request('POST', `/conversations/${id}/messages/`, data),
+
+  /** POST /conversations/{id}/mark_seen/ — mark conversation seen */
+  markSeen: (id) => request('POST', `/conversations/${id}/mark_seen/`),
+}
+
 // ── Waiter Request API ────────────────────────────────────────────────────────
 
 export const waiterRequestApi = {

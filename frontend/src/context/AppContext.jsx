@@ -1,7 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, waiterRequestApi, authApi, branchManagerApi } from '../api'
-
-
+import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, conversationApi, waiterRequestApi, authApi, branchManagerApi } from '../api'
 
 const AppContext = createContext(null)
 
@@ -23,6 +21,7 @@ export function AppProvider({ children }) {
   const [qrCodes,        setQRCodes]       = useState([])
   const [orders,         setOrders]        = useState([])
   const [notifications,  setNotifications] = useState([])
+  const [conversations,  setConversations]  = useState([])
   const [unreadCount,    setUnreadCount]   = useState(0)
   const [waiterRequestsState, setWaiterRequests] = useState([])
   const [loading,        setLoading]       = useState({
@@ -329,7 +328,37 @@ export function AppProvider({ children }) {
     }
   }, [])
 
-  // Load on mount + start notification and request polling
+  const fetchConversations = useCallback(async () => {
+    try {
+      const list = await conversationApi.list()
+      const items = Array.isArray(list) ? list : (list.results ?? [])
+      setConversations(items)
+    } catch (err) {
+      console.warn('fetchConversations error:', err)
+    }
+  }, [])
+
+  const sendMessageToOwner = useCallback(async (data) => {
+    const created = await conversationApi.create(data)
+    await fetchConversations()
+    await fetchNotifications()
+    return created
+  }, [fetchConversations, fetchNotifications])
+
+  const replyToConversation = useCallback(async (id, messageText) => {
+    const res = await conversationApi.reply(id, { message: messageText })
+    await fetchConversations()
+    await fetchNotifications()
+    return res
+  }, [fetchConversations, fetchNotifications])
+
+  const markConversationSeen = useCallback(async (id) => {
+    const res = await conversationApi.markSeen(id)
+    await fetchConversations()
+    return res
+  }, [fetchConversations])
+
+  // Load on mount + start notification, request, and conversation polling
   useEffect(() => {
     if (!isAuthenticated) {
       if (pollRef.current) clearInterval(pollRef.current)
@@ -343,17 +372,19 @@ export function AppProvider({ children }) {
     fetchOrders()
     fetchNotifications()
     fetchWaiterRequests()
+    fetchConversations()
 
-    // Poll notifications & waiter requests every 4 seconds for live multi-waiter updates
+    // Poll notifications, waiter requests, and conversations every 4 seconds
     pollRef.current = setInterval(() => {
       fetchNotifications()
       fetchWaiterRequests()
+      fetchConversations()
     }, 4000)
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
-  }, [isAuthenticated, fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications, fetchWaiterRequests])
+  }, [isAuthenticated, fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications, fetchWaiterRequests, fetchConversations])
 
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -820,6 +851,12 @@ export function AppProvider({ children }) {
         fetchNotifications,
         markNotificationRead,
         markAllNotificationsRead,
+        // conversation & manager-owner messaging
+        conversations,
+        fetchConversations,
+        sendMessageToOwner,
+        replyToConversation,
+        markConversationSeen,
       }}
     >
       {children}

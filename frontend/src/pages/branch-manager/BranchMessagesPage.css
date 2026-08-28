@@ -1,0 +1,143 @@
+/* BranchMessagesPage.css — Warm light theme matching Artisan Brew Branch Manager aesthetic */
+
+.branch-messages-container {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 20px;
+  height: calc(100vh - 130px);
+  min-height: 550px;
+}
+
+.branch-messages-sidebar {
+  background: var(--color-white, #ffffff);
+  border: 1px solid var(--color-border, #e8dfd5);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(44, 24, 16, 0.02);
+}
+
+.btn-new-alert-cta {
+  background: var(--color-espresso, #2c1810);
+  color: #ffffff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-new-alert-cta:hover {
+  background: #1a0e09;
+}
+
+.branch-messages-thread-panel {
+  background: var(--color-white, #ffffff);
+  border: 1px solid var(--color-border, #e8dfd5);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(44, 24, 16, 0.02);
+}
+
+/* Modal styling */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(44, 24, 16, 0.4);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-card {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 480px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--color-border, #e8dfd5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--color-border-light, #f0e8e0);
+  padding-bottom: 10px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.btn-close-modal {
+  background: none;
+  border: none;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #4b5563;
+}
+
+.form-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, #e8dfd5);
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  font-weight: 500;
+  outline: none;
+  font-family: inherit;
+}
+.form-input:focus {
+  border-color: #2563eb;
+}
+
+.btn-cancel {
+  background: #ffffff;
+  border: 1px solid var(--color-border, #e8dfd5);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+}
+.btn-cancel:hover {
+  background: #f9fafb;
+}
+
+.btn-submit-alert {
+  background: var(--color-espresso, #2c1810);
+  color: #ffffff;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-submit-alert:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+}

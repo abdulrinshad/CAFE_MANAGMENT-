@@ -31,6 +31,7 @@ export default function BranchManagerLayout({
 
   const menuItems = [
     { path: '/branch/dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
+    { path: '/branch/messages', label: 'Contact Owner', icon: <RequestsIcon /> },
     { path: '/branch/staff', label: 'Staff', icon: <StaffIcon /> },
     { path: '/branch/pos', label: 'POS Terminals', icon: <POSIcon /> },
     { path: '/branch/tables', label: 'Tables', icon: <TablesIcon /> },
@@ -299,6 +300,14 @@ function POSIcon() {
       <rect x="2" y="3" width="20" height="12" rx="2" ry="2" />
       <line x1="12" y1="15" x2="12" y2="21" />
       <line x1="8" y1="21" x2="16" y2="21" />
+    </svg>
+  );
+}
+
+function RequestsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>
   );
 }

@@ -47,11 +47,13 @@ import OwnerExpensesPage     from './pages/owner/OwnerExpensesPage'
 import OwnerCustomersPage    from './pages/owner/OwnerCustomersPage'
 import OwnerReportsPage      from './pages/owner/OwnerReportsPage'
 import OwnerSettingsPage     from './pages/owner/OwnerSettingsPage'
+import OwnerMessagesPage     from './pages/owner/OwnerMessagesPage'
 import BranchManagerLoginPage     from './pages/BranchManagerLoginPage'
 import BranchManagerDashboardPage from './pages/BranchManagerDashboardPage'
 
 // ── Branch Manager Module ───────────────────────────────────────────
 import BranchDashboard   from './pages/branch-manager/BranchDashboard'
+import BranchMessagesPage from './pages/branch-manager/BranchMessagesPage'
 import Staff             from './pages/branch-manager/Staff'
 import BranchPOS         from './pages/branch-manager/BranchPOS'
 import Tables            from './pages/branch-manager/Tables'
@@ -415,11 +417,21 @@ export default function App() {
             <OwnerSettingsPage />
           </ProtectedRoute>
         } />
+        <Route path="/owner/messages" element={
+          <ProtectedRoute allowedRoles={['owner', 'admin']}>
+            <OwnerMessagesPage />
+          </ProtectedRoute>
+        } />
 
         {/* ── Branch Manager Routes ── */}
         <Route path="/branch/dashboard" element={
           <ProtectedRoute allowedRoles={['branch_manager']}>
             <BranchDashboard />
+          </ProtectedRoute>
+        } />
+        <Route path="/branch/messages" element={
+          <ProtectedRoute allowedRoles={['branch_manager']}>
+            <BranchMessagesPage />
           </ProtectedRoute>
         } />
         <Route path="/branch/staff" element={

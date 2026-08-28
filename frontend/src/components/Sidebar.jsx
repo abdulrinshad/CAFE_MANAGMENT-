@@ -34,6 +34,7 @@ const OWNER_NAV_SECTIONS = [
   {
     label: 'OPERATIONS',
     items: [
+      { path: '/owner/messages',  label: 'Branch Messages', icon: <RequestsIcon /> },
       { path: '/owner/menu',      label: 'Menu',      icon: <MenuIcon /> },
       { path: '/owner/orders',    label: 'Orders',    icon: <OrdersIcon /> },
       { path: '/owner/billing',   label: 'Billing',   icon: <BillingIcon /> },
