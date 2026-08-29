@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, conversationApi, waiterRequestApi, authApi, branchManagerApi } from '../api'
+import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, conversationApi, waiterRequestApi, authApi, branchManagerApi, settingsApi } from '../api'
 
 const AppContext = createContext(null)
 
@@ -29,6 +29,9 @@ export function AppProvider({ children }) {
   })
   const [apiError, setApiError] = useState(null)
   const pollRef = useRef(null)
+
+  // ── Settings State ────────────────────────────────────────────────────────
+  const [ownerSettings, setOwnerSettings] = useState(null)
 
   // ── Auth Context State ──────────────────────────────────────────────────
   const [currentUser, setCurrentUser] = useState(() => {
@@ -153,6 +156,7 @@ export function AppProvider({ children }) {
     setCurrentRole('branch_manager')
     setCurrentBranchManager(res.manager)
     setCurrentBranch(res.branch)
+    fetchOwnerSettings()
     return res
   }
 
@@ -169,19 +173,30 @@ export function AppProvider({ children }) {
     setCurrentBranchRaw(null)
   }, [])
 
+  const fetchOwnerSettings = useCallback(async () => {
+    if (!localStorage.getItem('artisan_access')) return
+    try {
+      const data = await settingsApi.get()
+      setOwnerSettings(data)
+    } catch (err) {
+      console.error("Failed to load owner settings:", err)
+    }
+  }, [])
+
   const refreshUser = useCallback(async () => {
     if (localStorage.getItem('artisan_access')) {
       try {
         const user = await authApi.me()
         setCurrentUser(user)
         setCurrentRole(user.role)
+        fetchOwnerSettings()
       } catch (err) {
         console.error("Failed to load user profile:", err)
         logout()
       }
     }
     setAuthLoading(false)
-  }, [logout])
+  }, [logout, fetchOwnerSettings])
 
   useEffect(() => {
     refreshUser()
@@ -194,6 +209,7 @@ export function AppProvider({ children }) {
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
     setCurrentUser(res.user)
     setCurrentRole(res.user.role)
+    fetchOwnerSettings()
     return res.user
   }
 
@@ -205,6 +221,7 @@ export function AppProvider({ children }) {
     setCurrentUser(res.user)
     setCurrentWaiter(res.waiter)
     setCurrentRole('waiter')
+    fetchOwnerSettings()
     return res.waiter
   }
 
@@ -782,6 +799,10 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider
       value={{
+        ownerSettings,
+        fetchOwnerSettings,
+        taxRate: ownerSettings ? Number(ownerSettings.default_tax_rate) : 5.0,
+        currency: ownerSettings?.currency || 'INR',
         // data
         products,
         categories,

@@ -26,7 +26,15 @@ export default function CheckoutPage() {
   const params = useParams()
   const orderId = params.orderId || params.id
   const navigate = useNavigate()
-  const { completeOrder } = useApp()
+  const { completeOrder, ownerSettings, taxRate } = useApp()
+
+  const activePaymentMethods = PAYMENT_METHODS.filter(pm => {
+    if (!ownerSettings) return true
+    if (pm.id === 'cash') return ownerSettings.pm_cash
+    if (pm.id === 'card') return ownerSettings.pm_card
+    if (pm.id === 'upi') return ownerSettings.pm_upi
+    return true
+  })
 
   const [order,         setOrder]         = useState(null)
   const [invoice,       setInvoice]       = useState(null)
@@ -162,7 +170,7 @@ export default function CheckoutPage() {
           <div className="checkout-section">
             <div className="checkout-section-title">Payment Method</div>
             <div className="checkout-methods-grid">
-              {PAYMENT_METHODS.map((m) => (
+              {activePaymentMethods.map((m) => (
                 <button
                   key={m.id}
                   className={`checkout-method-btn ${paymentMethod === m.id ? 'active' : ''}`}
@@ -294,7 +302,7 @@ export default function CheckoutPage() {
                   <span>₹{Number(invoice.subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="checkout-summary-row">
-                  <span>Tax (5% GST)</span>
+                  <span>Tax ({taxRate}% GST)</span>
                   <span>₹{Number(invoice.tax_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="checkout-summary-row checkout-summary-row--total">

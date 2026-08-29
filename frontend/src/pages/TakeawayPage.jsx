@@ -32,7 +32,7 @@ const getCategoryIcon = (product) => {
 
 export default function TakeawayPage() {
   const navigate = useNavigate()
-  const { products, createOrder, currentUser } = useApp()
+  const { products, createOrder, currentUser, taxRate } = useApp()
 
   const derivedCategories = useMemo(() => {
     if (!products) return ['All']
@@ -116,7 +116,7 @@ export default function TakeawayPage() {
 
   // Calculations
   const subtotal = cart.reduce((acc, curr) => acc + curr.total, 0)
-  const tax = Math.round(subtotal * 0.05)
+  const tax = Math.round(subtotal * (taxRate / 100))
   const total = subtotal + tax
 
   const handleSendOrder = async () => {
@@ -302,7 +302,7 @@ export default function TakeawayPage() {
                 <span>₹{subtotal}</span>
               </div>
               <div className="pos-total-row">
-                <span>GST (5%)</span>
+                <span>GST ({taxRate}%)</span>
                 <span>₹{tax}</span>
               </div>
               <div className="pos-total-row grand-total">

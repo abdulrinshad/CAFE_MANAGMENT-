@@ -10,7 +10,7 @@ from decimal import Decimal
 import datetime
 
 from accounts.models import (
-    Branch, BranchManager, Waiter, Cashier, KitchenStaff, POSTerminal
+    Branch, BranchManager, Waiter, Cashier, KitchenStaff, POSTerminal, BranchSettings
 )
 from accounts.serializers import (
     WaiterSerializer, WaiterSafeSerializer,
@@ -1023,13 +1023,23 @@ class BranchSettingsView(APIView):
         branch = get_manager_branch(request)
         if not branch:
             return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
+        settings = BranchSettings.load_for_branch(branch)
         return Response({
             "id": branch.id,
             "name": branch.name,
             "code": branch.code,
             "address": branch.address,
             "phone": branch.phone,
-            "active": branch.active
+            "active": branch.active,
+            "email": settings.manager_email,
+            "openingTime": settings.opening_time,
+            "closingTime": settings.closing_time,
+            "taxGST": float(settings.tax_gst),
+            "serviceCharge": float(settings.service_charge),
+            "alert_customer_assistance": settings.alert_customer_assistance,
+            "alert_bill_requests": settings.alert_bill_requests,
+            "alert_low_stock": settings.alert_low_stock,
+            "currency": "INR"
         })
 
     def patch(self, request, *args, **kwargs):
@@ -1037,22 +1047,62 @@ class BranchSettingsView(APIView):
         if not branch:
             return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
 
-        name = request.data.get('name')
+        settings = BranchSettings.load_for_branch(branch)
+
         address = request.data.get('address')
         phone = request.data.get('phone')
+        email = request.data.get('email')
+        opening_time = request.data.get('openingTime')
+        closing_time = request.data.get('closingTime')
+        tax_gst = request.data.get('taxGST')
+        service_charge = request.data.get('serviceCharge')
+        
+        alert_customer_assistance = request.data.get('alert_customer_assistance')
+        alert_bill_requests = request.data.get('alert_bill_requests')
+        alert_low_stock = request.data.get('alert_low_stock')
 
-        if name: branch.name = name
-        if address is not None: branch.address = address
-        if phone is not None: branch.phone = phone
-
+        if address is not None:
+            branch.address = address
+        if phone is not None:
+            branch.phone = phone
         branch.save()
+
+        if email is not None:
+            settings.manager_email = email
+        if opening_time is not None:
+            settings.opening_time = opening_time
+        if closing_time is not None:
+            settings.closing_time = closing_time
+        if tax_gst is not None:
+            settings.tax_gst = Decimal(str(tax_gst))
+        if service_charge is not None:
+            settings.service_charge = Decimal(str(service_charge))
+        
+        if alert_customer_assistance is not None:
+            settings.alert_customer_assistance = bool(alert_customer_assistance)
+        if alert_bill_requests is not None:
+            settings.alert_bill_requests = bool(alert_bill_requests)
+        if alert_low_stock is not None:
+            settings.alert_low_stock = bool(alert_low_stock)
+        
+        settings.save()
+
         return Response({
             "id": branch.id,
             "name": branch.name,
             "code": branch.code,
             "address": branch.address,
             "phone": branch.phone,
-            "active": branch.active
+            "active": branch.active,
+            "email": settings.manager_email,
+            "openingTime": settings.opening_time,
+            "closingTime": settings.closing_time,
+            "taxGST": float(settings.tax_gst),
+            "serviceCharge": float(settings.service_charge),
+            "alert_customer_assistance": settings.alert_customer_assistance,
+            "alert_bill_requests": settings.alert_bill_requests,
+            "alert_low_stock": settings.alert_low_stock,
+            "currency": "INR"
         })
 
     def put(self, request, *args, **kwargs):

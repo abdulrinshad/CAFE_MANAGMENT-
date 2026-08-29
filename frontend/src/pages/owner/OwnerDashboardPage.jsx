@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../layouts/AdminLayout'
 import { useApp } from '../../context/AppContext'
-import { dashboardApi } from '../../api'
+import { dashboardApi, branchApi } from '../../api'
 import '../DashboardPage.css'
 import './owner.css'
 
@@ -68,7 +68,7 @@ function KPICard({ label, value, sub, badge, badgeType = 'green' }) {
 
 export default function OwnerDashboardPage() {
   const navigate = useNavigate()
-  const { currentUser, orders, tables, waiterRequests, api } = useApp()
+  const { currentUser, orders, tables, waiterRequests } = useApp()
   const [stats, setStats] = useState(null)
   const [chartData, setChartData] = useState([])
   const [chartPeriod, setChartPeriod] = useState('weekly')
@@ -112,8 +112,8 @@ export default function OwnerDashboardPage() {
 
   const fetchBranches = async () => {
     try {
-      const res = await api.get('/accounts/branches/')
-      setBranches(res.data)
+      const res = await branchApi.list()
+      setBranches(Array.isArray(res) ? res : (res.results || []))
     } catch (err) {
       console.error('Failed to fetch branches', err)
     }

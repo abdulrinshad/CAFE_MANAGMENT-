@@ -85,7 +85,7 @@ function billRequestStatusLabel(rawStatus) {
 export default function OrderDetailPage() {
   const { id }   = useParams()
   const navigate = useNavigate()
-  const { currentRole } = useApp()
+  const { currentRole, taxRate } = useApp()
 
   const [order,       setOrder]       = useState(null)
   const [loading,     setLoading]     = useState(true)
@@ -318,7 +318,7 @@ export default function OrderDetailPage() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const liveSubtotal = order ? order.items.reduce((s, it) => s + it.subtotal, 0) : 0
-  const liveTax      = Math.round(liveSubtotal * 0.05 * 100) / 100
+  const liveTax      = Math.round(liveSubtotal * (taxRate / 100) * 100) / 100
   const liveTotal    = liveSubtotal + liveTax
 
   // ── Loading / error states ────────────────────────────────────────────────
@@ -704,7 +704,7 @@ export default function OrderDetailPage() {
                 <span>₹{liveSubtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <div className="summary-row">
-                <span>Tax (5% GST)</span>
+                <span>Tax ({taxRate}% GST)</span>
                 <span>₹{liveTax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
               </div>
               <hr className="order-detail__divider" />

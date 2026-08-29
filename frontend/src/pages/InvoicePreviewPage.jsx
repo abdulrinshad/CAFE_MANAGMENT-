@@ -9,11 +9,13 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import AdminLayout from '../layouts/AdminLayout'
 import { invoiceApi, orderApi } from '../api'
+import { useApp } from '../context/AppContext'
 import './InvoicePreviewPage.css'
 
 export default function InvoicePreviewPage() {
   const { id }   = useParams()   // order ID
   const navigate = useNavigate()
+  const { taxRate, ownerSettings } = useApp()
 
   const [invoice,  setInvoice]  = useState(null)
   const [loading,  setLoading]  = useState(true)
@@ -124,7 +126,7 @@ export default function InvoicePreviewPage() {
         `Table: ${table}\n\n` +
         `Items:\n${itemsText}\n\n` +
         `Subtotal: ₹${sub}\n` +
-        `GST (5%): ₹${tax}\n` +
+        `GST (${taxRate}%): ₹${tax}\n` +
         `Total: ₹${total}\n\n` +
         `Please review your bill.\n\n` +
         `Thank you,\n` +
@@ -320,7 +322,7 @@ export default function InvoicePreviewPage() {
                   <span>₹{subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="totals-row">
-                  <span>GST (5%)</span>
+                  <span>GST ({taxRate}%)</span>
                   <span>₹{tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="totals-row total-grand">

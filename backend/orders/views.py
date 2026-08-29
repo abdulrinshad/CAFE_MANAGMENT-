@@ -621,12 +621,15 @@ class OrderViewSet(viewsets.ModelViewSet):
                 f'{item.quantity}× {item.product_name} (₹{item.unit_price})'
                 for item in order.items.all()
             )
+            from accounts.models import OwnerSettings
+            owner_settings = OwnerSettings.load()
+            tax_rate_str = f"{owner_settings.default_tax_rate}%"
             message = (
                 f'Order {order.order_number} | '
                 f'Customer: {order.customer_name or "Guest"} | '
                 f'Items: {items_text} | '
                 f'Subtotal: ₹{order.subtotal} | '
-                f'Tax (5%%): ₹{order.tax_amount} | '
+                f'Tax ({tax_rate_str}): ₹{order.tax_amount} | '
                 f'Total: ₹{order.total}'
             )
 

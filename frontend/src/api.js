@@ -557,3 +557,11 @@ export const cashierApi = {
   setActive: (id, is_active) => request('PATCH', `/cashiers/${id}/set_active/`, { is_active }),
 }
 
+// ── Settings API ──────────────────────────────────────────────────────────────
+
+export const settingsApi = {
+  get: () => request('GET', '/owner/settings/'),
+  update: (data) => request('PUT', '/owner/settings/', data),
+}
+
+

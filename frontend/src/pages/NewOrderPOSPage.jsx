@@ -34,7 +34,7 @@ const getCategoryIcon = (product) => {
 export default function NewOrderPOSPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { products, createOrder, currentUser, tables, currentRole } = useApp()
+  const { products, createOrder, currentUser, tables, currentRole, taxRate } = useApp()
 
   const tableId = searchParams.get('table')
   const isDineIn = !!tableId
@@ -130,7 +130,7 @@ export default function NewOrderPOSPage() {
 
   // Calculations
   const subtotal = cart.reduce((acc, curr) => acc + curr.total, 0)
-  const tax = Math.round(subtotal * 0.05)
+  const tax = Math.round(subtotal * (taxRate / 100))
   const total = subtotal + tax
 
   const handleSendOrder = async () => {
@@ -331,7 +331,7 @@ export default function NewOrderPOSPage() {
               <span>₹{subtotal.toLocaleString('en-IN')}</span>
             </div>
             <div className="pos-summary-row">
-              <span>Tax (5% GST)</span>
+              <span>Tax ({taxRate}% GST)</span>
               <span>₹{tax.toLocaleString('en-IN')}</span>
             </div>
             <hr className="pos-summary-divider" />
