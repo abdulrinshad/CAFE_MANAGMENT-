@@ -28,17 +28,18 @@ def order_notification(sender, instance, created, **kwargs):
             return
 
         table_label = fresh.table_label
+        order_branch = fresh.branch or (fresh.table.branch if fresh.table else None)
 
         if created:
-            if not Notification.objects.filter(
-                type='new_order',
-                order=fresh
-            ).exclude(status__in=[Notification.STATUS_COMPLETED, Notification.STATUS_DISMISSED]).exists():
+            if not Notification.objects.filter(type='new_order', order=fresh).exists():
+                waiter_info = f"Waiter {fresh.waiter_name}" if fresh.waiter_name else "Staff"
                 Notification.objects.create(
                     type='new_order',
+                    target_role='cashier_manager',
+                    branch=order_branch,
                     title=f'New Order: {fresh.order_number}',
                     message=(
-                        f'New order received for {table_label}. '
+                        f'{waiter_info} placed a new order for {table_label}. '
                         f'Total: \u20b9{fresh.total}. '
                         f'{fresh.item_count} item(s).'
                     ),
@@ -47,34 +48,33 @@ def order_notification(sender, instance, created, **kwargs):
                 )
         else:
             # Status-change notifications
-            status_messages = {
-                'preparing': (
-                    'status_changed',
-                    f'Order {fresh.order_number} is now being prepared.',
-                ),
-                'ready': (
-                    'status_changed',
-                    f'Order {fresh.order_number} is ready for pickup/delivery.',
-                ),
-                'completed': (
-                    'payment_completed',
-                    f'Payment completed for {fresh.order_number}. '
-                    f'Total: \u20b9{fresh.total}.',
-                ),
-                'cancelled': (
-                    'status_changed',
-                    f'Order {fresh.order_number} has been cancelled.',
-                ),
-            }
-            if fresh.status in status_messages:
-                ntype, msg = status_messages[fresh.status]
-                if not Notification.objects.filter(
-                    type=ntype,
-                    order=fresh,
-                    message=msg
-                ).exclude(status__in=[Notification.STATUS_COMPLETED, Notification.STATUS_DISMISSED]).exists():
+            if fresh.status == 'completed':
+                if not Notification.objects.filter(type='payment_completed', order=fresh).exists():
+                    cashier_info = f"Cashier {fresh.cashier_name}" if fresh.cashier_name else "Staff"
                     Notification.objects.create(
-                        type=ntype,
+                        type='payment_completed',
+                        target_role='manager',
+                        branch=order_branch,
+                        title=f'Payment Processed: {fresh.order_number}',
+                        message=(
+                            f'{cashier_info} processed payment for Order #{fresh.order_number}. '
+                            f'Total: \u20b9{fresh.total}.'
+                        ),
+                        order=fresh,
+                        table=fresh.table,
+                    )
+            elif fresh.status in ['preparing', 'ready', 'cancelled']:
+                status_messages = {
+                    'preparing': f'Order {fresh.order_number} is now being prepared.',
+                    'ready':     f'Order {fresh.order_number} is ready for pickup/delivery.',
+                    'cancelled': f'Order {fresh.order_number} has been cancelled.',
+                }
+                msg = status_messages[fresh.status]
+                if not Notification.objects.filter(type='status_changed', order=fresh, message=msg).exists():
+                    Notification.objects.create(
+                        type='status_changed',
+                        target_role='staff',
+                        branch=order_branch,
                         title=f'Order {fresh.order_number}: {fresh.get_status_display()}',
                         message=msg,
                         order=fresh,

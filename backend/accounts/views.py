@@ -635,14 +635,8 @@ class OwnerPOSTerminalViewSet(viewsets.ModelViewSet):
         terminal.status = status_val.lower()
         terminal.save(update_fields=['status', 'updated_at'])
         return Response(POSTerminalSerializer(terminal).data)
-
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 from .models import OwnerSettings
 from .serializers import OwnerSettingsSerializer
-from rest_framework.permissions import IsAuthenticated
 
 class OwnerSettingsView(APIView):
     def get_permissions(self):
@@ -662,4 +656,3 @@ class OwnerSettingsView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-

@@ -78,7 +78,6 @@ export default function CheckoutPage() {
     load()
     return () => { cancelled = true }
   }, [orderId])
-
   // ── Derived ────────────────────────────────────────────────────────────────
   const amountDue   = invoice ? Number(invoice.total) : (order ? Number(order.total) : 0)
   const orderNumber = order   ? (order.order_number || `#${orderId}`) : `#${orderId}`

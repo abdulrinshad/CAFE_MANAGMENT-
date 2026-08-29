@@ -36,8 +36,18 @@ export default function TopHeader({ searchPlaceholder = 'Search orders, items...
       await markNotificationRead(notif.id)
     }
     setBellOpen(false)
-    if (notif.order) {
-      navigate(`/orders/${notif.order}`)
+    if (notif.type === 'owner_message' || notif.type === 'owner_reply' || notif.conversation) {
+      if (window.location.pathname.startsWith('/branch')) {
+        navigate('/branch/messages')
+      } else {
+        navigate('/owner/messages')
+      }
+    } else if (notif.order) {
+      if (window.location.pathname.startsWith('/pos') || window.location.pathname.startsWith('/cashier')) {
+        navigate(`/orders/${notif.order}/invoice`)
+      } else {
+        navigate(`/orders/${notif.order}`)
+      }
     }
   }
 
@@ -45,9 +55,13 @@ export default function TopHeader({ searchPlaceholder = 'Search orders, items...
     switch (type) {
       case 'new_order':         return '🛎️'
       case 'status_changed':    return '🔄'
-      case 'payment_completed': return '✅'
+      case 'payment_completed':
+      case 'payment_processed': return '✅'
       case 'bill_requested':    return '💵'
       case 'table_attention':   return '⚠️'
+      case 'owner_message':     return '✉️'
+      case 'owner_reply':       return '💬'
+      case 'system_alert':      return '🚨'
       default:                  return '🔔'
     }
   }

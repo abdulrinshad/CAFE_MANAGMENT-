@@ -480,13 +480,9 @@ class POSTerminalSerializer(serializers.ModelSerializer):
         ret['assignedUser'] = instance.assigned_cashier.name if instance.assigned_cashier else "Not Assigned"
         return ret
 
-
-
-from rest_framework import serializers
 from .models import OwnerSettings
 
 class OwnerSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = OwnerSettings
         fields = '__all__'
-

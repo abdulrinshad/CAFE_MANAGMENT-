@@ -195,8 +195,6 @@ class POSTerminal(models.Model):
     def __str__(self):
         return f"{self.name} — {self.branch.name}"
 
-
-
 class OwnerSettings(models.Model):
     business_name = models.CharField(max_length=255, default='Artisan Brew')
     owner_name = models.CharField(max_length=255, default='Dilfa')
@@ -252,6 +250,7 @@ class OwnerSettings(models.Model):
         return obj
 
 
+
 class BranchSettings(models.Model):
     branch = models.OneToOneField(
         Branch,
@@ -282,5 +281,3 @@ class BranchSettings(models.Model):
     def load_for_branch(cls, branch):
         obj, created = cls.objects.get_or_create(branch=branch)
         return obj
-
-

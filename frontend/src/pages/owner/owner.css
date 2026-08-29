@@ -417,7 +417,8 @@
   padding: 10px 14px;
   border-radius: 8px;
   font-size: 13px;
-  color: var(--color-text-secondary);
+  font-weight: 600;
+  color: #374151;
   cursor: pointer;
   border: none;
   background: none;
@@ -426,11 +427,11 @@
   font-family: var(--font-sans);
   transition: background var(--transition), color var(--transition);
 }
-.owner-settings-nav-item:hover { background: var(--color-cream); color: var(--color-espresso); }
+.owner-settings-nav-item:hover { background: var(--color-cream); color: #111827; }
 .owner-settings-nav-item--active {
-  background: var(--color-peach-active);
-  color: var(--color-espresso);
-  font-weight: 500;
+  background: rgba(74, 44, 26, 0.1);
+  color: var(--color-espresso, #2c1810);
+  font-weight: 700;
 }
 
 /* ── Settings Section ── */
@@ -444,8 +445,8 @@
 .owner-settings-block__title {
   font-family: var(--font-serif);
   font-size: 15px;
-  font-weight: 600;
-  color: var(--color-espresso);
+  font-weight: 700;
+  color: var(--color-espresso, #2c1810);
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--color-border-light);
@@ -459,8 +460,8 @@
   gap: 12px;
 }
 .owner-settings-row:last-child { border-bottom: none; }
-.owner-settings-row__label { font-size: 13px; color: var(--color-text-primary); font-weight: 500; }
-.owner-settings-row__sub { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
+.owner-settings-row__label { font-size: 13px; color: #111827; font-weight: 600; }
+.owner-settings-row__sub { font-size: 11px; color: #4b5563; margin-top: 2px; }
 
 /* ── Performance Bar ── */
 .perf-bar { display: flex; align-items: center; gap: 8px; }

@@ -34,6 +34,7 @@ const OWNER_NAV_SECTIONS = [
   {
     label: 'OPERATIONS',
     items: [
+      { path: '/owner/messages',  label: 'Branch Messages', icon: <RequestsIcon /> },
       { path: '/owner/menu',      label: 'Menu',      icon: <MenuIcon /> },
       { path: '/owner/orders',    label: 'Orders',    icon: <OrdersIcon /> },
       { path: '/owner/billing',   label: 'Billing',   icon: <BillingIcon /> },
@@ -76,26 +77,29 @@ export default function Sidebar({ isOpen, onClose }) {
 
   const cashierItems = [
     { path: '/pos/dashboard',        label: 'Dashboard',         icon: <DashboardIcon />, exact: true },
-    { path: '/orders/new',           label: '+ New Order',       icon: <PlusIcon /> },
+    { path: '/orders/new',           label: 'New Order',         icon: <PlusIcon />, isPrimaryCta: true },
     { path: '/cashier/online-orders',label: 'Online Orders',     icon: <RequestsIcon /> },
-    { path: '/cashier/bill-requests',label: 'Bill Requests',     icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
+    { path: '/cashier/bill-requests',label: 'Bill Requests',    icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
     { path: '/cashier/orders',       label: 'Orders',            icon: <OrdersIcon /> },
-    { path: '/cashier/transactions', label: 'Transactions',      icon: <PaymentsIcon /> },
-    { path: getSettingsRoute(currentRole),     label: 'Settings',          icon: <SettingsIcon />, matchPath: '/settings' },
+    { path: '/cashier/tables',       label: 'Tables',            icon: <TablesIcon /> },
+    { path: '/cashier/transactions', label: 'Transactions',     icon: <PaymentsIcon /> },
+    { path: '/menu',                 label: 'View Menu',        icon: <MenuIcon /> },
+    { path: getSettingsRoute(currentRole), label: 'Settings',    icon: <SettingsIcon />, matchPath: '/settings' },
   ]
 
   const items = isCashier
     ? cashierItems
     : (currentRole === 'waiter' || !isOwner
       ? [
-          { path: '/dashboard',     label: 'Dashboard',        icon: <DashboardIcon />, exact: true },
-          { path: '/menu',          label: 'View Menu',        icon: <MenuIcon /> },
-          { path: '/tables',        label: 'My Tables',        icon: <TablesIcon /> },
-          { path: '/orders',        label: 'My Orders',        icon: <OrdersIcon /> },
-          { path: '/requests',      label: 'Pending Requests', icon: <RequestsIcon />, badge: activeRequestsCount > 0 ? activeRequestsCount : null },
-          { path: '/orders/new',    label: 'New Order',        icon: <PlusIcon />, isPrimaryCta: true },
-          { path: '/bill-requests', label: 'Bill Requests',    icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
-          { path: '/qr-codes',      label: 'QR Codes',         icon: <QRIcon /> },
+          { path: '/dashboard',            label: 'Dashboard',        icon: <DashboardIcon />, exact: true },
+          { path: '/orders/new',           label: 'New Order',        icon: <PlusIcon />, isPrimaryCta: true },
+          { path: '/tables',               label: 'My Tables',        icon: <TablesIcon /> },
+          { path: '/orders',               label: 'My Orders',        icon: <OrdersIcon /> },
+          { path: '/requests',             label: 'Pending Requests', icon: <RequestsIcon />, badge: activeRequestsCount > 0 ? activeRequestsCount : null },
+          { path: '/bill-requests',        label: 'Bill Requests',    icon: <BillingIcon />, badge: activeBillRequestsCount > 0 ? activeBillRequestsCount : null },
+          { path: '/cashier/transactions', label: 'Transactions',     icon: <PaymentsIcon /> },
+          { path: '/menu',                 label: 'View Menu',        icon: <MenuIcon /> },
+          { path: '/qr-codes',             label: 'QR Codes',         icon: <QRIcon /> },
         ]
       : NAV_ITEMS)
 
@@ -116,7 +120,7 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
         <div className="sidebar__brand-text">
           <span className="sidebar__brand-name">
-            {isCashier ? 'Artisan POS' : currentRole === 'waiter' ? 'Artisan POS' : 'Artisan Brew'}
+            Artisan Brew
           </span>
           <span className="sidebar__brand-sub">
             {isCashier ? 'Cashier Terminal' : currentRole === 'waiter' ? 'Waiter Terminal' : 'Management Suite'}
