@@ -7,7 +7,7 @@ import './ActiveOrderPage.css'
 export default function ActiveOrderPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { orders, updateTable, tables } = useApp()
+  const { orders, updateTable, tables, taxRate } = useApp()
 
   // Find order
   const order = orders ? orders.find((o) => o.id === id || o.id === `ORD-${id}`) : null
@@ -51,7 +51,7 @@ export default function ActiveOrderPage() {
 
   // Calculate totals
   const subtotal = items.reduce((acc, curr) => acc + curr.total, 0)
-  const tax = Math.round(subtotal * 0.05)
+  const tax = Math.round(subtotal * (taxRate / 100))
   const total = subtotal + tax
 
   const handleGenerateBillSubmit = (e) => {
@@ -127,7 +127,7 @@ export default function ActiveOrderPage() {
                 <span>₹{subtotal.toLocaleString()}</span>
               </div>
               <div className="summary-detail-row">
-                <span>CGST & SGST (5%)</span>
+                <span>CGST & SGST ({taxRate}%)</span>
                 <span>₹{tax.toLocaleString()}</span>
               </div>
               <hr className="summary-divider" />

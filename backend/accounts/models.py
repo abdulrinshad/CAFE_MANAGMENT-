@@ -204,7 +204,7 @@ class OwnerSettings(models.Model):
     phone = models.CharField(max_length=50, default='+91 98765 43200')
     gstin = models.CharField(max_length=100, default='29ARTBR1234F1Z9')
     address = models.TextField(default='Bengaluru, Karnataka')
-    website = models.URLField(default='www.artisanbrew.com')
+    website = models.URLField(default='https://www.artisanbrew.com', blank=True, null=True)
     currency = models.CharField(max_length=10, default='INR')
     
     # Branch settings
@@ -250,4 +250,37 @@ class OwnerSettings(models.Model):
     def load(cls):
         obj, created = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class BranchSettings(models.Model):
+    branch = models.OneToOneField(
+        Branch,
+        on_delete=models.CASCADE,
+        related_name='branch_settings'
+    )
+    manager_email = models.EmailField(blank=True, default='')
+    opening_time = models.CharField(max_length=20, default='09:00')
+    closing_time = models.CharField(max_length=20, default='23:00')
+    tax_gst = models.DecimalField(max_digits=5, decimal_places=2, default=18.0)
+    service_charge = models.DecimalField(max_digits=5, decimal_places=2, default=5.0)
+    
+    alert_customer_assistance = models.BooleanField(default=True)
+    alert_bill_requests = models.BooleanField(default=True)
+    alert_low_stock = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Branch Settings'
+        verbose_name_plural = 'Branch Settings'
+
+    def __str__(self):
+        return f"Settings for {self.branch.name}"
+
+    @classmethod
+    def load_for_branch(cls, branch):
+        obj, created = cls.objects.get_or_create(branch=branch)
+        return obj
+
 

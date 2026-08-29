@@ -132,8 +132,11 @@ class Order(models.Model):
 
     def recalculate_totals(self):
         """Recompute subtotal, tax, total from order items and save."""
+        from accounts.models import OwnerSettings
+        owner_settings = OwnerSettings.load()
+        tax_rate = Decimal(str(owner_settings.default_tax_rate)) / Decimal('100.0')
         subtotal = sum(item.subtotal for item in self.items.all())
-        tax      = subtotal * Decimal('0.05')  # 5% GST
+        tax      = subtotal * tax_rate
         self.subtotal   = subtotal
         self.tax_amount = tax.quantize(Decimal('0.01'))
         self.total      = (subtotal + tax).quantize(Decimal('0.01'))

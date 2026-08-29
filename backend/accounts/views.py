@@ -77,6 +77,7 @@ class WaiterViewSet(viewsets.ModelViewSet):
     queryset = Waiter.objects.all()
     serializer_class = WaiterSerializer
     permission_classes = [IsAdminOrManager]
+    pagination_class = None
 
     def get_queryset(self):
         queryset = Waiter.objects.all().order_by('-created_at')
@@ -423,6 +424,7 @@ class CashierViewSet(viewsets.ModelViewSet):
     queryset = Cashier.objects.select_related('branch').all()
     serializer_class = CashierSerializer
     permission_classes = [IsAdminOrManager]
+    pagination_class = None
 
     def get_queryset(self):
         qs = Cashier.objects.select_related('branch').all().order_by('-created_at')
@@ -458,6 +460,7 @@ class BranchViewSet(viewsets.ModelViewSet):
     """
     queryset = Branch.objects.all().order_by('name')
     permission_classes = [IsAdmin]
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -510,6 +513,7 @@ class BranchManagerViewSet(viewsets.ModelViewSet):
     queryset = BranchManager.objects.select_related('branch').all()
     serializer_class = BranchManagerSerializer
     permission_classes = [IsAdmin]
+    pagination_class = None
 
     def get_queryset(self):
         qs = BranchManager.objects.select_related('branch').all()
@@ -641,7 +645,10 @@ from .serializers import OwnerSettingsSerializer
 from rest_framework.permissions import IsAuthenticated
 
 class OwnerSettingsView(APIView):
-    permission_classes = [IsAuthenticated]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [IsAuthenticated()]
+        return [IsAdmin()]
 
     def get(self, request):
         settings = OwnerSettings.load()

@@ -4,18 +4,34 @@ import { branchManagerService } from '../../services/branchManagerService';
 import '../../pages/owner/owner.css';
 
 export default function BranchSettings() {
-  const [branchInfo, setBranchInfo] = useState({});
+  const [branchInfo, setBranchInfo] = useState({
+    name: '',
+    address: '',
+    phone: '',
+    email: '',
+    openingTime: '09:00',
+    closingTime: '23:00',
+    taxGST: 18,
+    currency: 'INR',
+    serviceCharge: 5,
+    alert_customer_assistance: true,
+    alert_bill_requests: true,
+    alert_low_stock: true,
+  });
   const [activeTab, setActiveTab] = useState('profile');
   const [saveSuccess, setSaveSuccess] = useState(false);
-
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const loadSettings = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const data = await branchManagerService.getBranchInfo();
       setBranchInfo(data || {});
     } catch (err) {
       console.error(err);
+      setError('Unable to load branch settings. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -28,11 +44,13 @@ export default function BranchSettings() {
   const handleSave = async (e) => {
     e.preventDefault();
     try {
-      await branchManagerService.updateBranchSettings(branchInfo);
+      setError(null);
+      const updated = await branchManagerService.updateBranchSettings(branchInfo);
+      setBranchInfo(updated || branchInfo);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
-      alert(err.message || 'Failed to save settings');
+      setError(err.message || 'Failed to save settings');
     }
   };
 
@@ -40,7 +58,19 @@ export default function BranchSettings() {
     return (
       <BranchManagerLayout>
         <div className="owner-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh', color: 'var(--color-espresso)' }}>
-          <h3>Loading settings...</h3>
+          <h3>Loading branch settings...</h3>
+        </div>
+      </BranchManagerLayout>
+    );
+  }
+
+  if (error && !branchInfo.name) {
+    return (
+      <BranchManagerLayout>
+        <div className="owner-page" style={{ padding: '20px', textAlign: 'center' }}>
+          <h2 style={{ color: 'var(--color-red)' }}>Error</h2>
+          <p>{error}</p>
+          <button className="btn-primary" onClick={loadSettings} style={{ marginTop: '15px' }}>Retry</button>
         </div>
       </BranchManagerLayout>
     );
@@ -59,9 +89,13 @@ export default function BranchSettings() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h1 className="owner-page-header__title">Branch Settings</h1>
-            <p className="owner-page-header__sub">Configure contact card, operating times, tax schemes, and system alerts for Kochi.</p>
+            <p className="owner-page-header__sub">
+              Configure contact card, operating times, tax schemes, and system alerts for {branchInfo.name || 'your branch'}.
+            </p>
           </div>
         </div>
+
+        {error && <div style={{color: 'red', marginTop: 15, padding: '10px 15px', background: '#ffebeb', borderRadius: 6}}>{error}</div>}
 
         {/* Settings Navigation */}
         <div className="owner-settings-layout">
@@ -70,6 +104,7 @@ export default function BranchSettings() {
             {tabs.map(tab => (
               <button
                 key={tab.key}
+                type="button"
                 className={`owner-settings-nav-item ${activeTab === tab.key ? 'owner-settings-nav-item--active' : ''}`}
                 onClick={() => setActiveTab(tab.key)}
               >
@@ -103,6 +138,7 @@ export default function BranchSettings() {
                       <label className="form-label">Street Address</label>
                       <textarea
                         className="form-textarea"
+                        required
                         value={branchInfo.address || ''}
                         onChange={e => setBranchInfo({ ...branchInfo, address: e.target.value })}
                       />
@@ -114,6 +150,7 @@ export default function BranchSettings() {
                         <input
                           type="text"
                           className="form-input"
+                          required
                           value={branchInfo.phone || ''}
                           onChange={e => setBranchInfo({ ...branchInfo, phone: e.target.value })}
                         />
@@ -124,6 +161,7 @@ export default function BranchSettings() {
                         <input
                           type="email"
                           className="form-input"
+                          required
                           value={branchInfo.email || ''}
                           onChange={e => setBranchInfo({ ...branchInfo, email: e.target.value })}
                         />
@@ -135,7 +173,9 @@ export default function BranchSettings() {
                         <label className="form-label">Opening Hours</label>
                         <input
                           type="text"
+                          placeholder="e.g. 09:00"
                           className="form-input"
+                          required
                           value={branchInfo.openingTime || ''}
                           onChange={e => setBranchInfo({ ...branchInfo, openingTime: e.target.value })}
                         />
@@ -145,7 +185,9 @@ export default function BranchSettings() {
                         <label className="form-label">Closing Hours</label>
                         <input
                           type="text"
+                          placeholder="e.g. 23:00"
                           className="form-input"
+                          required
                           value={branchInfo.closingTime || ''}
                           onChange={e => setBranchInfo({ ...branchInfo, closingTime: e.target.value })}
                         />
@@ -165,8 +207,12 @@ export default function BranchSettings() {
                         <label className="form-label">Local Tax / GST Scheme (%)</label>
                         <input
                           type="number"
+                          step="0.01"
+                          min="0"
+                          max="100"
                           className="form-input"
-                          value={branchInfo.taxGST || 18}
+                          required
+                          value={branchInfo.taxGST ?? 18}
                           onChange={e => setBranchInfo({ ...branchInfo, taxGST: Number(e.target.value) })}
                         />
                       </div>
@@ -186,8 +232,12 @@ export default function BranchSettings() {
                       <label className="form-label">Default Table Service Charge (%)</label>
                       <input
                         type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
                         className="form-input"
-                        value={branchInfo.serviceCharge || 5}
+                        required
+                        value={branchInfo.serviceCharge ?? 5}
                         onChange={e => setBranchInfo({ ...branchInfo, serviceCharge: Number(e.target.value) })}
                       />
                     </div>
@@ -205,7 +255,11 @@ export default function BranchSettings() {
                         <span style={{ fontWeight: '500', fontSize: '13px' }}>Dine-In Customer Assistance Request Alerts</span>
                         <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Ping sound notification when a table scans a QR and clicks Call Waiter.</div>
                       </div>
-                      <input type="checkbox" defaultChecked />
+                      <input
+                        type="checkbox"
+                        checked={!!branchInfo.alert_customer_assistance}
+                        onChange={e => setBranchInfo({ ...branchInfo, alert_customer_assistance: e.target.checked })}
+                      />
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--color-border-light)' }}>
@@ -213,7 +267,11 @@ export default function BranchSettings() {
                         <span style={{ fontWeight: '500', fontSize: '13px' }}>Digital QR Bill Requests</span>
                         <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Send notification alert when customer clicks Request Bill on QR page.</div>
                       </div>
-                      <input type="checkbox" defaultChecked />
+                      <input
+                        type="checkbox"
+                        checked={!!branchInfo.alert_bill_requests}
+                        onChange={e => setBranchInfo({ ...branchInfo, alert_bill_requests: e.target.checked })}
+                      />
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
@@ -221,7 +279,11 @@ export default function BranchSettings() {
                         <span style={{ fontWeight: '500', fontSize: '13px' }}>Inventory Shortage / Low Stock Push Notifications</span>
                         <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Daily warning log listing ingredients falling below minimum quantities.</div>
                       </div>
-                      <input type="checkbox" defaultChecked />
+                      <input
+                        type="checkbox"
+                        checked={!!branchInfo.alert_low_stock}
+                        onChange={e => setBranchInfo({ ...branchInfo, alert_low_stock: e.target.checked })}
+                      />
                     </div>
                   </div>
                 </div>
