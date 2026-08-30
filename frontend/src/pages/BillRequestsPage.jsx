@@ -59,6 +59,9 @@ export default function BillRequestsPage() {
       billStatus = 'COMPLETED'
     }
 
+    const resolvedOrder = orders.find(o => String(o.id) === String(resolvedOrderId))
+    const isPaid = (r.order_payment_status === 'paid') || (resolvedOrder ? (resolvedOrder.status === 'COMPLETED' || resolvedOrder.payment_status === 'PAID') : false)
+
     return {
       id:          r.id,
       table:       resolvedTable,
@@ -69,6 +72,7 @@ export default function BillRequestsPage() {
       message:     r.message || '',
       status:      billStatus,
       rawStatus:   r.status,
+      isPaid:      isPaid,
     }
   })
 
@@ -237,12 +241,22 @@ export default function BillRequestsPage() {
                         </button>
                       )}
                       {item.status === 'READY' && (
-                        <button
-                          className="btn-primary btn-sm w-full btn-success-bg"
-                          onClick={() => handleCollectPaymentClick(item)}
-                        >
-                          Collect Payment
-                        </button>
+                        item.isPaid ? (
+                          <button
+                            className="btn-primary btn-sm w-full"
+                            style={{ background: 'rgba(22, 163, 74, 0.5)', cursor: 'not-allowed' }}
+                            disabled
+                          >
+                            Payment Collected
+                          </button>
+                        ) : (
+                          <button
+                            className="btn-primary btn-sm w-full btn-success-bg"
+                            onClick={() => handleCollectPaymentClick(item)}
+                          >
+                            Collect Payment
+                          </button>
+                        )
                       )}
                       {item.status === 'COMPLETED' && (
                         <button
