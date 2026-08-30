@@ -308,6 +308,7 @@ class WaiterRequestSerializer(serializers.ModelSerializer):
     order_number  = serializers.SerializerMethodField()
     customer_name = serializers.SerializerMethodField()
     items_summary = serializers.SerializerMethodField()
+    order_payment_status = serializers.SerializerMethodField()
 
     class Meta:
         model  = WaiterRequest
@@ -316,11 +317,13 @@ class WaiterRequestSerializer(serializers.ModelSerializer):
             'message', 'status', 'assigned_waiter', 'amount',
             'branch_id', 'branch_name',
             'order_id', 'order_number', 'customer_name', 'items_summary',
+            'order_payment_status',
             'time', 'created_at', 'updated_at',
         ]
         read_only_fields = [
             'id', 'table_name', 'table_id', 'time', 'created_at', 'updated_at',
             'branch_id', 'branch_name', 'order_id', 'order_number', 'customer_name', 'items_summary',
+            'order_payment_status',
         ]
 
     def get_table_id(self, obj):
@@ -362,5 +365,13 @@ class WaiterRequestSerializer(serializers.ModelSerializer):
     def get_items_summary(self, obj):
         order = self.get_order_obj(obj)
         return order.items_summary if order else ''
+
+    def get_order_payment_status(self, obj):
+        order = self.get_order_obj(obj)
+        if order:
+            if order.status == 'completed' or order.payment_status == 'paid':
+                return 'paid'
+            return order.payment_status
+        return 'unknown'
 
 

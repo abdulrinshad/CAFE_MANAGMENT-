@@ -872,6 +872,13 @@ class OrderViewSet(viewsets.ModelViewSet):
         from django.db import transaction
 
         order = self.get_object()
+        
+        if order.status == Order.STATUS_COMPLETED or order.payment_status == Payment.STATUS_PAID:
+            return Response(
+                {'detail': 'Payment has already been collected for this order.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         method = str(request.data.get('method') or request.data.get('payment_method') or 'cash').lower()
         pay_status = str(request.data.get('status') or request.data.get('payment_status') or 'paid').lower()
 
@@ -928,6 +935,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                     'cashier_name', 'pos_terminal', 'branch', 'amount_received',
                     'change_returned', 'transaction_ref', 'updated_at'
                 ])
+                _inv_sp = transaction.savepoint()
                 try:
                     invoice = Invoice.objects.get(order=order)
                     invoice.status  = Invoice.STATUS_PAID
@@ -945,6 +953,9 @@ class OrderViewSet(viewsets.ModelViewSet):
                             total=order.total,
                             status=Invoice.STATUS_PAID,
                             paid_at=timezone.now(),
+                            whatsapp_number=order.whatsapp_number,
+                            customer_whatsapp=order.whatsapp_number,
+                            customer_name=order.customer_name,
                         )
                         transaction.savepoint_commit(_inv_create_sp)
                     except Exception:
