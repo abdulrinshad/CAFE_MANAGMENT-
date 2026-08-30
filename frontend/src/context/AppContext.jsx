@@ -43,7 +43,18 @@ export function AppProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true)
 
   const [currentRole, setCurrentRoleRaw] = useState(() => {
-    try { return normalizeRole(localStorage.getItem('artisan_role') || 'admin') } catch { return 'admin' }
+    try { 
+      let storedRole = localStorage.getItem('artisan_role')
+      const userStr = localStorage.getItem('artisan_user')
+      if (userStr) {
+        const user = JSON.parse(userStr)
+        if (user && (user.role === 'ADMIN' || user.role === 'OWNER')) {
+          storedRole = 'admin'
+          localStorage.setItem('artisan_role', 'admin')
+        }
+      }
+      return normalizeRole(storedRole || 'admin') 
+    } catch { return 'admin' }
   })
   const [currentWaiter, setCurrentWaiterRaw] = useState(() => {
     try {
@@ -73,6 +84,19 @@ export function AppProvider({ children }) {
       return s ? JSON.parse(s) : null
     } catch { return null }
   })
+
+  // ── Owner branch filter state ────────────────────────────────────────────
+  const [ownerBranchFilter, setOwnerBranchFilterRaw] = useState(() => {
+    let val = localStorage.getItem('artisan_owner_branch')
+    if (!val || val === 'undefined' || val === 'null' || val === '[object Object]') val = 'all'
+    return val
+  })
+
+  const setOwnerBranchFilter = useCallback((val) => {
+    if (!val || val === 'undefined' || val === 'null') val = 'all'
+    localStorage.setItem('artisan_owner_branch', val)
+    setOwnerBranchFilterRaw(val)
+  }, [])
 
   // Derive waiterRequests from waiterRequestsState (actual backend WaiterRequests)
   const waiterRequests = useMemo(() => {
@@ -188,7 +212,7 @@ export function AppProvider({ children }) {
       try {
         const user = await authApi.me()
         setCurrentUser(user)
-        setCurrentRole(user.role)
+        setCurrentRole(normalizeRole(user.role))
         fetchOwnerSettings()
       } catch (err) {
         console.error("Failed to load user profile:", err)
@@ -208,7 +232,7 @@ export function AppProvider({ children }) {
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
     setCurrentUser(res.user)
-    setCurrentRole(res.user.role)
+    setCurrentRole(normalizeRole(res.user.role))
     fetchOwnerSettings()
     return res.user
   }
@@ -231,12 +255,17 @@ export function AppProvider({ children }) {
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
     setCurrentUser(res.user)
-    if (res.role === 'cashier') {
+    
+    const role = normalizeRole(res.role)
+    setCurrentRole(role)
+    
+    if (role === 'cashier') {
       setCurrentCashier(res.employee)
-      setCurrentRole('cashier')
-    } else {
+    } else if (role === 'branch_manager') {
+      setCurrentBranchManagerRaw(res.employee)
+      setCurrentBranchRaw(res.branch)
+    } else if (role === 'waiter') {
       setCurrentWaiter(res.employee)
-      setCurrentRole('waiter')
     }
     return res
   }
@@ -245,13 +274,20 @@ export function AppProvider({ children }) {
 
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Fetch helpers
-  // ─────────────────────────────────────────────────────────────────────────
+  // Fetch helpers ─────────────────────────────────────────────────────────
+
+  const getBranchParam = useCallback(() => {
+    // Only apply branch query param if owner is filtering
+    if (currentRole === 'admin' && ownerBranchFilter !== 'all' && ownerBranchFilter !== 'All') {
+      return { branch: ownerBranchFilter }
+    }
+    return {}
+  }, [currentRole, ownerBranchFilter])
 
   const fetchCategories = useCallback(async () => {
     setLoading((l) => ({ ...l, categories: true }))
     try {
-      const data = await categoryApi.list({ ordering: 'display_order,name' })
+      const data = await categoryApi.list({ ordering: 'display_order,name', ...getBranchParam() })
       setCategories(Array.isArray(data) ? data : (data.results ?? []))
       setApiError(null)
     } catch (err) {
@@ -260,12 +296,12 @@ export function AppProvider({ children }) {
     } finally {
       setLoading((l) => ({ ...l, categories: false }))
     }
-  }, [])
+  }, [getBranchParam])
 
   const fetchProducts = useCallback(async () => {
     setLoading((l) => ({ ...l, products: true }))
     try {
-      const data = await productApi.list({ ordering: 'display_order,name', page_size: 200 })
+      const data = await productApi.list({ ordering: 'display_order,name', page_size: 200, ...getBranchParam() })
       const list = Array.isArray(data) ? data : (data.results ?? [])
       setProducts(list.map(normaliseProduct))
       setApiError(null)
@@ -275,12 +311,12 @@ export function AppProvider({ children }) {
     } finally {
       setLoading((l) => ({ ...l, products: false }))
     }
-  }, [])
+  }, [getBranchParam])
 
   const fetchTables = useCallback(async () => {
     setLoading((l) => ({ ...l, tables: true }))
     try {
-      const data = await tableApi.list({ ordering: 'name' })
+      const data = await tableApi.list({ ordering: 'name', ...getBranchParam() })
       const list = Array.isArray(data) ? data : (data.results ?? [])
       setTables(list.map(normaliseTable))
       setApiError(null)
@@ -290,12 +326,12 @@ export function AppProvider({ children }) {
     } finally {
       setLoading((l) => ({ ...l, tables: false }))
     }
-  }, [])
+  }, [getBranchParam])
 
   const fetchQRCodes = useCallback(async () => {
     setLoading((l) => ({ ...l, qrCodes: true }))
     try {
-      const data = await qrCodeApi.list({ ordering: 'table__name' })
+      const data = await qrCodeApi.list({ ordering: 'table__name', ...getBranchParam() })
       const list = Array.isArray(data) ? data : (data.results ?? [])
       setQRCodes(list.map(normaliseQR))
       setApiError(null)
@@ -305,12 +341,12 @@ export function AppProvider({ children }) {
     } finally {
       setLoading((l) => ({ ...l, qrCodes: false }))
     }
-  }, [])
+  }, [getBranchParam])
 
   const fetchOrders = useCallback(async (params = {}) => {
     setLoading((l) => ({ ...l, orders: true }))
     try {
-      const data = await orderApi.list({ ordering: '-created_at', page_size: 100, ...params })
+      const data = await orderApi.list({ ordering: '-created_at', page_size: 100, ...getBranchParam(), ...params })
       const list = Array.isArray(data) ? data : (data.results ?? [])
       setOrders(list.map(normaliseOrder))
       setApiError(null)
@@ -319,13 +355,13 @@ export function AppProvider({ children }) {
     } finally {
       setLoading((l) => ({ ...l, orders: false }))
     }
-  }, [])
+  }, [getBranchParam])
 
   const fetchNotifications = useCallback(async () => {
     try {
       const [list, countData] = await Promise.all([
-        notificationApi.list(),
-        notificationApi.unreadCount(),
+        notificationApi.list(getBranchParam()),
+        notificationApi.unreadCount(getBranchParam()),
       ])
       const items = Array.isArray(list) ? list : (list.results ?? [])
       setNotifications(items)
@@ -333,17 +369,17 @@ export function AppProvider({ children }) {
     } catch (err) {
       console.warn('fetchNotifications error:', err)
     }
-  }, [])
+  }, [getBranchParam])
 
   const fetchWaiterRequests = useCallback(async () => {
     try {
-      const list = await waiterRequestApi.list()
+      const list = await waiterRequestApi.list(getBranchParam())
       const items = Array.isArray(list) ? list : (list.results ?? [])
       setWaiterRequests(items.map(normaliseWaiterRequest))
     } catch (err) {
       console.warn('fetchWaiterRequests error:', err)
     }
-  }, [])
+  }, [getBranchParam])
 
   const fetchConversations = useCallback(async () => {
     try {

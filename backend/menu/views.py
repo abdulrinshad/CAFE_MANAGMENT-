@@ -14,7 +14,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.exceptions import PermissionDenied
 from django.http import FileResponse
 
-from accounts.utils import get_waiter_branch
+from accounts.utils import get_waiter_branch, BranchEnforceMixin
 from .models import Category, Product, Table, QRCode, WaiterRequest
 from .serializers import (
     CategorySerializer,
@@ -33,7 +33,7 @@ from .serializers import (
 from .filters import CategoryFilter, ProductFilter
 
 
-class CategoryViewSet(viewsets.ModelViewSet):
+class CategoryViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     queryset         = Category.objects.all()
     serializer_class = CategorySerializer
     filterset_class  = CategoryFilter
@@ -45,16 +45,16 @@ class CategoryViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         waiter_branch = get_waiter_branch(self.request)
         if waiter_branch:
-            from django.db.models import Q
-            qs = qs.filter(Q(branch=waiter_branch) | Q(branch__isnull=True))
+            qs = qs.filter(branch=waiter_branch)
+        else:
+            branch_id = self.request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                if str(branch_id).isdigit():
+                    qs = qs.filter(branch_id=branch_id)
         return qs
 
-    def perform_create(self, serializer):
-        waiter_branch = get_waiter_branch(self.request)
-        serializer.save(branch=waiter_branch)
-
-
-class ProductViewSet(viewsets.ModelViewSet):
+    # perform_create is handled by BranchEnforceMixin
+class ProductViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     queryset        = Product.objects.select_related('category', 'branch').all()
     filterset_class = ProductFilter
     search_fields   = ['name', 'description']
@@ -74,13 +74,15 @@ class ProductViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         waiter_branch = get_waiter_branch(self.request)
         if waiter_branch:
-            from django.db.models import Q
-            qs = qs.filter(Q(branch=waiter_branch) | Q(branch__isnull=True))
+            qs = qs.filter(branch=waiter_branch)
+        else:
+            branch_id = self.request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                if str(branch_id).isdigit():
+                    qs = qs.filter(branch_id=branch_id)
         return qs
 
-    def perform_create(self, serializer):
-        waiter_branch = get_waiter_branch(self.request)
-        serializer.save(branch=waiter_branch)
+    # perform_create is handled by BranchEnforceMixin
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -108,7 +110,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 # Table ViewSet
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TableViewSet(viewsets.ModelViewSet):
+class TableViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     queryset         = Table.objects.prefetch_related('qr_code').all()
     serializer_class = TableSerializer
     ordering_fields  = ['name', 'seats', 'status', 'created_at']
@@ -119,11 +121,23 @@ class TableViewSet(viewsets.ModelViewSet):
         waiter_branch = get_waiter_branch(self.request)
         if waiter_branch:
             qs = qs.filter(branch=waiter_branch)
+        else:
+            branch_id = self.request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                if str(branch_id).isdigit():
+                    qs = qs.filter(branch_id=branch_id)
         return qs
 
     def perform_create(self, serializer):
         waiter_branch = get_waiter_branch(self.request)
-        serializer.save(branch=waiter_branch)
+        if waiter_branch:
+            serializer.save(branch=waiter_branch)
+        else:
+            branch_id = self.request.data.get('branch') or self.request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                serializer.save(branch_id=branch_id)
+            else:
+                serializer.save()
 
     def check_table_branch(self, table):
         waiter_branch = get_waiter_branch(self.request)
@@ -189,6 +203,18 @@ class QRCodeViewSet(viewsets.ModelViewSet):
     serializer_class = QRCodeSerializer
     ordering_fields  = ['qr_id', 'status', 'generated_at']
     ordering         = ['table__name']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        waiter_branch = get_waiter_branch(self.request)
+        if waiter_branch:
+            qs = qs.filter(table__branch=waiter_branch)
+        else:
+            branch_id = self.request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                if str(branch_id).isdigit():
+                    qs = qs.filter(table__branch_id=branch_id)
+        return qs
 
     @action(detail=True, methods=['patch'], url_path='set_status')
     def set_status(self, request, pk=None):
@@ -261,6 +287,11 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
         waiter_branch = get_waiter_branch(self.request)
         if waiter_branch:
             qs = qs.filter(branch=waiter_branch)
+        else:
+            branch_id = self.request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                if str(branch_id).isdigit():
+                    qs = qs.filter(branch_id=branch_id)
         status_param = self.request.query_params.get('status')
         if status_param and status_param.lower() != 'all':
             qs = qs.filter(status=status_param.lower())

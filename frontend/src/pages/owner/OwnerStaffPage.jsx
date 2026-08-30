@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
-import Modal from '../../components/Modal'
+import { useApp } from '../../context/AppContext'
 import { branchApi, branchManagerApi, waiterApi, cashierApi } from '../../api'
 import './owner.css'
 
 export default function OwnerStaffPage() {
   const [tab, setTab] = useState('managers')
   const [branches, setBranches] = useState([])
+  const { ownerBranchFilter: branchFilter, setOwnerBranchFilter: setBranchFilter } = useApp()
   const [managers, setManagers] = useState([])
   const [staff, setStaff] = useState([])
-  const [branchFilter, setBranchFilter] = useState('All')
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState(null)
+  const [debugError, setDebugError] = useState(null)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     fetchBranches()
@@ -19,7 +21,7 @@ export default function OwnerStaffPage() {
 
   useEffect(() => {
     fetchUsers()
-  }, [tab, branchFilter])
+  }, [tab, branchFilter, search])
 
   const fetchBranches = async () => {
     try {
@@ -33,30 +35,29 @@ export default function OwnerStaffPage() {
   const fetchUsers = async () => {
     setLoading(true)
     try {
+      const params = {}
+      if (branchFilter !== 'all' && branchFilter !== 'All') params.branch = branchFilter
+      if (search.trim()) params.search = search.trim()
       if (tab === 'managers') {
-        const res = await branchManagerApi.list()
-        let data = Array.isArray(res) ? res : (res.results || [])
-        if (branchFilter !== 'All') {
-          data = data.filter(m => m.branch === parseInt(branchFilter) || m.branch?.id === parseInt(branchFilter))
-        }
-        setManagers(data)
+        console.log("Fetching managers...", params);
+        const res = await branchManagerApi.list(params)
+        console.log("Managers response:", res);
+        setManagers(Array.isArray(res) ? res : (res.results || []))
       } else {
         const [w, c] = await Promise.all([
-           waiterApi.list(),
-           cashierApi.list()
+           waiterApi.list(params),
+           cashierApi.list(params)
         ])
         
         let wData = Array.isArray(w) ? w : (w.results || [])
         let cData = Array.isArray(c) ? c : (c.results || [])
         
         let data = [...wData.map(i=>({...i, role:'waiter'})), ...cData.map(i=>({...i, role:'cashier'}))]
-        if (branchFilter !== 'All') {
-          data = data.filter(s => s.branch === parseInt(branchFilter) || s.branch?.id === parseInt(branchFilter))
-        }
         setStaff(data)
       }
     } catch (err) {
       console.error(err)
+      setDebugError(err.message || String(err))
     } finally {
       setLoading(false)
     }
@@ -103,9 +104,17 @@ export default function OwnerStaffPage() {
             <h1 className="owner-page-header__title">Staff &amp; Branch Managers</h1>
             <p className="owner-page-header__sub">Manage employee access, roles, and branch assignments.</p>
           </div>
-          <div className="owner-page-header__actions">
+          <div className="owner-page-header__actions" style={{ display: 'flex', gap: '10px' }}>
+             <input 
+                type="text" 
+                className="form-input" 
+                placeholder="Search name..." 
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{ width: 200 }}
+             />
              <select className="form-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} style={{width: 200}}>
-                <option value="All">All Branches</option>
+                <option value="all">All Branches</option>
                 {branches.map(b => (
                    <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
@@ -124,6 +133,7 @@ export default function OwnerStaffPage() {
           </div>
 
           <div className="owner-table-wrap" style={{ border: 'none', borderRadius: 0 }}>
+            {debugError && <div style={{padding: 20, color: 'red'}}>Error: {debugError}</div>}
             {loading ? (
                <div style={{padding: 20, textAlign: 'center'}}>Loading...</div>
             ) : tab === 'managers' ? (

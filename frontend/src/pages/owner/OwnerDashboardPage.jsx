@@ -68,13 +68,16 @@ function KPICard({ label, value, sub, badge, badgeType = 'green' }) {
 
 export default function OwnerDashboardPage() {
   const navigate = useNavigate()
-  const { currentUser, orders, tables, waiterRequests } = useApp()
+  const { 
+    currentUser, 
+    orders, tables, waiterRequests,
+    ownerBranchFilter: branchFilter, setOwnerBranchFilter: setBranchFilter 
+  } = useApp()
   const [stats, setStats] = useState(null)
   const [chartData, setChartData] = useState([])
   const [chartPeriod, setChartPeriod] = useState('weekly')
   const [loading, setLoading] = useState(true)
   const [branches, setBranches] = useState([])
-  const [branchFilter, setBranchFilter] = useState('All')
 
   const userName = currentUser?.name || currentUser?.username || 'Owner'
 
@@ -87,11 +90,14 @@ export default function OwnerDashboardPage() {
     async function loadData() {
       try {
         setLoading(true)
-        const branchQuery = branchFilter !== 'All' ? `?branch=${branchFilter}` : ''
+        const params = {}
+        if (branchFilter !== 'all' && branchFilter !== 'All') {
+          params.branch = branchFilter
+        }
         
         const [statsRes, chartRes] = await Promise.all([
-          dashboardApi.stats(branchQuery).catch(() => null),
-          dashboardApi.salesChart(chartPeriod + branchQuery).catch(() => null),
+          dashboardApi.stats(params).catch(() => null),
+          dashboardApi.salesChart({ period: chartPeriod, ...params }).catch(() => null),
         ])
         if (!active) return
         setStats(statsRes)
@@ -119,9 +125,10 @@ export default function OwnerDashboardPage() {
     }
   }
 
-  const filteredOrders = branchFilter === 'All' ? orders : orders.filter(o => o.branch === parseInt(branchFilter))
-  const filteredTables = branchFilter === 'All' ? tables : tables.filter(t => t.branch === parseInt(branchFilter))
-  const filteredRequests = branchFilter === 'All' ? waiterRequests : waiterRequests.filter(r => r.branch === parseInt(branchFilter))
+  // Backend already filters by branch
+  const filteredOrders = orders
+  const filteredTables = tables
+  const filteredRequests = waiterRequests
 
   const todaySales = stats?.today_sales ?? filteredOrders.filter(o => o.status === 'COMPLETED').reduce((sum, o) => sum + (o.amount || 0), 0)
   const totalOrdersCount = stats?.today_orders ?? filteredOrders.length
@@ -147,7 +154,7 @@ export default function OwnerDashboardPage() {
           </div>
           <div>
              <select className="form-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} style={{width: 200}}>
-                <option value="All">All Branches</option>
+                <option value="all">All Branches</option>
                 {branches.map(b => (
                    <option key={b.id} value={b.id}>{b.name}</option>
                 ))}

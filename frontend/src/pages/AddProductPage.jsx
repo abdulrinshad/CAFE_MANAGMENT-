@@ -230,7 +230,13 @@ export default function AddProductPage() {
               <h2 className="form-card__title">Media</h2>
               <label className="upload-area" htmlFor="prod-image">
                 {form.imagePreview ? (
-                  <img src={form.imagePreview} alt="Preview" className="upload-area__preview" />
+                  <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <img src={form.imagePreview} alt="Preview" className="upload-area__preview" style={{ maxHeight: 200, objectFit: 'contain' }} />
+                    <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
+                      <span className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 13, background: 'rgba(0,0,0,0.05)', borderRadius: 4, color: '#333' }}>Change</span>
+                      <button type="button" className="btn btn-danger" style={{ padding: '6px 12px', fontSize: 13 }} onClick={(e) => { e.preventDefault(); set('imageFile', null); set('imagePreview', null); }}>Remove</button>
+                    </div>
+                  </div>
                 ) : (
                   <>
                     <div className="upload-area__icon"><UploadIcon /></div>

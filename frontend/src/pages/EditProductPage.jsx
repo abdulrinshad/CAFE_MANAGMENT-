@@ -80,6 +80,8 @@ export default function EditProductPage() {
       fd.append('available_on_qr',  form.availableOnQR)
       if (imageFile) {
         fd.append('image', imageFile)
+      } else if (!imagePreview && product.image) {
+        fd.append('image', '')
       }
 
       await updateProduct(product.id, fd)
@@ -189,18 +191,26 @@ export default function EditProductPage() {
         <div className="ep-card">
           <h2 className="ep-card__section-title">Media</h2>
           <div className="ep-media-row">
-            {imagePreview && (
-              <div className="ep-media-current">
-                <img src={imagePreview} alt="Current" />
+            {imagePreview ? (
+              <div style={{ position: 'relative', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <img src={imagePreview} alt="Current" style={{ maxHeight: 200, objectFit: 'contain', borderRadius: 8, border: '1px solid #eaeaea' }} />
+                <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
+                  <label className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 13, background: 'rgba(0,0,0,0.05)', borderRadius: 4, color: '#333', cursor: 'pointer' }} htmlFor="ep-image">
+                    Change
+                  </label>
+                  <button type="button" className="btn btn-danger" style={{ padding: '6px 12px', fontSize: 13 }} onClick={(e) => { e.preventDefault(); setImageFile(null); setImagePreview(null); }}>Remove</button>
+                  <input id="ep-image" type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImage} />
+                </div>
               </div>
+            ) : (
+              <label className="upload-area ep-upload" htmlFor="ep-image">
+                <div className="upload-area__icon"><UploadCloudIcon /></div>
+                <p className="upload-area__label">Click to upload new image</p>
+                <p className="upload-area__hint">PNG, JPG or WEBP (Max 5MB)</p>
+                <p className="upload-area__hint">Recommended size: 1080×1080px</p>
+                <input id="ep-image" type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImage} />
+              </label>
             )}
-            <label className="upload-area ep-upload" htmlFor="ep-image">
-              <div className="upload-area__icon"><UploadCloudIcon /></div>
-              <p className="upload-area__label">Click to upload new image</p>
-              <p className="upload-area__hint">PNG, JPG or WEBP (Max 5MB)</p>
-              <p className="upload-area__hint">Recommended size: 1080×1080px</p>
-              <input id="ep-image" type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImage} />
-            </label>
           </div>
         </div>
 

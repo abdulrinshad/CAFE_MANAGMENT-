@@ -1,16 +1,15 @@
 from accounts.models import Branch, Waiter
 
 
-def get_waiter_branch(request):
+def get_user_branch(request):
     """
-    Resolves the assigned Branch for the currently authenticated waiter or cashier.
+    Resolves the assigned Branch for the currently authenticated waiter, cashier, or branch manager.
 
     Returns:
       - A Branch instance if the request comes from a waiter shadow user
-        (username starts with 'waiter_') or a cashier shadow user
-        (username starts with 'cashier_').
-      - None for Admin / Manager / Staff users — so no branch filter is applied
-        and they see ALL tables and products across every branch.
+        (username starts with 'waiter_'), cashier shadow user ('cashier_'),
+        or a branch manager shadow user ('bm_').
+      - None for Admin users — so no branch filter is applied.
 
     This intentionally does NOT fall back to a default branch for non-waiter
     users, because doing so would incorrectly exclude records that have
@@ -40,10 +39,39 @@ def get_waiter_branch(request):
             except (IndexError, ValueError):
                 pass
 
-    # For all other authenticated users (Admin, Manager, Staff without waiter/cashier
-    # shadow username), return None — no branch filter will be applied.
+        # Branch Manager shadow users have username="bm_{id}"
+        if user.username and user.username.startswith('bm_'):
+            try:
+                from accounts.models import BranchManager
+                bm_id = int(user.username.split('_')[1])
+                bm = BranchManager.objects.select_related('branch').filter(pk=bm_id).first()
+                if bm and bm.branch:
+                    return bm.branch
+            except (IndexError, ValueError):
+                pass
+
+    # For all other authenticated users (Admin), return None
     return None
 
 
 # Alias used by cashier-specific views
-get_employee_branch = get_waiter_branch
+get_employee_branch = get_user_branch
+get_waiter_branch = get_user_branch
+
+from rest_framework.exceptions import ValidationError
+
+class BranchEnforceMixin:
+    """
+    Mixin to strictly require and enforce branch assignments on creation.
+    - If the user is a manager/waiter/cashier, it forces their own branch.
+    - If the user is an admin, it requires a valid branch in the request data/params.
+    """
+    def perform_create(self, serializer):
+        assigned_branch = get_user_branch(self.request)
+        if assigned_branch:
+            serializer.save(branch=assigned_branch)
+        else:
+            branch_id = self.request.data.get('branch') or self.request.query_params.get('branch')
+            if not branch_id or str(branch_id).lower() == 'all':
+                raise ValidationError({"branch": "Branch assignment is required."})
+            serializer.save(branch_id=branch_id)

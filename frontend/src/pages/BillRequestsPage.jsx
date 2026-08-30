@@ -60,7 +60,8 @@ export default function BillRequestsPage() {
     }
 
     const resolvedOrder = orders.find(o => String(o.id) === String(resolvedOrderId))
-    const isPaid = (r.order_payment_status === 'paid') || (resolvedOrder ? (resolvedOrder.status === 'COMPLETED' || resolvedOrder.payment_status === 'PAID') : false)
+    const isPaid = (r.order_payment_status === 'paid') || 
+      (resolvedOrder ? (resolvedOrder.status?.toLowerCase() === 'completed' || resolvedOrder.payment_status?.toLowerCase() === 'paid') : false)
 
     return {
       id:          r.id,

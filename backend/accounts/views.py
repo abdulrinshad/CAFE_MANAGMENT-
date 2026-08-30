@@ -22,6 +22,7 @@ from .serializers import (
     POSTerminalSerializer,
 )
 from .permissions import IsAdminOrManager, IsAdmin
+from .utils import BranchEnforceMixin
 
 
 # ── Auth Views ─────────────────────────────────────────────────────────────────
@@ -73,7 +74,7 @@ class ChangePasswordView(APIView):
 
 # ── Waiter Views ───────────────────────────────────────────────────────────────
 
-class WaiterViewSet(viewsets.ModelViewSet):
+class WaiterViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     queryset = Waiter.objects.all()
     serializer_class = WaiterSerializer
     permission_classes = [IsAdminOrManager]
@@ -89,8 +90,9 @@ class WaiterViewSet(viewsets.ModelViewSet):
             active_bool = is_active.lower() == 'true'
             queryset = queryset.filter(is_active=active_bool)
         branch_id = self.request.query_params.get('branch')
-        if branch_id:
-            queryset = queryset.filter(branch_id=branch_id)
+        if branch_id and str(branch_id).lower() != 'all':
+            if str(branch_id).isdigit():
+                queryset = queryset.filter(branch_id=branch_id)
         return queryset
 
 
@@ -417,7 +419,7 @@ class EmployeeLoginView(APIView):
 
 # ── Cashier Views ──────────────────────────────────────────────────────────────
 
-class CashierViewSet(viewsets.ModelViewSet):
+class CashierViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     """
     CRUD for Cashiers. Only Admin/Manager can manage these.
     """
@@ -435,8 +437,9 @@ class CashierViewSet(viewsets.ModelViewSet):
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == 'true')
         branch_id = self.request.query_params.get('branch')
-        if branch_id:
-            qs = qs.filter(branch_id=branch_id)
+        if branch_id and str(branch_id).lower() != 'all':
+            if str(branch_id).isdigit():
+                qs = qs.filter(branch_id=branch_id)
         return qs
 
     @action(detail=True, methods=['patch'], url_path='set_active')
@@ -518,8 +521,9 @@ class BranchManagerViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = BranchManager.objects.select_related('branch').all()
         branch_id = self.request.query_params.get('branch')
-        if branch_id:
-            qs = qs.filter(branch_id=branch_id)
+        if branch_id and str(branch_id).lower() != 'all':
+            if str(branch_id).isdigit():
+                qs = qs.filter(branch_id=branch_id)
         return qs
 
 
@@ -618,7 +622,7 @@ class BranchManagerLoginView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class OwnerPOSTerminalViewSet(viewsets.ModelViewSet):
+class OwnerPOSTerminalViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     queryset = POSTerminal.objects.select_related('branch', 'assigned_cashier').all()
     serializer_class = POSTerminalSerializer
     permission_classes = [IsAuthenticated, IsAdmin]

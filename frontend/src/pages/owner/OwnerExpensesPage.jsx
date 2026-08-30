@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
 import { branchApi, expenseApi } from '../../api'
+import { useApp } from '../../context/AppContext'
 import './owner.css'
 
 export default function OwnerExpensesPage() {
+  const { ownerBranchFilter: branchFilter, setOwnerBranchFilter: setBranchFilter } = useApp()
   const [expenses, setExpenses] = useState([])
   const [branches, setBranches] = useState([])
-  const [branchFilter, setBranchFilter] = useState('All')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -29,7 +30,7 @@ export default function OwnerExpensesPage() {
   const fetchExpenses = async () => {
     try {
       setLoading(true)
-      const params = branchFilter !== 'All' ? { branch: branchFilter } : {}
+      const params = branchFilter !== 'all' && branchFilter !== 'All' ? { branch: branchFilter } : {}
       const res = await expenseApi.list(params)
       setExpenses(Array.isArray(res) ? res : (res.results || []))
     } catch (err) {
@@ -58,7 +59,7 @@ export default function OwnerExpensesPage() {
           </div>
           <div className="owner-page-header__actions">
              <select className="form-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} style={{width: 200}}>
-                <option value="All">All Branches</option>
+                <option value="all">All Branches</option>
                 {branches.map(b => (
                    <option key={b.id} value={b.id}>{b.name}</option>
                 ))}

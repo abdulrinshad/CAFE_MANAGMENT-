@@ -23,6 +23,7 @@ from django.utils import timezone
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view
+from rest_framework.exceptions import ValidationError, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -34,6 +35,7 @@ from .serializers import (
     ExpenseSerializer,
 )
 from accounts.permissions import IsAdminOrManager
+from accounts.utils import get_waiter_branch, BranchEnforceMixin
 
 
 def _get_period_range(period, date_from=None, date_to=None):
@@ -128,6 +130,11 @@ class OrderViewSet(viewsets.ModelViewSet):
         waiter_branch = get_waiter_branch(self.request)
         if waiter_branch:
             qs = qs.filter(branch=waiter_branch)
+        else:
+            branch_id = self.request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                if str(branch_id).isdigit():
+                    qs = qs.filter(branch_id=branch_id)
         status_filter = self.request.query_params.get('status')
         search        = self.request.query_params.get('search')
         if status_filter:
@@ -142,6 +149,15 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         waiter_branch = get_waiter_branch(self.request)
+        
+        branch_to_assign = waiter_branch
+        if not branch_to_assign:
+            branch_id = self.request.data.get('branch') or self.request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                from accounts.models import Branch
+                branch_to_assign = Branch.objects.filter(pk=branch_id).first()
+            if not branch_to_assign:
+                raise ValidationError({"branch": "Branch assignment is required."})
         table = serializer.validated_data.get('table')
         if table:
             if table.branch and waiter_branch and table.branch != waiter_branch:
@@ -173,7 +189,10 @@ class OrderViewSet(viewsets.ModelViewSet):
                 except Exception:
                     pass
 
-        serializer.save(branch=waiter_branch, **extra_fields)
+        if branch_to_assign:
+            serializer.save(branch=branch_to_assign, **extra_fields)
+        else:
+            serializer.save(**extra_fields)
 
     @action(detail=True, methods=['patch'], url_path='set_status')
     def set_status(self, request, pk=None):
@@ -955,7 +974,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                             paid_at=timezone.now(),
                             whatsapp_number=order.whatsapp_number,
                             customer_whatsapp=order.whatsapp_number,
-                            customer_name=order.customer_name,
                         )
                         transaction.savepoint_commit(_inv_create_sp)
                     except Exception:
@@ -1133,6 +1151,12 @@ class DashboardStatsView(APIView):
         if waiter_branch:
             today_qs     = today_qs.filter(branch=waiter_branch)
             yesterday_qs = yesterday_qs.filter(branch=waiter_branch)
+        else:
+            branch_id = request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                if str(branch_id).isdigit():
+                    today_qs     = today_qs.filter(branch_id=branch_id)
+                    yesterday_qs = yesterday_qs.filter(branch_id=branch_id)
 
         # Sales = sum of completed order totals
         today_sales     = today_qs.filter(status=Order.STATUS_COMPLETED).aggregate(
@@ -1162,6 +1186,11 @@ class DashboardStatsView(APIView):
             tables_qs = Table.objects.filter(active=True)
             if waiter_branch:
                 tables_qs = tables_qs.filter(Q(branch=waiter_branch) | Q(branch__isnull=True))
+            else:
+                branch_id = request.query_params.get('branch')
+                if branch_id and str(branch_id).lower() != 'all':
+                    if str(branch_id).isdigit():
+                        tables_qs = tables_qs.filter(Q(branch_id=branch_id) | Q(branch__isnull=True))
             active_tables    = tables_qs.filter(active=True).count()
             occupied_tables  = tables_qs.filter(status='occupied').count()
             available_tables = tables_qs.filter(status='available').count()
@@ -1181,6 +1210,11 @@ class DashboardStatsView(APIView):
             reqs_qs = WaiterRequest.objects.all()
             if waiter_branch:
                 reqs_qs = reqs_qs.filter(Q(branch=waiter_branch) | Q(branch__isnull=True) | Q(table__branch=waiter_branch))
+            else:
+                branch_id = request.query_params.get('branch')
+                if branch_id and str(branch_id).lower() != 'all':
+                    if str(branch_id).isdigit():
+                        reqs_qs = reqs_qs.filter(Q(branch_id=branch_id) | Q(branch__isnull=True) | Q(table__branch_id=branch_id))
 
             # Exclude bill requests (which are handled on /bill-requests under pending bills)
             table_reqs = reqs_qs.exclude(
@@ -1204,6 +1238,11 @@ class DashboardStatsView(APIView):
         all_orders_qs = Order.objects.all()
         if waiter_branch:
             all_orders_qs = all_orders_qs.filter(branch=waiter_branch)
+        else:
+            branch_id = request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                if str(branch_id).isdigit():
+                    all_orders_qs = all_orders_qs.filter(branch_id=branch_id)
         active_orders = all_orders_qs.filter(
             status__in=[Order.STATUS_PENDING, Order.STATUS_PREPARING, Order.STATUS_READY, Order.STATUS_BILL_REQUESTED]
         ).count()
@@ -1240,6 +1279,11 @@ class DashboardRecentOrdersView(APIView):
         waiter_branch = get_waiter_branch(request)
         if waiter_branch:
             qs = qs.filter(branch=waiter_branch)
+        else:
+            branch_id = request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                if str(branch_id).isdigit():
+                    qs = qs.filter(branch_id=branch_id)
         orders = qs.order_by('-created_at')[:limit]
         data   = []
         for o in orders:
@@ -1565,7 +1609,8 @@ class PublicReceiptView(APIView):
 
 # ── Expense ViewSet ────────────────────────────────────────────────────────────
 
-class ExpenseViewSet(viewsets.ModelViewSet):
+
+class ExpenseViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     """
     CRUD for Expenses. Requires Admin or Manager.
 
@@ -1592,8 +1637,9 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         else:
             # For owner, optionally filter by query param
             branch = self.request.query_params.get('branch')
-            if branch:
-                qs = qs.filter(branch_id=branch)
+            if branch and str(branch).lower() != 'all':
+                if str(branch).isdigit():
+                    qs = qs.filter(branch_id=branch)
 
         category = self.request.query_params.get('category')
         if category:
@@ -1631,4 +1677,8 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         if waiter_branch:
             serializer.save(branch=waiter_branch)
         else:
-            serializer.save()
+            branch_id = self.request.data.get('branch') or self.request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                serializer.save(branch_id=branch_id)
+            else:
+                serializer.save()

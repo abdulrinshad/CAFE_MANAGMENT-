@@ -20,43 +20,21 @@ function ProductImageFallback({ size = 40 }) {
 }
 
 export default function OwnerMenuPage() {
-  const { categories } = useApp()
-  const [products, setProducts]   = useState([])
+  const { 
+    products, categories,
+    fetchProducts, fetchCategories,
+    ownerBranchFilter: branchFilter, setOwnerBranchFilter: setBranchFilter
+  } = useApp()
   const [catFilter, setCat]       = useState('All')
   const [search,    setSearch]    = useState('')
   const [branches, setBranches] = useState([])
-  const [branchFilter, setBranchFilter] = useState('All')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    fetchBranches()
+    branchApi.list()
+      .then(res => setBranches(Array.isArray(res) ? res : (res.results || [])))
+      .catch(() => {})
   }, [])
-
-  useEffect(() => {
-    fetchBranchProducts()
-  }, [branchFilter])
-
-  const fetchBranchProducts = async () => {
-    try {
-      setLoading(true)
-      const params = branchFilter !== 'All' ? { branch: branchFilter } : {}
-      const res = await productApi.list(params)
-      setProducts(Array.isArray(res) ? res : (res.results || []))
-    } catch (err) {
-      console.error('Failed to fetch products', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchBranches = async () => {
-    try {
-      const res = await branchApi.list()
-      setBranches(Array.isArray(res) ? res : (res.results || []))
-    } catch (err) {
-      console.error('Failed to fetch branches', err)
-    }
-  }
 
   // Create a mapping of branch ID to branch name for easy lookup in the table
   const branchMap = useMemo(() => {
@@ -85,7 +63,7 @@ export default function OwnerMenuPage() {
           </div>
           <div className="owner-page-header__actions">
              <select className="form-select" value={branchFilter} onChange={e => setBranchFilter(e.target.value)} style={{width: 200}}>
-                <option value="All">All Branches</option>
+                <option value="all">All Branches</option>
                 {branches.map(b => (
                    <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
