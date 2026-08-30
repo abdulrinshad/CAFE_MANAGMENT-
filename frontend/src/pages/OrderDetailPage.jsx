@@ -275,7 +275,6 @@ export default function OrderDetailPage() {
     }
   }
 
-  // ── Generate Bill submit (cashier/admin/manager only) ─────────────────────
   const handleGenerateBillSubmit = async (method, phoneVal = '') => {
     setWaError('')
     setNameError('')
@@ -302,12 +301,55 @@ export default function OrderDetailPage() {
 
     setBillLoading(true)
     try {
-      await orderApi.generateBill(id, {
+      const invoice = await orderApi.generateBill(id, {
         delivery_method: method,
         whatsapp_number: normalized,
         customer_name:   customerName.trim(),
       })
       setShowBillModal(false)
+
+      if (method === 'whatsapp' && invoice) {
+        const phoneDigits = normalized.replace(/[^\d]/g, '')
+        const invNum = invoice.invoice_number
+        const ordNum = invoice.order_number || `ORD-${String(id).padStart(4, '0')}`
+        const table = invoice.table_label || ''
+        const sub = Number(invoice.subtotal || 0).toFixed(2)
+        const tax = Number(invoice.tax_amount || 0).toFixed(2)
+        const total = Number(invoice.total || 0).toFixed(2)
+        const custName = customerName.trim() || 'Valued Customer'
+        const paymentStatus = invoice.status === 'PAID' ? 'Paid' : 'Pending'
+        
+        const itemsText = (invoice.items || []).map(item => {
+          const qty = item.quantity
+          const name = item.product_name
+          const itemSub = Number(item.subtotal).toFixed(2)
+          return `${name} x ${qty} = ₹${itemSub}`
+        }).join('\n')
+
+        const receiptUrl = `${window.location.origin}/receipt/${invoice.token}`
+        const tableLine = table && !table.includes('Takeaway') ? `Table: ${table}\n\n` : `\n`
+
+        const rawMessage = 
+          `Hello ${custName},\n\n` +
+          `Thank you for visiting Artisan Brew!\n\n` +
+          `Order Summary:\n` +
+          `Invoice No: ${invNum}\n` +
+          `Order No: ${ordNum}\n` +
+          tableLine +
+          `Items:\n${itemsText}\n\n` +
+          `Subtotal: ₹${sub}\n` +
+          `GST: ₹${tax}\n` +
+          `Total Amount: ₹${total}\n` +
+          `Payment Status: ${paymentStatus}\n\n` +
+          `View your digital bill here:\n${receiptUrl}\n\n` +
+          `We hope to see you again soon!\n` +
+          `- Artisan Brew`
+
+        const msg = encodeURIComponent(rawMessage)
+        const waUrl = `https://wa.me/${phoneDigits}?text=${msg}`
+        window.open(waUrl, '_blank', 'noopener,noreferrer')
+      }
+
       navigate(`/orders/${id}/invoice`)
     } catch (err) {
       setBillError(err.message || 'Unable to generate bill. Please try again.')

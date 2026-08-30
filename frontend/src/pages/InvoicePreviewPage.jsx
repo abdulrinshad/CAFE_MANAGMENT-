@@ -106,31 +106,38 @@ export default function InvoicePreviewPage() {
       const phoneDigits = normalizeWhatsAppPhone(phone)
       const invNum = invoice.invoice_number
       const ordNum = invoice.order_number || `ORD-${String(id).padStart(4, '0')}`
-      const table = invoice.table_label || `Order #${id}`
-      const sub = Number(invoice.subtotal).toFixed(2)
-      const tax = Number(invoice.tax_amount).toFixed(2)
-      const total = Number(invoice.total).toFixed(2)
+      const table = invoice.table_label || ''
+      const sub = Number(invoice.subtotal || 0).toFixed(2)
+      const tax = Number(invoice.tax_amount || 0).toFixed(2)
+      const total = Number(invoice.total || 0).toFixed(2)
+      const custName = invoice.customer_name?.trim() || 'Valued Customer'
+      const paymentStatus = invoice.status === 'PAID' ? 'Paid' : 'Pending'
       
       const itemsText = (invoice.items || []).map(item => {
         const qty = item.quantity
         const name = item.product_name
         const itemSub = Number(item.subtotal).toFixed(2)
-        return `${name} × ${qty} — ₹${itemSub}`
+        return `${name} x ${qty} = ₹${itemSub}`
       }).join('\n')
 
+      const receiptUrl = `${window.location.origin}/receipt/${invoice.token}`
+      const tableLine = table && !table.includes('Takeaway') ? `Table: ${table}\n\n` : `\n`
+
       const rawMessage = 
-        `Hello,\n\n` +
-        `Thank you for visiting Artisan Brew.\n\n` +
-        `Invoice: ${invNum}\n` +
-        `Order: ${ordNum}\n` +
-        `Table: ${table}\n\n` +
+        `Hello ${custName},\n\n` +
+        `Thank you for visiting Artisan Brew!\n\n` +
+        `Order Summary:\n` +
+        `Invoice No: ${invNum}\n` +
+        `Order No: ${ordNum}\n` +
+        tableLine +
         `Items:\n${itemsText}\n\n` +
         `Subtotal: ₹${sub}\n` +
-        `GST (${taxRate}%): ₹${tax}\n` +
-        `Total: ₹${total}\n\n` +
-        `Please review your bill.\n\n` +
-        `Thank you,\n` +
-        `Artisan Brew`
+        `GST: ₹${tax}\n` +
+        `Total Amount: ₹${total}\n` +
+        `Payment Status: ${paymentStatus}\n\n` +
+        `View your digital bill here:\n${receiptUrl}\n\n` +
+        `We hope to see you again soon!\n` +
+        `- Artisan Brew`
 
       const msg = encodeURIComponent(rawMessage)
       const url = `https://wa.me/${phoneDigits}?text=${msg}`
