@@ -171,6 +171,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
     branch_code  = serializers.CharField(source='order.branch.code', read_only=True, default='BRANCH-001')
     table_label  = serializers.CharField(source='order.table_label', read_only=True)
     table_id     = serializers.IntegerField(source='order.table_id', read_only=True, allow_null=True)
+    customer_name = serializers.CharField(source='order.customer_name', read_only=True)
     receipt_url  = serializers.SerializerMethodField()
     items        = serializers.SerializerMethodField()
     order_status = serializers.CharField(source='order.status', read_only=True)
@@ -182,7 +183,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'invoice_number', 'token',
             'order', 'order_number', 'branch_name', 'branch_code', 'table_label', 'table_id', 'order_status',
-            'whatsapp_number', 'status',
+            'customer_name', 'whatsapp_number', 'status',
             'receipt_status',
             'subtotal', 'tax_amount', 'total',
             'receipt_url', 'items',

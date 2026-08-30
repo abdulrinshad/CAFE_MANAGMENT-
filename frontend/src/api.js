@@ -339,18 +339,28 @@ export const invoiceApi = {
 
 export const dashboardApi = {
   /** GET /dashboard/stats/ — today's KPIs */
-  stats: () => request('GET', '/dashboard/stats/'),
+  stats: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request('GET', `/dashboard/stats/${qs ? `?${qs}` : ''}`)
+  },
 
   /** GET /dashboard/recent-orders/?limit=8 */
-  recentOrders: (limit = 8) => request('GET', `/dashboard/recent-orders/?limit=${limit}`),
+  recentOrders: (params = {}) => {
+    const qs = new URLSearchParams({ limit: 8, ...params }).toString()
+    return request('GET', `/dashboard/recent-orders/?${qs}`)
+  },
 
   /** GET /dashboard/best-sellers/?limit=5&period=daily */
-  bestSellers: (limit = 5, period = 'daily') =>
-    request('GET', `/dashboard/best-sellers/?limit=${limit}&period=${period}`),
+  bestSellers: (params = {}) => {
+    const qs = new URLSearchParams({ limit: 5, period: 'daily', ...params }).toString()
+    return request('GET', `/dashboard/best-sellers/?${qs}`)
+  },
 
   /** GET /dashboard/sales-chart/?period=weekly */
-  salesChart: (period = 'weekly') =>
-    request('GET', `/dashboard/sales-chart/?period=${period}`),
+  salesChart: (params = {}) => {
+    const qs = new URLSearchParams({ period: 'weekly', ...params }).toString()
+    return request('GET', `/dashboard/sales-chart/?${qs}`)
+  },
 }
 
 // ── Reports API ───────────────────────────────────────────────────────────────

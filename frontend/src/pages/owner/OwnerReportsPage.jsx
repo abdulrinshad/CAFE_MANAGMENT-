@@ -60,6 +60,7 @@ function sevenDaysAgoStr() {
 }
 
 export default function OwnerReportsPage() {
+  const { ownerBranchFilter: branchFilter, setOwnerBranchFilter: setBranchFilter } = useApp()
   const [period,       setPeriod]       = useState('weekly')
   const [summary,      setSummary]      = useState(null)
   const [chartData,    setChartData]    = useState([])
@@ -73,8 +74,6 @@ export default function OwnerReportsPage() {
   const [appliedTo,    setAppliedTo]    = useState(todayStr())
   const [manualReady,  setManualReady]  = useState(false)   // true once Apply is clicked
 
-  // Branch filter
-  const [branchFilter, setBranchFilter] = useState('all')
   const [branches,     setBranches]     = useState([])
 
   useEffect(() => {
@@ -91,7 +90,7 @@ export default function OwnerReportsPage() {
     setLoading(true)
     try {
       const params = {}
-      if (branchFilter !== 'all') params.branch = branchFilter
+      if (branchFilter !== 'all' && branchFilter !== 'All') params.branch = branchFilter
 
       let sumPromise, revPromise, catsPromise
       if (period === 'manual') {

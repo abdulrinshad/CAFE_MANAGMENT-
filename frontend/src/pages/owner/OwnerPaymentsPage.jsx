@@ -5,9 +5,8 @@ import { branchApi } from '../../api'
 import './owner.css'
 
 export default function OwnerPaymentsPage() {
-  const { orders } = useApp()
+  const { orders, ownerBranchFilter: branchFilter, setOwnerBranchFilter: setBranchFilter } = useApp()
   const [search,       setSearch]       = useState('')
-  const [branchFilter, setBranchFilter] = useState('all')
   const [branches,     setBranches]     = useState([])
 
   useEffect(() => {
@@ -16,10 +15,8 @@ export default function OwnerPaymentsPage() {
       .catch(() => {})
   }, [])
 
-  // Apply branch filter before building payments list
-  const branchOrders = branchFilter === 'all'
-    ? orders
-    : orders.filter(o => String(o.branch) === branchFilter)
+  // Backend already filters `orders` globally via AppContext
+  const branchOrders = orders
 
   const paymentsList = branchOrders.map(o => ({
     id:      `PAY-${o.id}`,

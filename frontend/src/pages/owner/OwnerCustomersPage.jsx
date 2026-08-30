@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
 import { orderApi, branchApi } from '../../api'
+import { useApp } from '../../context/AppContext'
 import './owner.css'
 
 export default function OwnerCustomersPage() {
@@ -8,14 +9,19 @@ export default function OwnerCustomersPage() {
   const [loading, setLoading]        = useState(true)
   const [search,  setSearch]         = useState('')
   const [selectedKey, setSelectedKey] = useState(null)
-  const [branchFilter, setBranchFilter] = useState('all')
+  const { ownerBranchFilter: branchFilter, setOwnerBranchFilter: setBranchFilter } = useApp()
   const [branches,     setBranches]   = useState([])
+
+  // Helper to fetch orders (Note: AppContext already filters global orders, but here we fetch 500 for customers)
+  const getBranchParam = useCallback(() => {
+    return (branchFilter !== 'all' && branchFilter !== 'All') ? { branch: branchFilter } : {}
+  }, [branchFilter])
 
   // Fetch all orders from real API
   const fetchOrders = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await orderApi.list({ ordering: '-created_at', page_size: 500 })
+      const data = await orderApi.list({ ordering: '-created_at', page_size: 500, ...getBranchParam() })
       const list = Array.isArray(data) ? data : (data.results ?? [])
       setOrders(list)
     } catch (err) {
@@ -23,7 +29,7 @@ export default function OwnerCustomersPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [getBranchParam])
 
   useEffect(() => {
     fetchOrders()
@@ -32,12 +38,9 @@ export default function OwnerCustomersPage() {
       .catch(() => {})
   }, [fetchOrders])
 
-  // Apply branch filter to orders before building customer map
-  const branchOrders = useMemo(() =>
-    branchFilter === 'all'
-      ? orders
-      : orders.filter(o => String(o.branch) === branchFilter),
-  [orders, branchFilter])
+  // Backend already applies branch filter
+  const branchOrders = orders
+
 
   // Build customer records.
   // Key priority: phone number → customer name → 'walk-in-guest'

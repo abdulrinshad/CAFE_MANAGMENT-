@@ -20,10 +20,9 @@ function statusBadge(status) {
 }
 
 export default function OwnerOrdersPage() {
-  const { orders, fetchOrders } = useApp()
+  const { orders, fetchOrders, ownerBranchFilter: branchFilter, setOwnerBranchFilter: setBranchFilter } = useApp()
   const [statusFil,    setStatus]       = useState('All')
   const [search,       setSearch]       = useState('')
-  const [branchFilter, setBranchFilter] = useState('all')
   const [branches,     setBranches]     = useState([])
 
   useEffect(() => {
@@ -40,8 +39,7 @@ export default function OwnerOrdersPage() {
       (o.orderId && o.orderId.toLowerCase().includes(search.toLowerCase())) ||
       (o.table  && o.table.toLowerCase().includes(search.toLowerCase()))  ||
       (o.waiter && o.waiter.toLowerCase().includes(search.toLowerCase()))
-    const matchBranch = branchFilter === 'all' || String(o.branch) === branchFilter
-    return matchStatus && matchSearch && matchBranch
+    return matchStatus && matchSearch
   })
 
   const totalAmount = filtered.reduce((a, o) => a + (Number(o.amount) || 0), 0)
