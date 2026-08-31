@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
 import { reportsApi, branchApi } from '../../api'
+import { useApp } from '../../context/AppContext'
 import '../DashboardPage.css'
 import './owner.css'
 
@@ -96,7 +97,7 @@ export default function OwnerReportsPage() {
       if (period === 'manual') {
         const manualParams = { ...params, period: 'custom', date_from: appliedFrom, date_to: appliedTo }
         sumPromise  = reportsApi.summary(manualParams).catch(() => null)
-        revPromise  = reportsApi.revenueChart({ ...params, period: 'custom', date_from: appliedFrom, date_to: appliedTo }).catch(() => null)
+        revPromise  = reportsApi.revenueChart(manualParams).catch(() => null)
         catsPromise = reportsApi.topCategories(manualParams).catch(() => null)
       } else {
         sumPromise  = reportsApi.summary({ period, ...params }).catch(() => null)
@@ -231,7 +232,7 @@ export default function OwnerReportsPage() {
                 id="filter-reports-branch"
               >
                 <option value="all">All Branches</option>
-                {branches.filter(b => b.active).map(b => (
+                {branches.map(b => (
                   <option key={b.id} value={String(b.id)}>{b.name}</option>
                 ))}
               </select>
