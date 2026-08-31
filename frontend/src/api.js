@@ -107,6 +107,12 @@ export const authApi = {
   getWaiters: () => request('GET', '/auth/waiters/'),
   waiterLogin: (data) => request('POST', '/auth/waiter-login/', data),
   employeeLogin: (data) => request('POST', '/auth/employee-login/', data),
+  adminForgotPassword: (data) => request('POST', '/auth/admin-forgot-password/', data),
+  adminVerifyOTP: (data) => request('POST', '/auth/admin-verify-otp/', data),
+  adminResetPassword: (data) => request('POST', '/auth/admin-reset-password/', data),
+  adminSignup: (data) => request('POST', '/auth/admin-signup/', data),
+  adminVerifySignupOTP: (data) => request('POST', '/auth/admin-verify-signup-otp/', data),
+  adminResendSignupOTP: (data) => request('POST', '/auth/admin-resend-signup-otp/', data),
 }
 
 

@@ -147,12 +147,22 @@ export function AppProvider({ children }) {
     localStorage.removeItem('artisan_bm')
     localStorage.removeItem('artisan_bm_branch')
     localStorage.removeItem('artisan_cashier')
+    localStorage.removeItem('artisan_owner_branch')
+    
+    // Clear all state
     setCurrentUser(null)
     setCurrentRoleRaw('admin')
     setCurrentWaiterRaw(null)
     setCurrentBranchManagerRaw(null)
     setCurrentBranchRaw(null)
     setCurrentCashierRaw(null)
+    setOwnerBranchFilterRaw('all')
+    setNotifications([])
+    setWaiterRequests([])
+    setOwnerSettings(null)
+
+    // Hard reload to completely wipe React memory tree
+    window.location.href = '/login'
   }, [])
 
   const setCurrentBranchManager = (mgr) => {
@@ -171,8 +181,8 @@ export function AppProvider({ children }) {
     setCurrentBranchRaw(branch)
   }
 
-  const loginBranchManager = async (managerId, pin) => {
-    const res = await branchManagerApi.login({ manager_id: managerId, pin })
+  const loginBranchManager = async (businessCode, branchCode, managerId, pin) => {
+    const res = await branchManagerApi.login({ business_code: businessCode, branch_code: branchCode, manager_id: managerId, pin })
     localStorage.setItem('artisan_access', res.access)
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
@@ -237,8 +247,8 @@ export function AppProvider({ children }) {
     return res.user
   }
 
-  const loginWaiter = async (waiterId, pin) => {
-    const res = await authApi.waiterLogin({ waiter_id: waiterId, pin })
+  const loginWaiter = async (businessCode, branchCode, waiterId, pin) => {
+    const res = await authApi.waiterLogin({ business_code: businessCode, branch_code: branchCode, waiter_id: waiterId, pin })
     localStorage.setItem('artisan_access', res.access)
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
@@ -249,8 +259,8 @@ export function AppProvider({ children }) {
     return res.waiter
   }
 
-  const loginEmployee = async (employeeId, pin) => {
-    const res = await authApi.employeeLogin({ employee_id: employeeId, pin })
+  const loginEmployee = async (businessCode, branchCode, employeeId, pin) => {
+    const res = await authApi.employeeLogin({ business_code: businessCode, branch_code: branchCode, employee_id: employeeId, pin })
     localStorage.setItem('artisan_access', res.access)
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))

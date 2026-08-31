@@ -49,6 +49,12 @@ class Order(models.Model):
     order_number  = models.CharField(max_length=20, unique=True, blank=True)
 
     # Links
+    tenant = models.ForeignKey(
+        'accounts.Tenant',
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='orders',
+    )
     branch = models.ForeignKey(
         'accounts.Branch',
         on_delete=models.SET_NULL,
@@ -377,6 +383,12 @@ class Expense(models.Model):
         ('rejected', 'Rejected'),
     ]
 
+    tenant = models.ForeignKey(
+        'accounts.Tenant',
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='expenses',
+    )
     branch = models.ForeignKey(
         'accounts.Branch',
         on_delete=models.SET_NULL,

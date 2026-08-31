@@ -57,7 +57,8 @@ class Category(models.Model):
         ('default',           'Default'),
     ]
 
-    name          = models.CharField(max_length=120, unique=True)
+    name          = models.CharField(max_length=120)
+    tenant        = models.ForeignKey('accounts.Tenant', on_delete=models.CASCADE, related_name='categories', null=True, blank=True)
     icon          = models.CharField(max_length=50, choices=ICON_CHOICES, default='default')
     branch        = models.ForeignKey('accounts.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='categories')
     display_order = models.PositiveSmallIntegerField(default=0, db_index=True)
@@ -69,6 +70,7 @@ class Category(models.Model):
         verbose_name        = 'Category'
         verbose_name_plural = 'Categories'
         ordering            = ['display_order', 'name']
+        unique_together     = (('name', 'branch'),)
 
     def __str__(self):
         return self.name
@@ -98,6 +100,7 @@ class Product(models.Model):
 
     # ── Core fields ──────────────────────────────────────────────────────────
     name         = models.CharField(max_length=200)
+    tenant       = models.ForeignKey('accounts.Tenant', on_delete=models.CASCADE, related_name='products', null=True, blank=True)
     branch       = models.ForeignKey('accounts.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='products')
     category     = models.ForeignKey(
         Category,
@@ -189,7 +192,8 @@ class Table(models.Model):
     ]
 
     # Table label shown in the UI, e.g. "T-01", "Bar-1"
-    name              = models.CharField(max_length=50, unique=True, help_text='Table label, e.g. T-01')
+    name              = models.CharField(max_length=50, help_text='Table label, e.g. T-01')
+    tenant            = models.ForeignKey('accounts.Tenant', on_delete=models.CASCADE, related_name='tables', null=True, blank=True)
     branch            = models.ForeignKey('accounts.Branch', on_delete=models.SET_NULL, null=True, blank=True, related_name='tables')
     seats             = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(1)])
     status            = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_AVAILABLE, db_index=True)
@@ -203,6 +207,7 @@ class Table(models.Model):
         verbose_name        = 'Table'
         verbose_name_plural = 'Tables'
         ordering            = ['name']
+        unique_together     = (('name', 'branch'),)
 
     def __str__(self):
         return f'{self.name} ({self.get_status_display()})'
@@ -324,6 +329,7 @@ class WaiterRequest(models.Model):
 
 
 class InventoryItem(models.Model):
+    tenant = models.ForeignKey('accounts.Tenant', on_delete=models.CASCADE, related_name='inventory_items', null=True, blank=True)
     branch = models.ForeignKey('accounts.Branch', on_delete=models.CASCADE, related_name='inventory_items')
     name = models.CharField(max_length=120)
     current_stock = models.DecimalField(max_digits=10, decimal_places=2, default=0)

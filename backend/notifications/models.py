@@ -56,6 +56,12 @@ class Notification(models.Model):
         null=True, blank=True,
         related_name='notifications',
     )
+    tenant = models.ForeignKey(
+        'accounts.Tenant',
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='notifications',
+    )
     branch = models.ForeignKey(
         'accounts.Branch',
         on_delete=models.CASCADE,
@@ -166,6 +172,12 @@ class Conversation(models.Model):
         (PRIORITY_URGENT,    'Urgent'),
     ]
 
+    tenant = models.ForeignKey(
+        'accounts.Tenant',
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='conversations',
+    )
     branch = models.ForeignKey(
         'accounts.Branch',
         on_delete=models.CASCADE,

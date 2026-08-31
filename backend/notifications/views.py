@@ -26,10 +26,10 @@ from .serializers import NotificationSerializer, ConversationSerializer, Convers
 
 from accounts.permissions import IsEmployeeOrAbove, IsAdminOrManager
 from accounts.branch_views import get_manager_branch
-from accounts.utils import get_waiter_branch
+from accounts.utils import get_waiter_branch, TenantEnforceMixin
 
 
-class NotificationViewSet(mixins.UpdateModelMixin, viewsets.ReadOnlyModelViewSet):
+class NotificationViewSet(TenantEnforceMixin, mixins.UpdateModelMixin, viewsets.ReadOnlyModelViewSet):
     """
     Read-write (update/read) viewset for notifications.
     Enforces strict branch-level security: Cashiers and Branch Managers only see
@@ -75,6 +75,12 @@ class NotificationViewSet(mixins.UpdateModelMixin, viewsets.ReadOnlyModelViewSet
                 models.Q(target_role='admin') |
                 models.Q(type__in=['owner_message', 'system_alert'])
             )
+            branch_id = self.request.query_params.get('branch')
+            if branch_id and str(branch_id).lower() != 'all':
+                if str(branch_id).isdigit():
+                    qs = qs.filter(branch_id=branch_id)
+            else:
+                qs = qs.filter(models.Q(branch__isnull=False) | models.Q(type='system_alert'))
         else:
             if not user_branch:
                 # Non-owner user without an assigned branch sees only direct notifications
@@ -150,7 +156,7 @@ class NotificationViewSet(mixins.UpdateModelMixin, viewsets.ReadOnlyModelViewSet
         return Response({'marked_read': count})
 
 
-class ConversationViewSet(viewsets.ModelViewSet):
+class ConversationViewSet(TenantEnforceMixin, viewsets.ModelViewSet):
     """
     ViewSet for Manager <-> Owner conversations and alerts.
     Cashiers & Waiters are restricted from accessing this endpoint (HTTP 403).
@@ -176,6 +182,13 @@ class ConversationViewSet(viewsets.ModelViewSet):
             if not is_owner_or_admin and assigned_branch:
                 # Branch Manager sees conversations for their branch
                 qs = qs.filter(branch=assigned_branch)
+            elif is_owner_or_admin:
+                branch_id = self.request.query_params.get('branch')
+                if branch_id and str(branch_id).lower() != 'all':
+                    if str(branch_id).isdigit():
+                        qs = qs.filter(branch_id=branch_id)
+                else:
+                    qs = qs.filter(branch__isnull=False)
 
         return qs
 
@@ -221,7 +234,10 @@ class ConversationViewSet(viewsets.ModelViewSet):
             except Exception:
                 pass
 
+        from accounts.utils import get_user_tenant
+        tenant = get_user_tenant(request)
         conversation = Conversation.objects.create(
+            tenant=tenant,
             branch=branch,
             manager=user,
             manager_name=manager_name,
@@ -247,6 +263,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
         try:
             p_label = priority.upper()
             Notification.objects.create(
+                tenant=tenant,
                 type=Notification.TYPE_OWNER_MESSAGE,
                 target_role=Notification.TARGET_ADMIN,
                 branch=branch,
@@ -325,6 +342,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 if is_owner:
                     # Notify ONLY the specific original Branch Manager
                     Notification.objects.create(
+                        tenant=conversation.tenant,
                         type=Notification.TYPE_OWNER_REPLY,
                         target_role=Notification.TARGET_USER,
                         recipient=conversation.manager,
@@ -337,6 +355,7 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 else:
                     # Notify Owner
                     Notification.objects.create(
+                        tenant=conversation.tenant,
                         type=Notification.TYPE_OWNER_MESSAGE,
                         target_role=Notification.TARGET_ADMIN,
                         branch=conversation.branch,
