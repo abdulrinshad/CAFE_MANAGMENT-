@@ -278,7 +278,7 @@ export function AppProvider({ children }) {
 
   const getBranchParam = useCallback(() => {
     // Only apply branch query param if owner is filtering
-    if (currentRole === 'admin' && ownerBranchFilter !== 'all' && ownerBranchFilter !== 'All') {
+    if ((currentRole === 'admin' || currentRole === 'owner') && ownerBranchFilter !== 'all' && ownerBranchFilter !== 'All') {
       return { branch: ownerBranchFilter }
     }
     return {}
@@ -425,19 +425,23 @@ export function AppProvider({ children }) {
     fetchOrders()
     fetchNotifications()
     fetchWaiterRequests()
-    fetchConversations()
+    if (currentRole === 'admin' || currentRole === 'branch_manager') {
+      fetchConversations()
+    }
 
     // Poll notifications, waiter requests, and conversations every 4 seconds
     pollRef.current = setInterval(() => {
       fetchNotifications()
       fetchWaiterRequests()
-      fetchConversations()
+      if (currentRole === 'admin' || currentRole === 'branch_manager') {
+        fetchConversations()
+      }
     }, 4000)
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
-  }, [isAuthenticated, fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications, fetchWaiterRequests, fetchConversations])
+  }, [isAuthenticated, currentRole, fetchCategories, fetchProducts, fetchTables, fetchQRCodes, fetchOrders, fetchNotifications, fetchWaiterRequests, fetchConversations])
 
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -462,6 +466,7 @@ export function AppProvider({ children }) {
       ...o,
       // UI-expected field aliases
       orderId:      o.order_number,
+      branchName:   o.branch_name ?? '',
       table:        o.table_label ?? '',
       waiter:       o.waiter_name ?? '',
       itemsSummary: o.items_summary ?? '',
@@ -914,6 +919,9 @@ export function AppProvider({ children }) {
         sendMessageToOwner,
         replyToConversation,
         markConversationSeen,
+        // owner branch filter state
+        ownerBranchFilter,
+        setOwnerBranchFilter,
       }}
     >
       {children}

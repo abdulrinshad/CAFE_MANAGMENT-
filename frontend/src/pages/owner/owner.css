@@ -182,7 +182,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
-  min-width: 600px;
+  min-width: 850px;
 }
 .owner-table thead { background: var(--color-bg-alt); }
 .owner-table thead th {

@@ -16,6 +16,22 @@ export default function OwnerPOSPage() {
   const [form, setForm]       = useState(EMPTY_FORM)
   const [loading, setLoading] = useState(true)
 
+  // Form validation errors state
+  const [formErrors, setFormErrors] = useState({})
+
+  // Toast notification state
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' })
+  
+  // Delete confirmation state
+  const [deleteModal, setDeleteModal] = useState(false)
+  const [terminalToDelete, setTerminalToDelete] = useState(null)
+  const [deletingProgress, setDeletingProgress] = useState(false)
+
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type })
+    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 4000)
+  }
+
   const loadData = useCallback(async () => {
     try {
       const posData = await request('GET', '/owner/pos/')
@@ -36,41 +52,53 @@ export default function OwnerPOSPage() {
   const openAdd  = () => { 
     setForm({ terminal: '', branchId: branches[0]?.id || '', status: 'active' })
     setEditing(null)
+    setFormErrors({})
     setModal(true) 
   }
 
   const openEdit = (t) => {
     setForm({ terminal: t.terminal || t.name, branchId: t.branch || '', status: t.status })
     setEditing(t.id)
+    setFormErrors({})
     setModal(true)
   }
 
-  const closeModal = () => { setModal(false); setEditing(null) }
+  const closeModal = () => { 
+    setModal(false)
+    setEditing(null)
+    setFormErrors({})
+  }
 
   const handleSave = async () => {
     if (!form.terminal.trim()) return
     if (!form.branchId) {
-      alert("Please select a branch.")
+      showToast("Please select a branch.", "error")
       return
     }
     try {
+      setFormErrors({})
       if (editing) {
         await request('PATCH', `/owner/pos/${editing}/`, {
           terminalName: form.terminal,
           branchId: form.branchId,
           status: form.status
         })
+        showToast("POS terminal updated successfully.", "success")
       } else {
         await request('POST', '/owner/pos/', {
           terminalName: form.terminal,
           branchId: form.branchId,
           status: form.status
         })
+        showToast("POS terminal registered successfully.", "success")
       }
       await loadData()
       closeModal()
     } catch (err) {
-      alert(err.message || "Failed to save POS terminal.")
+      if (err.data && typeof err.data === 'object') {
+        setFormErrors(err.data)
+      }
+      showToast(err.message || "Failed to save POS terminal.", "error")
     }
   }
 
@@ -78,9 +106,35 @@ export default function OwnerPOSPage() {
     const nextStatus = currentStatus === 'active' ? 'inactive' : 'active'
     try {
       await request('PATCH', `/owner/pos/${id}/status/`, { status: nextStatus })
+      showToast(`POS terminal ${nextStatus === 'active' ? 'activated' : 'deactivated'} successfully.`, "success")
       await loadData()
     } catch (err) {
-      alert(err.message || "Failed to update terminal status.")
+      showToast(err.message || "Failed to update terminal status.", "error")
+    }
+  }
+
+  const handleDeleteClick = (t) => {
+    if (t.assigned_cashier || (t.assignedUser && t.assignedUser !== 'Not Assigned')) {
+      showToast(`${t.terminal || t.name} is currently assigned to a cashier. Please unassign the cashier before deleting this terminal.`, 'error')
+      return
+    }
+    setTerminalToDelete(t)
+    setDeleteModal(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!terminalToDelete) return
+    setDeletingProgress(true)
+    try {
+      await request('DELETE', `/owner/pos/${terminalToDelete.id}/`)
+      showToast("POS terminal deleted successfully.", "success")
+      setDeleteModal(false)
+      setTerminalToDelete(null)
+      await loadData()
+    } catch (err) {
+      showToast(err.message || "Failed to delete POS terminal.", "error")
+    } finally {
+      setDeletingProgress(false)
     }
   }
 
@@ -166,6 +220,13 @@ export default function OwnerPOSPage() {
                         >
                           {t.status === 'active' ? '⏸' : '▶'}
                         </button>
+                        <button 
+                          className="owner-icon-btn owner-icon-btn--danger" 
+                          title="Delete" 
+                          onClick={() => handleDeleteClick(t)}
+                        >
+                          🗑️
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -189,7 +250,20 @@ export default function OwnerPOSPage() {
         <div className="owner-form-grid">
           <div className="form-group owner-form-grid--full">
             <label className="form-label">Terminal Name / ID <span>*</span></label>
-            <input className="form-input" placeholder="e.g. POS-02 (Counter Express)" value={form.terminal} onChange={f('terminal')} id="inp-pos-name" required />
+            <input 
+              className="form-input" 
+              placeholder="e.g. POS-02 (Counter Express)" 
+              value={form.terminal} 
+              onChange={f('terminal')} 
+              id="inp-pos-name" 
+              required 
+              style={formErrors.name || formErrors.terminal || formErrors.terminalName ? { borderColor: '#e53e3e', boxShadow: '0 0 0 1px #e53e3e' } : {}}
+            />
+            {(formErrors.name || formErrors.terminal || formErrors.terminalName) && (
+              <p style={{ color: '#e53e3e', fontSize: '11px', marginTop: '4px', marginBottom: '0' }}>
+                {formErrors.name || formErrors.terminal || formErrors.terminalName}
+              </p>
+            )}
           </div>
           <div className="form-group owner-form-grid--full">
             <label className="form-label">Branch <span>*</span></label>
@@ -214,6 +288,57 @@ export default function OwnerPOSPage() {
           <button className="btn-primary" onClick={handleSave} id="btn-save-pos">{editing ? 'Save Changes' : 'Register Terminal'}</button>
         </div>
       </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal open={deleteModal} onClose={() => setDeleteModal(false)} title="Delete POS Terminal?">
+        <div style={{ padding: '10px 0', fontSize: '14px', color: 'var(--color-espresso)' }}>
+          <p>Are you sure you want to delete <strong>"{terminalToDelete?.terminal || terminalToDelete?.name}"</strong>?</p>
+          <p style={{ color: '#e53e3e', fontSize: '13px', marginTop: '8px' }}>This action cannot be undone.</p>
+        </div>
+        <div className="owner-modal-footer">
+          <button className="btn-outline" onClick={() => setDeleteModal(false)} disabled={deletingProgress}>Cancel</button>
+          <button 
+            className="btn-primary" 
+            style={{ backgroundColor: '#e53e3e', color: '#fff', border: 'none' }} 
+            onClick={confirmDelete} 
+            disabled={deletingProgress}
+          >
+            {deletingProgress ? 'Deleting...' : 'Delete Terminal'}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          backgroundColor: toast.type === 'success' ? '#2e7d32' : toast.type === 'error' ? '#c62828' : '#333',
+          color: '#fff',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          animation: 'slideIn 0.3s ease-out',
+          fontSize: '14px',
+          fontWeight: '500'
+        }}>
+          <span>{toast.type === 'success' ? '✓' : '⚠️'}</span>
+          <span>{toast.message}</span>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
+
     </AdminLayout>
   )
 }

@@ -461,6 +461,16 @@ class POSTerminalSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('id', 'created_at', 'updated_at')
 
+    def validate_name(self, value):
+        from accounts.models import POSTerminal
+        val = str(value).strip()
+        qs = POSTerminal.objects.filter(name__iexact=val)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(f"{val} already exists. Please use a different POS terminal ID.")
+        return val
+
     def to_internal_value(self, data):
         data = data.copy()
         if 'terminal' in data:

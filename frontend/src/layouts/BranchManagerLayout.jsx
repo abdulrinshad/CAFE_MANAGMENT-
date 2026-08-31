@@ -8,14 +8,14 @@ import '../components/TopHeader.css';
 
 export default function BranchManagerLayout({
   children,
-  searchPlaceholder = 'Search Kochi branch...',
+  searchPlaceholder,
   pageTitle,
   pageIcon,
   headerRight,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useApp();
+  const { logout, currentBranch } = useApp();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [searchVal, setSearchVal] = useState('');
   
@@ -148,7 +148,7 @@ export default function BranchManagerLayout({
                 <input
                   type="text"
                   className="top-header__search-input"
-                  placeholder={searchPlaceholder}
+                  placeholder={searchPlaceholder || `Search ${currentBranch?.name || 'branch'}...`}
                   value={searchVal}
                   onChange={(e) => setSearchVal(e.target.value)}
                 />

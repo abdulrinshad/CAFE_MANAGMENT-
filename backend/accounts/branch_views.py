@@ -158,6 +158,9 @@ class BranchStaffView(APIView):
     permission_classes = [IsAuthenticated, IsBranchManager]
 
     def _serialize_member(self, member, role_name):
+        terminal = None
+        if role_name == "CASHIER":
+            terminal = POSTerminal.objects.filter(assigned_cashier=member).first()
         return {
             "id":          f"{role_name.lower()}_{member.id}",
             "db_id":       member.id,
@@ -173,6 +176,8 @@ class BranchStaffView(APIView):
             "is_active":   member.is_active,
             "status":      "active" if member.is_active else "inactive",
             "joinedDate":  member.created_at.strftime("%Y-%m-%d") if hasattr(member, 'created_at') and member.created_at else "",
+            "terminal_id": terminal.id if terminal else None,
+            "terminal_name": terminal.name if terminal else "None",
         }
     def get(self, request, pk=None, *args, **kwargs):
         branch = get_manager_branch(request)
@@ -204,6 +209,33 @@ class BranchStaffView(APIView):
             [self._serialize_member(k, "KITCHEN") for k in kitchen]
         )
         return Response(staff_list)
+
+    def _validate_post(self, data, branch):
+        errors = {}
+        name = str(data.get('name') or '').strip()
+        employee_id = str(data.get('employee_id') or '').strip()
+        pin = str(data.get('pin') or '').strip()
+        confirm_pin = str(data.get('confirm_pin') or '').strip()
+
+        if not name:
+            errors['name'] = "Full Name is required."
+        elif len(name) > 120:
+            errors['name'] = "Full Name is too long."
+
+        if not employee_id:
+            errors['employee_id'] = "Employee ID is required."
+        else:
+            if Waiter.objects.filter(employee_id=employee_id).exists() or Cashier.objects.filter(employee_id=employee_id).exists() or KitchenStaff.objects.filter(employee_id=employee_id).exists():
+                errors['employee_id'] = "Employee ID already exists. Please use a different Employee ID."
+
+        if not pin:
+            errors['pin'] = "4-Digit PIN is required for new employees."
+        elif not pin.isdigit() or len(pin) != 4:
+            errors['pin'] = "PIN must be exactly 4 digits and numeric."
+        elif pin != confirm_pin:
+            errors['confirm_pin'] = "PINs do not match."
+
+        return errors, name, employee_id, pin
 
     def post(self, request, *args, **kwargs):
         """
@@ -259,6 +291,20 @@ class BranchStaffView(APIView):
             serializer = CashierSerializer(data=data)
             serializer.is_valid(raise_exception=True)
             member = serializer.save()
+
+            # POS Terminal Assignment validation and assignment
+            terminal_id = request.data.get('terminal_id')
+            if terminal_id:
+                try:
+                    terminal = POSTerminal.objects.get(pk=terminal_id, branch=branch)
+                    if terminal.assigned_cashier and terminal.assigned_cashier.is_active:
+                        return Response({"detail": f"Terminal '{terminal.name}' is already assigned to an active cashier."}, status=status.HTTP_400_BAD_REQUEST)
+                    POSTerminal.objects.filter(assigned_cashier=member).update(assigned_cashier=None)
+                    terminal.assigned_cashier = member
+                    terminal.save(update_fields=['assigned_cashier'])
+                except (POSTerminal.DoesNotExist, ValueError, TypeError):
+                    return Response({"detail": "Invalid POS Terminal ID or terminal belongs to another branch."}, status=status.HTTP_400_BAD_REQUEST)
+
             return Response(self._serialize_member(member, "CASHIER"), status=status.HTTP_201_CREATED)
 
         elif role == 'kitchen':
@@ -276,6 +322,7 @@ class BranchStaffView(APIView):
             return Response(self._serialize_member(member, "KITCHEN"), status=status.HTTP_201_CREATED)
 
         return Response({"detail": f"Unsupported role: {role}"}, status=status.HTTP_400_BAD_REQUEST)
+
     def patch(self, request, pk, *args, **kwargs):
         branch = get_manager_branch(request)
         if not branch:
@@ -297,6 +344,8 @@ class BranchStaffView(APIView):
             elif role_type == 'cashier':
                 member = get_object_or_404(Cashier, pk=obj_id, branch=branch)
                 member.is_active = is_active; member.save(update_fields=['is_active'])
+                if not is_active:
+                    POSTerminal.objects.filter(assigned_cashier=member).update(assigned_cashier=None)
                 return Response(self._serialize_member(member, "CASHIER"))
             elif role_type == 'kitchen':
                 member = get_object_or_404(KitchenStaff, pk=obj_id, branch=branch)
@@ -346,6 +395,8 @@ class BranchStaffView(APIView):
             if is_active is not None:
                 member.is_active = is_active
                 update_fields.append('is_active')
+                if not is_active:
+                    POSTerminal.objects.filter(assigned_cashier=member).update(assigned_cashier=None)
             if pin:
                 member.set_pin(pin)
                 update_fields.append('pin_hash')
@@ -365,6 +416,21 @@ class BranchStaffView(APIView):
             member, err = _apply_fields(member, 'cashier')
             if err:
                 return Response({"employee_id": err}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Handle terminal_id update if passed in payload
+            if 'terminal_id' in request.data:
+                terminal_id = request.data.get('terminal_id')
+                POSTerminal.objects.filter(assigned_cashier=member).update(assigned_cashier=None)
+                if terminal_id not in [None, '', 'null', 'None']:
+                    try:
+                        terminal = POSTerminal.objects.get(pk=terminal_id, branch=branch)
+                        if terminal.assigned_cashier and terminal.assigned_cashier != member and terminal.assigned_cashier.is_active:
+                            return Response({"detail": f"Terminal '{terminal.name}' is already assigned to another active cashier."}, status=status.HTTP_400_BAD_REQUEST)
+                        terminal.assigned_cashier = member
+                        terminal.save(update_fields=['assigned_cashier'])
+                    except (POSTerminal.DoesNotExist, ValueError, TypeError):
+                        return Response({"detail": "Invalid POS Terminal ID or terminal belongs to another branch."}, status=status.HTTP_400_BAD_REQUEST)
+
             return Response(self._serialize_member(member, "CASHIER"))
 
         elif role_type == 'kitchen':

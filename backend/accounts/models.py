@@ -168,7 +168,7 @@ class KitchenStaff(models.Model):
 
 
 class POSTerminal(models.Model):
-    name = models.CharField(max_length=120)
+    name = models.CharField(max_length=120, unique=True)
     branch = models.ForeignKey(
         Branch, on_delete=models.CASCADE, related_name='pos_terminals'
     )

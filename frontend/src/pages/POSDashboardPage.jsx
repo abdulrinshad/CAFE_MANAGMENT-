@@ -71,26 +71,26 @@ export default function POSDashboardPage() {
 
   // ── Dynamic Cashier Identity & Terminal ──────────────────────────────────────
   const cashierDisplayName = (() => {
+    if (currentCashier?.name) return currentCashier.name
+    if (currentWaiter?.name)  return currentWaiter.name
     if (currentUser) {
       const first = (currentUser.first_name || '').trim()
       const last  = (currentUser.last_name  || '').trim()
       if (first && last) return `${first} ${last}`
       if (first)         return first
-      if (currentUser.email && currentUser.email.includes('@')) {
+      if (currentUser.email && currentUser.email.includes('@') && !currentUser.email.includes('artisanbrew.internal')) {
         const handle = currentUser.email.split('@')[0]
         return handle.charAt(0).toUpperCase() + handle.slice(1)
       }
-      if (currentUser.username && !currentUser.username.startsWith('cashier_')) {
+      if (currentUser.username && !currentUser.username.startsWith('cashier_') && !currentUser.username.startsWith('waiter_')) {
         return currentUser.username
       }
     }
-    if (currentCashier?.name) return currentCashier.name
-    if (currentWaiter?.name)  return currentWaiter.name
     return 'Cashier'
   })()
 
-  const branchName = currentBranch?.name || currentUser?.branch?.name || currentUser?.branch_name || 'Kochi Main Branch'
-  const terminalName = currentUser?.terminal_name || 'Cashier Terminal'
+  const branchName = currentCashier?.branch_name || currentBranch?.name || currentUser?.branch?.name || currentUser?.branch_name || 'Your Branch'
+  const terminalName = currentCashier?.terminal?.name || currentUser?.terminal_name || 'Cashier Terminal'
 
   const headerRight = (
     <div className="header-branch-terminal" style={{ marginRight: '16px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', fontSize: '11px', color: 'var(--color-text-secondary)' }}>

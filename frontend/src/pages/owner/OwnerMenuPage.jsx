@@ -21,11 +21,9 @@ function ProductImageFallback({ size = 40 }) {
 
 export default function OwnerMenuPage() {
   const { 
-    products, categories,
-    fetchProducts, fetchCategories,
+    products, branches: appBranches,
     ownerBranchFilter: branchFilter, setOwnerBranchFilter: setBranchFilter
   } = useApp()
-  const [catFilter, setCat]       = useState('All')
   const [search,    setSearch]    = useState('')
   const [branches, setBranches] = useState([])
   const [loading, setLoading] = useState(false)
@@ -43,12 +41,9 @@ export default function OwnerMenuPage() {
     return map
   }, [branches])
 
-  const allCats = ['All', ...categories.map(c => c.name)]
-
   const filtered = products.filter(i => {
-    const matchCat    = catFilter === 'All' || (i.category_name && i.category_name.toLowerCase() === catFilter.toLowerCase()) || (i.categoryLabel && i.categoryLabel.toLowerCase() === catFilter.toLowerCase())
     const matchSearch = !search || i.name.toLowerCase().includes(search.toLowerCase())
-    return matchCat && matchSearch
+    return matchSearch
   })
 
   return (
@@ -71,21 +66,8 @@ export default function OwnerMenuPage() {
           </div>
         </div>
 
-        {/* Category Tabs + Filters */}
+        {/* Filters */}
         <div className="owner-section-card">
-          <div className="owner-tab-bar">
-            {allCats.map(c => (
-              <button
-                key={c}
-                className={`owner-tab${catFilter === c ? ' owner-tab--active' : ''}`}
-                onClick={() => setCat(c)}
-                id={`menu-cat-${c.toLowerCase().replace(/\s/g,'-')}`}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
-
           <div className="owner-section-card__header" style={{ borderBottom: 'none' }}>
             <div className="owner-filter-bar">
               <input

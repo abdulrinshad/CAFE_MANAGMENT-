@@ -17,6 +17,7 @@ const EMPTY_FORM = {
   pin:         '',
   confirm_pin: '',
   is_active:   true,
+  terminal_id: '',
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ export default function Staff() {
   const [editing,      setEditing]      = useState(null);   // { id: 'waiter_5' | 'cashier_3', type }
   const [saving,       setSaving]       = useState(false);
   const [error,        setError]        = useState(null);
+  const [terminals,    setTerminals]    = useState([]);
 
   // Detail view modal
   const [selectedMember,  setSelectedMember]  = useState(null);
@@ -56,6 +58,23 @@ export default function Staff() {
 
   useEffect(() => { loadStaff(); }, []);
 
+  useEffect(() => {
+    if (modal && employeeType === TYPE_CASHIER) {
+      branchManagerService.getPOSTerminals()
+        .then(data => {
+          setTerminals(Array.isArray(data) ? data : []);
+        })
+        .catch(err => {
+          console.error("Failed to load POS terminals:", err);
+        });
+    }
+  }, [modal, employeeType]);
+
+  const availableTerminals = terminals.filter(t => 
+    t.status === 'active' && 
+    (!t.assigned_cashier || (editing && t.assigned_cashier === parseInt(editing.id.split('_')[1])))
+  );
+
   // ── KPI helpers ────────────────────────────────────────────────────────────
 
   const waiters  = staff.filter(s => s.role_key === 'waiter'  || s.role === 'Waiter').length;
@@ -66,7 +85,7 @@ export default function Staff() {
 
   const openAdd = (type = TYPE_WAITER) => {
     setEmployeeType(type);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, terminal_id: '' });
     setEditing(null);
     setError(null);
     setModal(true);
@@ -82,6 +101,7 @@ export default function Staff() {
       pin:         '',
       confirm_pin: '',
       is_active:   member.is_active ?? true,
+      terminal_id: member.terminal_id || '',
     });
     setEditing({ id: member.id, type });
     setError(null);
@@ -160,6 +180,10 @@ export default function Staff() {
         payload.confirm_pin = form.pin.trim();
       }
 
+      if (employeeType === TYPE_CASHIER) {
+        payload.terminal_id = form.terminal_id ? parseInt(form.terminal_id) : null;
+      }
+
       if (editing) {
         // PATCH /branch/staff/<id>/
         await branchManagerService.editStaff(editing.id, payload);
@@ -172,13 +196,22 @@ export default function Staff() {
       closeModal();
     } catch (err) {
       console.error('Save employee error:', err);
-      // Surface structured backend errors (e.g. { employee_id: "already in use" })
-      if (err.data && typeof err.data === 'object') {
-        const msgs = Object.values(err.data).flat().join(' ');
-        setError(msgs || err.message || 'Failed to save employee.');
-      } else {
-        setError(err.message || 'Failed to save employee.');
+      let errMsg = 'Failed to save employee.';
+      if (err.data) {
+        if (typeof err.data === 'string') {
+          errMsg = err.data;
+        } else if (typeof err.data === 'object') {
+          const values = Object.values(err.data).map(val => {
+            if (Array.isArray(val)) return val.join(' ');
+            if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+            return String(val);
+          });
+          errMsg = values.join(' ');
+        }
+      } else if (err.message) {
+        errMsg = err.message;
       }
+      setError(errMsg);
     } finally {
       setSaving(false);
     }
@@ -319,6 +352,11 @@ export default function Staff() {
                         }`}>
                           {member.role || member.role_key?.toUpperCase() || '—'}
                         </span>
+                        {member.role_key === 'cashier' && member.terminal_name && member.terminal_name !== 'None' && (
+                          <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                            {member.terminal_name}
+                          </div>
+                        )}
                       </td>
 
                       {/* Branch — always manager's own branch */}
@@ -555,6 +593,29 @@ export default function Staff() {
             />
           </div>
 
+          {/* ── POS Terminal (Cashier only) ────────────────────────────────── */}
+          {employeeType === TYPE_CASHIER && (
+            <div className="form-group owner-form-grid--full">
+              <label className="form-label">POS Terminal</label>
+              <select
+                id="sel-emp-terminal"
+                className="form-select"
+                value={form.terminal_id || ''}
+                onChange={f('terminal_id')}
+              >
+                <option value="">-- Unassigned / None --</option>
+                {availableTerminals.map(t => (
+                  <option key={t.id} value={String(t.id)}>{t.name}</option>
+                ))}
+              </select>
+              {availableTerminals.length === 0 && !form.terminal_id && (
+                <p style={{ fontSize: 11, color: '#e53e3e', marginTop: 4, marginBottom: 0 }}>
+                  No available POS terminals for this branch
+                </p>
+              )}
+            </div>
+          )}
+
           {/* ── Status ────────────────────────────────────────────────────── */}
           <div className="form-group owner-form-grid--full">
             <label className="form-label">Status</label>
@@ -648,6 +709,9 @@ export default function Staff() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, fontSize: 13 }}>
               <DetailRow label="Branch"      value={selectedMember.branch_name || currentBranch?.name || '—'} />
               <DetailRow label="Section"     value={selectedMember.section || (selectedMember.role_key === 'cashier' ? 'N/A' : '—')} />
+              {selectedMember.role_key === 'cashier' && (
+                <DetailRow label="POS Terminal" value={selectedMember.terminal_name || 'None'} />
+              )}
               <DetailRow label="Joined"      value={selectedMember.joinedDate || '—'} />
               <DetailRow
                 label="Status"

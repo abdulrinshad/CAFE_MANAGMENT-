@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import BranchManagerLayout from '../../layouts/BranchManagerLayout';
 import { branchManagerService } from '../../services/branchManagerService';
+import { useApp } from '../../context/AppContext';
 import '../../pages/owner/owner.css';
 
 export default function Kitchen() {
+  const { currentBranch } = useApp();
   const [orders, setOrders] = useState([]);
   const [channelFilter, setChannelFilter] = useState('ALL');
 
@@ -63,7 +65,7 @@ export default function Kitchen() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h1 className="owner-page-header__title">Kitchen Display System</h1>
-            <p className="owner-page-header__sub">Monitor and update cooking stages for Kochi branch orders.</p>
+            <p className="owner-page-header__sub">Monitor and update cooking stages for {currentBranch?.name || 'your'} branch orders.</p>
           </div>
           
           {/* Quick Filters */}

@@ -126,6 +126,7 @@ class OrderSerializer(serializers.ModelSerializer):
 class OrderListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views."""
     table_label   = serializers.CharField(read_only=True)
+    branch_name   = serializers.CharField(source='branch.name', read_only=True, default='Artisan Brew')
     items_summary = serializers.CharField(read_only=True)
     item_count    = serializers.IntegerField(read_only=True)
     items         = OrderItemSerializer(many=True, read_only=True)
@@ -135,7 +136,7 @@ class OrderListSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Order
         fields = [
-            'id', 'order_number', 'table', 'table_label',
+            'id', 'order_number', 'branch', 'branch_name', 'table', 'table_label',
             'customer_name', 'waiter_name', 'cashier_name', 'pos_terminal', 'whatsapp_number',
             'status', 'total', 'item_count', 'items_summary',
             'items', 'created_at', 'completed_at',

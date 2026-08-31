@@ -152,10 +152,14 @@ class OrderViewSet(viewsets.ModelViewSet):
         
         branch_to_assign = waiter_branch
         if not branch_to_assign:
-            branch_id = self.request.data.get('branch') or self.request.query_params.get('branch')
-            if branch_id and str(branch_id).lower() != 'all':
-                from accounts.models import Branch
-                branch_to_assign = Branch.objects.filter(pk=branch_id).first()
+            table = serializer.validated_data.get('table')
+            if table and table.branch:
+                branch_to_assign = table.branch
+            else:
+                branch_id = self.request.data.get('branch') or self.request.query_params.get('branch')
+                if branch_id and str(branch_id).lower() != 'all':
+                    from accounts.models import Branch
+                    branch_to_assign = Branch.objects.filter(pk=branch_id).first()
             if not branch_to_assign:
                 raise ValidationError({"branch": "Branch assignment is required."})
         table = serializer.validated_data.get('table')

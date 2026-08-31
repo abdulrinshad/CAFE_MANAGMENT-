@@ -71,7 +71,7 @@ class BranchEnforceMixin:
         if assigned_branch:
             serializer.save(branch=assigned_branch)
         else:
-            branch_id = self.request.data.get('branch') or self.request.query_params.get('branch')
+            branch_id = self.request.data.get('branch') or self.request.data.get('branchId') or self.request.query_params.get('branch')
             if not branch_id or str(branch_id).lower() == 'all':
                 raise ValidationError({"branch": "Branch assignment is required."})
             serializer.save(branch_id=branch_id)

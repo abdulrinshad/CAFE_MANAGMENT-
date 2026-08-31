@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import BranchManagerLayout from '../../layouts/BranchManagerLayout';
 import { branchManagerService } from '../../services/branchManagerService';
+import { useApp } from '../../context/AppContext';
 import '../../pages/owner/owner.css';
 
 export default function Customers() {
+  const { currentBranch } = useApp();
   const [customers, setCustomers] = useState([]);
   const [selectedCust, setSelectedCust] = useState(null);
   const [showDrawer, setShowDrawer] = useState(false);
@@ -56,7 +58,7 @@ export default function Customers() {
           <div className="owner-kpi-card">
             <div className="owner-kpi-card__label">Total Patrons</div>
             <div className="owner-kpi-card__value">{totalPatrons}</div>
-            <div className="owner-kpi-card__sub">Kochi database</div>
+            <div className="owner-kpi-card__sub">{currentBranch?.name || 'Local'} database</div>
           </div>
           <div className="owner-kpi-card">
             <div className="owner-kpi-card__label">Total CRM Revenue</div>
@@ -225,7 +227,7 @@ export default function Customers() {
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-espresso)', marginBottom: '8px' }}>Recent Orders (Kochi Branch)</div>
+                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-espresso)', marginBottom: '8px' }}>Recent Orders ({currentBranch?.name || 'Local'} Branch)</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', borderBottom: '1px dashed var(--color-border-light)', paddingBottom: '8px' }}>
                       <div>
