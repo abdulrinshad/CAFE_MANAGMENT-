@@ -36,11 +36,19 @@ class BranchWriteSerializer(serializers.ModelSerializer):
         fields = ('name', 'code', 'address', 'phone', 'active', 'create_manager', 'manager_name', 'manager_id', 'manager_pin')
 
     def validate_code(self, value):
-        qs = Branch.objects.filter(code=value)
+        from .utils import get_user_tenant
+        request = self.context.get('request')
+        if not request:
+            return value
+        tenant = get_user_tenant(request)
+        if not tenant:
+            return value
+
+        qs = Branch.objects.filter(code=value, tenant=tenant)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError("A branch with this code already exists.")
+            raise serializers.ValidationError("A branch with this code already exists in your business.")
         return value
 
     def validate(self, attrs):
@@ -57,8 +65,16 @@ class BranchWriteSerializer(serializers.ModelSerializer):
             if not manager_pin:
                 raise serializers.ValidationError({"manager_pin": "Manager PIN is required when creating a manager."})
 
-            if BranchManager.objects.filter(manager_id=manager_id).exists():
-                raise serializers.ValidationError({"manager_id": "This Manager ID is already in use."})
+            from .utils import get_user_tenant
+            request = self.context.get('request')
+            tenant = get_user_tenant(request) if request else None
+            
+            qs = BranchManager.objects.filter(manager_id=manager_id)
+            if tenant:
+                qs = qs.filter(tenant=tenant)
+                
+            if qs.exists():
+                raise serializers.ValidationError({"manager_id": "This Manager ID is already in use in your business."})
         return attrs
 
     def create(self, validated_data):
@@ -74,7 +90,8 @@ class BranchWriteSerializer(serializers.ModelSerializer):
                 manager = BranchManager(
                     name=manager_name,
                     manager_id=manager_id,
-                    branch=branch
+                    branch=branch,
+                    tenant=branch.tenant
                 )
                 manager.set_pin(manager_pin)
                 manager.save()
@@ -97,11 +114,18 @@ class BranchManagerSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'created_at', 'updated_at', 'branch_name')
 
     def validate_manager_id(self, value):
+        from .utils import get_user_tenant
+        request = self.context.get('request')
+        tenant = get_user_tenant(request) if request else None
+
         qs = BranchManager.objects.filter(manager_id=value)
+        if tenant:
+            qs = qs.filter(tenant=tenant)
+            
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError("This Manager ID is already in use.")
+            raise serializers.ValidationError("This Manager ID is already in use in your business.")
         return value
 
     def create(self, validated_data):
@@ -214,6 +238,16 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             raise serializers.ValidationError("You do not have permission to log in.")
 
         refresh = RefreshToken.for_user(authenticated_user)
+        
+        tenant = None
+        if hasattr(authenticated_user, 'tenant'):
+            tenant = authenticated_user.tenant
+        elif hasattr(authenticated_user, 'profile') and authenticated_user.profile.tenant:
+            tenant = authenticated_user.profile.tenant
+            
+        if tenant:
+            refresh['tenant_id'] = tenant.id
+            refresh['business_code'] = tenant.business_code
 
         return {
             'refresh': str(refresh),
@@ -223,6 +257,8 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
                 'username': authenticated_user.username,
                 'email': authenticated_user.email,
                 'role': role,
+                'tenant_id': tenant.id if tenant else None,
+                'business_code': tenant.business_code if tenant else None,
                 'is_staff': authenticated_user.is_staff,
                 'is_superuser': authenticated_user.is_superuser,
             }
@@ -256,14 +292,24 @@ class WaiterSerializer(serializers.ModelSerializer):
     def validate_employee_id(self, value):
         if not value:
             return value
+        from .utils import get_user_tenant
+        request = self.context.get('request')
+        tenant = get_user_tenant(request) if request else None
+
         qs = Waiter.objects.filter(employee_id=value)
+        if tenant:
+            qs = qs.filter(tenant=tenant)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError("This Employee ID is already in use.")
+            raise serializers.ValidationError("This Employee ID is already in use in your business.")
+            
         # Also check Cashier namespace to guarantee uniqueness across employees
-        if Cashier.objects.filter(employee_id=value).exists():
-            raise serializers.ValidationError("This Employee ID is already in use by a Cashier.")
+        cashier_qs = Cashier.objects.filter(employee_id=value)
+        if tenant:
+            cashier_qs = cashier_qs.filter(tenant=tenant)
+        if cashier_qs.exists():
+            raise serializers.ValidationError("This Employee ID is already in use by a Cashier in your business.")
         return value
 
     def validate(self, attrs):
@@ -324,14 +370,24 @@ class CashierSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'created_at', 'updated_at', 'branch_name')
 
     def validate_employee_id(self, value):
+        from .utils import get_user_tenant
+        request = self.context.get('request')
+        tenant = get_user_tenant(request) if request else None
+
         qs = Cashier.objects.filter(employee_id=value)
+        if tenant:
+            qs = qs.filter(tenant=tenant)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError("This Employee ID is already in use.")
+            raise serializers.ValidationError("This Employee ID is already in use in your business.")
+            
         # Cross-check Waiter namespace
-        if Waiter.objects.filter(employee_id=value).exists():
-            raise serializers.ValidationError("This Employee ID is already in use by a Waiter.")
+        waiter_qs = Waiter.objects.filter(employee_id=value)
+        if tenant:
+            waiter_qs = waiter_qs.filter(tenant=tenant)
+        if waiter_qs.exists():
+            raise serializers.ValidationError("This Employee ID is already in use by a Waiter in your business.")
         return value
 
     def validate(self, attrs):
@@ -392,16 +448,29 @@ class KitchenStaffSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'created_at', 'updated_at', 'branch_name')
 
     def validate_employee_id(self, value):
+        from .utils import get_user_tenant
+        request = self.context.get('request')
+        tenant = get_user_tenant(request) if request else None
+
         qs = KitchenStaff.objects.filter(employee_id=value)
+        if tenant:
+            qs = qs.filter(tenant=tenant)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
-            raise serializers.ValidationError("This Employee ID is already in use.")
+            raise serializers.ValidationError("This Employee ID is already in use in your business.")
+            
         # Cross-check Waiter and Cashier namespaces
-        if Waiter.objects.filter(employee_id=value).exists():
-            raise serializers.ValidationError("This Employee ID is already in use by a Waiter.")
-        if Cashier.objects.filter(employee_id=value).exists():
-            raise serializers.ValidationError("This Employee ID is already in use by a Cashier.")
+        waiter_qs = Waiter.objects.filter(employee_id=value)
+        cashier_qs = Cashier.objects.filter(employee_id=value)
+        if tenant:
+            waiter_qs = waiter_qs.filter(tenant=tenant)
+            cashier_qs = cashier_qs.filter(tenant=tenant)
+            
+        if waiter_qs.exists():
+            raise serializers.ValidationError("This Employee ID is already in use by a Waiter in your business.")
+        if cashier_qs.exists():
+            raise serializers.ValidationError("This Employee ID is already in use by a Cashier in your business.")
         return value
 
     def validate(self, attrs):
@@ -496,3 +565,36 @@ class OwnerSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = OwnerSettings
         fields = '__all__'
+
+class AdminSignupSerializer(serializers.Serializer):
+    full_name = serializers.CharField(required=True, max_length=150)
+    email = serializers.EmailField(required=True)
+    phone = serializers.CharField(required=True, max_length=15)
+    password = serializers.CharField(write_only=True, required=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, required=True)
+    business_code = serializers.CharField(required=False, allow_blank=True, max_length=20)
+
+    def validate_business_code(self, value):
+        if value:
+            from .models import Tenant
+            if Tenant.objects.filter(business_code__iexact=value).exists():
+                raise serializers.ValidationError("Business Code already taken. Please choose another or leave blank to auto-generate.")
+        return value
+
+    def validate_email(self, value):
+        from django.contrib.auth.models import User
+        user = User.objects.filter(email__iexact=value).first() or User.objects.filter(username__iexact=value).first()
+        if user and user.is_active:
+            raise serializers.ValidationError("An account with this email already exists.")
+        return value
+
+    def validate_phone(self, value):
+        import re
+        if not re.match(r'^\d{10}$', value):
+            raise serializers.ValidationError("Phone number must contain exactly 10 digits.")
+        return value
+
+    def validate(self, attrs):
+        if attrs.get('password') != attrs.get('confirm_password'):
+            raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+        return attrs

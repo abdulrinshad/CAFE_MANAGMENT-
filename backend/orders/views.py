@@ -114,7 +114,7 @@ def _is_cashier_or_above(request):
     return False
 
 
-class OrderViewSet(viewsets.ModelViewSet):
+class OrderViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     permission_classes = [IsEmployeeOrAbove]
     queryset = Order.objects.select_related('table', 'branch').prefetch_related('items__product').all()
     ordering_fields  = ['created_at', 'status', 'total']
@@ -135,6 +135,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             if branch_id and str(branch_id).lower() != 'all':
                 if str(branch_id).isdigit():
                     qs = qs.filter(branch_id=branch_id)
+            else:
+                qs = qs.filter(branch__isnull=False)
         status_filter = self.request.query_params.get('status')
         search        = self.request.query_params.get('search')
         if status_filter:
@@ -192,6 +194,11 @@ class OrderViewSet(viewsets.ModelViewSet):
                             extra_fields['pos_terminal'] = term
                 except Exception:
                     pass
+
+        from accounts.utils import get_user_tenant
+        tenant = get_user_tenant(self.request)
+        if tenant:
+            extra_fields['tenant'] = tenant
 
         if branch_to_assign:
             serializer.save(branch=branch_to_assign, **extra_fields)
@@ -1126,9 +1133,23 @@ class OrderViewSet(viewsets.ModelViewSet):
 
 
 
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Dashboard APIs
 # ─────────────────────────────────────────────────────────────────────────────
+from accounts.utils import get_user_tenant
+def get_order_qs(request):
+    tenant = get_user_tenant(request)
+    if tenant:
+        return Order.objects.filter(tenant=tenant)
+    return Order.objects.all()
+
+def get_orderitem_qs(request):
+    tenant = get_user_tenant(request)
+    if tenant:
+        return get_orderitem_qs(request).filter(order__tenant=tenant)
+    return OrderItem.objects.all()
+
 
 class DashboardStatsView(APIView):
     """GET /api/v1/dashboard/stats/ — today's KPIs."""
@@ -1149,8 +1170,8 @@ class DashboardStatsView(APIView):
         yesterday_start = timezone.make_aware(datetime.combine(yesterday, datetime.min.time()), tz)
         yesterday_end   = timezone.make_aware(datetime.combine(yesterday, datetime.max.time()), tz)
 
-        today_qs     = Order.objects.filter(created_at__range=(today_start, today_end))
-        yesterday_qs = Order.objects.filter(created_at__range=(yesterday_start, yesterday_end))
+        today_qs     = get_order_qs(request).filter(created_at__range=(today_start, today_end))
+        yesterday_qs = get_order_qs(request).filter(created_at__range=(yesterday_start, yesterday_end))
 
         if waiter_branch:
             today_qs     = today_qs.filter(branch=waiter_branch)
@@ -1161,6 +1182,9 @@ class DashboardStatsView(APIView):
                 if str(branch_id).isdigit():
                     today_qs     = today_qs.filter(branch_id=branch_id)
                     yesterday_qs = yesterday_qs.filter(branch_id=branch_id)
+            else:
+                today_qs = today_qs.filter(branch__isnull=False)
+                yesterday_qs = yesterday_qs.filter(branch__isnull=False)
 
         # Sales = sum of completed order totals
         today_sales     = today_qs.filter(status=Order.STATUS_COMPLETED).aggregate(
@@ -1195,6 +1219,8 @@ class DashboardStatsView(APIView):
                 if branch_id and str(branch_id).lower() != 'all':
                     if str(branch_id).isdigit():
                         tables_qs = tables_qs.filter(Q(branch_id=branch_id) | Q(branch__isnull=True))
+                else:
+                    tables_qs = tables_qs.filter(branch__isnull=False)
             active_tables    = tables_qs.filter(active=True).count()
             occupied_tables  = tables_qs.filter(status='occupied').count()
             available_tables = tables_qs.filter(status='available').count()
@@ -1219,6 +1245,8 @@ class DashboardStatsView(APIView):
                 if branch_id and str(branch_id).lower() != 'all':
                     if str(branch_id).isdigit():
                         reqs_qs = reqs_qs.filter(Q(branch_id=branch_id) | Q(branch__isnull=True) | Q(table__branch_id=branch_id))
+                else:
+                    reqs_qs = reqs_qs.filter(branch__isnull=False)
 
             # Exclude bill requests (which are handled on /bill-requests under pending bills)
             table_reqs = reqs_qs.exclude(
@@ -1239,7 +1267,7 @@ class DashboardStatsView(APIView):
             recent_requests = []
 
         # Active orders (pending, preparing, or ready status Orders across all time)
-        all_orders_qs = Order.objects.all()
+        all_orders_qs = get_order_qs(request)
         if waiter_branch:
             all_orders_qs = all_orders_qs.filter(branch=waiter_branch)
         else:
@@ -1247,6 +1275,8 @@ class DashboardStatsView(APIView):
             if branch_id and str(branch_id).lower() != 'all':
                 if str(branch_id).isdigit():
                     all_orders_qs = all_orders_qs.filter(branch_id=branch_id)
+            else:
+                all_orders_qs = all_orders_qs.filter(branch__isnull=False)
         active_orders = all_orders_qs.filter(
             status__in=[Order.STATUS_PENDING, Order.STATUS_PREPARING, Order.STATUS_READY, Order.STATUS_BILL_REQUESTED]
         ).count()
@@ -1279,7 +1309,7 @@ class DashboardRecentOrdersView(APIView):
 
     def get(self, request):
         limit  = int(request.query_params.get('limit', 8))
-        qs     = Order.objects.select_related('table', 'branch').prefetch_related('items')
+        qs     = get_order_qs(request).select_related('table', 'branch').prefetch_related('items')
         waiter_branch = get_waiter_branch(request)
         if waiter_branch:
             qs = qs.filter(branch=waiter_branch)
@@ -1288,6 +1318,8 @@ class DashboardRecentOrdersView(APIView):
             if branch_id and str(branch_id).lower() != 'all':
                 if str(branch_id).isdigit():
                     qs = qs.filter(branch_id=branch_id)
+            else:
+                qs = qs.filter(branch__isnull=False)
         orders = qs.order_by('-created_at')[:limit]
         data   = []
         for o in orders:
@@ -1314,13 +1346,22 @@ class DashboardBestSellersView(APIView):
         period = request.query_params.get('period', 'daily')
         start, end = _get_period_range(period)
 
+        branch = request.query_params.get('branch')
+
+        filters = {
+            'order__status': Order.STATUS_COMPLETED,
+            'order__created_at__range': (start, end),
+        }
+        if branch and str(branch).lower() != 'all':
+            if str(branch).isdigit():
+                filters['order__branch_id'] = branch
+        else:
+            filters['order__branch__isnull'] = False
+
         # Aggregate order items from completed orders only
         items = (
             OrderItem.objects
-            .filter(
-                order__status=Order.STATUS_COMPLETED,
-                order__created_at__range=(start, end),
-            )
+            .filter(**filters)
             .values('product', 'product_name')
             .annotate(
                 qty_sold   = Sum('quantity'),
@@ -1363,12 +1404,12 @@ class DashboardSalesChartView(APIView):
         today  = timezone.now().date()
 
         def _apply_branch(qs):
-            if branch:
+            if branch and str(branch).lower() != 'all':
                 try:
                     return qs.filter(branch_id=int(branch))
                 except (ValueError, TypeError):
                     pass
-            return qs
+            return qs.filter(branch__isnull=False)
 
         if period in ('daily', 'custom'):
             # For custom range, use _get_period_range; for daily use today
@@ -1471,12 +1512,14 @@ class ReportsSummaryView(APIView):
         branch    = request.query_params.get('branch')
         start, end = _get_period_range(period, date_from, date_to)
 
-        qs = Order.objects.filter(created_at__range=(start, end))
-        if branch:
+        qs = get_order_qs(request).filter(created_at__range=(start, end))
+        if branch and str(branch).lower() != 'all':
             try:
                 qs = qs.filter(branch_id=int(branch))
             except (ValueError, TypeError):
                 pass
+        else:
+            qs = qs.filter(branch__isnull=False)
 
         total     = qs.count()
         completed = qs.filter(status=Order.STATUS_COMPLETED).count()
@@ -1491,12 +1534,14 @@ class ReportsSummaryView(APIView):
         period_len = (end - start)
         prev_start = start - period_len
         prev_end   = start
-        prev_qs    = Order.objects.filter(created_at__range=(prev_start, prev_end))
-        if branch:
+        prev_qs    = get_order_qs(request).filter(created_at__range=(prev_start, prev_end))
+        if branch and str(branch).lower() != 'all':
             try:
                 prev_qs = prev_qs.filter(branch_id=int(branch))
             except (ValueError, TypeError):
                 pass
+        else:
+            prev_qs = prev_qs.filter(branch__isnull=False)
         prev_revenue = prev_qs.filter(status=Order.STATUS_COMPLETED).aggregate(
             r=Sum('total'))['r'] or Decimal('0')
 
@@ -1543,16 +1588,18 @@ class ReportsTopCategoriesView(APIView):
         start, end = _get_period_range(period, date_from, date_to)
 
         # Sum revenue by product category from completed orders
-        qs = OrderItem.objects.filter(
+        qs = get_orderitem_qs(request).filter(
             order__status=Order.STATUS_COMPLETED,
             order__created_at__range=(start, end),
             product__category__isnull=False,
         )
-        if branch:
+        if branch and str(branch).lower() != 'all':
             try:
                 qs = qs.filter(order__branch_id=int(branch))
             except (ValueError, TypeError):
                 pass
+        else:
+            qs = qs.filter(order__branch__isnull=False)
 
         rows = (
             qs
@@ -1630,7 +1677,7 @@ class ExpenseViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     permission_classes = [IsAdminOrManager]
 
     def get_queryset(self):
-        qs = Expense.objects.select_related('branch').order_by('-date', '-created_at')
+        qs = super().get_queryset().select_related('branch').order_by('-date', '-created_at')
 
         from accounts.utils import get_waiter_branch
         waiter_branch = get_waiter_branch(self.request)
@@ -1644,6 +1691,8 @@ class ExpenseViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
             if branch and str(branch).lower() != 'all':
                 if str(branch).isdigit():
                     qs = qs.filter(branch_id=branch)
+            else:
+                qs = qs.filter(branch__isnull=False)
 
         category = self.request.query_params.get('category')
         if category:

@@ -1,6 +1,7 @@
 from rest_framework import status, viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from .utils import TenantEnforceMixin, BranchEnforceMixin
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.decorators import action
 from django.contrib.auth.models import User
@@ -20,6 +21,7 @@ from .serializers import (
     KitchenStaffSerializer,
     KitchenStaffSafeSerializer,
     POSTerminalSerializer,
+    AdminSignupSerializer,
 )
 from .permissions import IsAdminOrManager, IsAdmin
 from .utils import BranchEnforceMixin
@@ -81,7 +83,7 @@ class WaiterViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        queryset = Waiter.objects.all().order_by('-created_at')
+        queryset = super().get_queryset().order_by('-created_at')
         search = self.request.query_params.get('search')
         if search:
             queryset = queryset.filter(name__icontains=search)
@@ -93,6 +95,8 @@ class WaiterViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
         if branch_id and str(branch_id).lower() != 'all':
             if str(branch_id).isdigit():
                 queryset = queryset.filter(branch_id=branch_id)
+        else:
+            queryset = queryset.filter(branch__isnull=False)
         return queryset
 
 
@@ -108,7 +112,7 @@ class ActiveWaiterListView(APIView):
 class WaiterLoginView(APIView):
     """
     POST /auth/waiter-login/
-    Body: { waiter_id, pin }
+    Body: { business_code, branch_code, waiter_id, pin }
 
     Legacy login for Waiters using their DB id (integer).
     Also supports employee_id string lookup for new-style logins.
@@ -116,18 +120,34 @@ class WaiterLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
+        business_code = request.data.get('business_code', '').strip()
+        branch_code = request.data.get('branch_code', '').strip()
         waiter_id = request.data.get('waiter_id')
         pin = request.data.get('pin')
 
-        if not waiter_id or not pin:
-            return Response({"detail": "waiter_id and pin are required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not business_code or not branch_code or not waiter_id or not pin:
+            return Response({"detail": "Business Code, Branch Code, waiter_id, and pin are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .models import Tenant, Branch
+        try:
+            tenant = Tenant.objects.get(business_code=business_code)
+        except Tenant.DoesNotExist:
+            return Response({"detail": "Invalid Business Code."}, status=status.HTTP_401_UNAUTHORIZED)
+            
+        try:
+            branch = Branch.objects.get(code=branch_code, tenant=tenant)
+        except Branch.DoesNotExist:
+            return Response(
+                {"detail": "Branch does not belong to this business or does not exist."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
 
         # Support both integer PK and string employee_id
         waiter = None
         try:
             waiter_id_int = int(waiter_id)
             try:
-                waiter = Waiter.objects.get(id=waiter_id_int)
+                waiter = Waiter.objects.get(id=waiter_id_int, branch=branch)
             except Waiter.DoesNotExist:
                 pass
         except (ValueError, TypeError):
@@ -135,9 +155,14 @@ class WaiterLoginView(APIView):
 
         if waiter is None:
             try:
-                waiter = Waiter.objects.get(employee_id=str(waiter_id))
+                waiter = Waiter.objects.get(employee_id=str(waiter_id), branch=branch)
             except Waiter.DoesNotExist:
-                return Response({"detail": "Incorrect PIN. Please try again."}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({"detail": "Employee not found in this business/branch."}, status=status.HTTP_401_UNAUTHORIZED)
+                
+        # Self-heal legacy data
+        if waiter.tenant_id != tenant.id:
+            waiter.tenant = tenant
+            waiter.save(update_fields=['tenant'])
 
         if not waiter.is_active:
             return Response({"detail": "This waiter account is currently inactive."}, status=status.HTTP_403_FORBIDDEN)
@@ -162,9 +187,13 @@ class WaiterLoginView(APIView):
         profile, _ = UserProfile.objects.get_or_create(user=shadow_user)
         profile.role = UserProfile.STAFF
         profile.branch = waiter.branch
+        profile.tenant = waiter.tenant
         profile.save()
 
         refresh = RefreshToken.for_user(shadow_user)
+        if waiter.tenant:
+            refresh['tenant_id'] = waiter.tenant.id
+            refresh['business_code'] = waiter.tenant.business_code
 
         return Response({
             "success": True,
@@ -203,13 +232,32 @@ class EmployeeLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
+        business_code = request.data.get('business_code', '').strip()
+        branch_code = request.data.get('branch_code', '').strip()
         employee_id = request.data.get('employee_id', '').strip()
         pin = request.data.get('pin', '')
 
-        if not employee_id or not pin:
+        if not business_code or not branch_code or not employee_id or not pin:
             return Response(
-                {"detail": "employee_id and pin are required."},
+                {"detail": "Business Code, Branch Code, Employee ID, and PIN are required."},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+        from .models import Tenant, Branch
+        try:
+            tenant = Tenant.objects.get(business_code=business_code)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"detail": "Invalid Business Code."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        try:
+            branch = Branch.objects.get(code=branch_code, tenant=tenant)
+        except Branch.DoesNotExist:
+            return Response(
+                {"detail": "Branch does not belong to this business or does not exist."},
+                status=status.HTTP_401_UNAUTHORIZED
             )
 
         # Try Waiter first
@@ -217,25 +265,25 @@ class EmployeeLoginView(APIView):
         cashier = None
         kitchen = None
         try:
-            waiter = Waiter.objects.select_related('branch').get(employee_id=employee_id)
+            waiter = Waiter.objects.select_related('branch').get(employee_id=employee_id, tenant=tenant, branch=branch)
         except Waiter.DoesNotExist:
             pass
 
         if waiter is None:
             try:
-                cashier = Cashier.objects.select_related('branch').get(employee_id=employee_id)
+                cashier = Cashier.objects.select_related('branch').get(employee_id=employee_id, tenant=tenant, branch=branch)
             except Cashier.DoesNotExist:
                 pass
 
         if waiter is None and cashier is None:
             try:
-                kitchen = KitchenStaff.objects.select_related('branch').get(employee_id=employee_id)
+                kitchen = KitchenStaff.objects.select_related('branch').get(employee_id=employee_id, tenant=tenant, branch=branch)
             except KitchenStaff.DoesNotExist:
                 pass
 
         if waiter is None and cashier is None and kitchen is None:
             return Response(
-                {"detail": "Invalid Employee ID or PIN."},
+                {"detail": "Employee not found in this business/branch."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
@@ -275,9 +323,13 @@ class EmployeeLoginView(APIView):
         profile, _ = UserProfile.objects.get_or_create(user=shadow_user)
         profile.role = UserProfile.STAFF
         profile.branch = waiter.branch
+        profile.tenant = waiter.tenant
         profile.save()
 
         refresh = RefreshToken.for_user(shadow_user)
+        if waiter.tenant:
+            refresh['tenant_id'] = waiter.tenant.id
+            refresh['business_code'] = waiter.tenant.business_code
         return Response({
             "success": True,
             "role": "waiter",
@@ -329,9 +381,13 @@ class EmployeeLoginView(APIView):
         profile, _ = UserProfile.objects.get_or_create(user=shadow_user)
         profile.role = UserProfile.CASHIER
         profile.branch = cashier.branch
+        profile.tenant = cashier.tenant
         profile.save()
 
         refresh = RefreshToken.for_user(shadow_user)
+        if cashier.tenant:
+            refresh['tenant_id'] = cashier.tenant.id
+            refresh['business_code'] = cashier.tenant.business_code
         from accounts.models import POSTerminal
         terminal = POSTerminal.objects.filter(assigned_cashier=cashier, status='active').first()
         terminal_info = None
@@ -392,9 +448,13 @@ class EmployeeLoginView(APIView):
         profile, _ = UserProfile.objects.get_or_create(user=shadow_user)
         profile.role = UserProfile.KITCHEN
         profile.branch = kitchen.branch
+        profile.tenant = kitchen.tenant
         profile.save()
 
         refresh = RefreshToken.for_user(shadow_user)
+        if kitchen.tenant:
+            refresh['tenant_id'] = kitchen.tenant.id
+            refresh['business_code'] = kitchen.tenant.business_code
         return Response({
             "success": True,
             "role": "kitchen",
@@ -429,7 +489,7 @@ class CashierViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        qs = Cashier.objects.select_related('branch').all().order_by('-created_at')
+        qs = super().get_queryset().select_related('branch').order_by('-created_at')
         search = self.request.query_params.get('search')
         if search:
             qs = qs.filter(name__icontains=search)
@@ -440,6 +500,8 @@ class CashierViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
         if branch_id and str(branch_id).lower() != 'all':
             if str(branch_id).isdigit():
                 qs = qs.filter(branch_id=branch_id)
+        else:
+            qs = qs.filter(branch__isnull=False)
         return qs
 
     @action(detail=True, methods=['patch'], url_path='set_active')
@@ -456,7 +518,7 @@ class CashierViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
 
 # ── Branch Views ───────────────────────────────────────────────────────────────
 
-class BranchViewSet(viewsets.ModelViewSet):
+class BranchViewSet(TenantEnforceMixin, viewsets.ModelViewSet):
     """
     CRUD for Branches.  Only Admin users can create / modify branches.
     List is also accessible to authenticated users (e.g. owner dashboard).
@@ -481,18 +543,20 @@ class BranchViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def create(self, request, *args, **kwargs):
-        serializer = BranchWriteSerializer(data=request.data)
+        from .utils import get_user_tenant
+        serializer = BranchWriteSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
-        branch = serializer.save()
-        return Response(BranchSerializer(branch).data, status=status.HTTP_201_CREATED)
+        tenant = get_user_tenant(request)
+        branch = serializer.save(tenant=tenant)
+        return Response(BranchSerializer(branch, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
-        serializer = BranchWriteSerializer(instance, data=request.data, partial=partial)
+        serializer = BranchWriteSerializer(instance, data=request.data, partial=partial, context={'request': request})
         serializer.is_valid(raise_exception=True)
         branch = serializer.save()
-        return Response(BranchSerializer(branch).data)
+        return Response(BranchSerializer(branch, context={'request': request}).data)
 
     @action(detail=True, methods=['patch'], url_path='set_active')
     def set_active(self, request, pk=None):
@@ -508,7 +572,7 @@ class BranchViewSet(viewsets.ModelViewSet):
 
 # ── BranchManager Views ────────────────────────────────────────────────────────
 
-class BranchManagerViewSet(viewsets.ModelViewSet):
+class BranchManagerViewSet(TenantEnforceMixin, viewsets.ModelViewSet):
     """
     CRUD for Branch Managers. Only Admin can manage these.
     Each branch can have at most one manager (OneToOneField).
@@ -519,11 +583,13 @@ class BranchManagerViewSet(viewsets.ModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        qs = BranchManager.objects.select_related('branch').all()
+        qs = super().get_queryset().select_related('branch')
         branch_id = self.request.query_params.get('branch')
         if branch_id and str(branch_id).lower() != 'all':
             if str(branch_id).isdigit():
                 qs = qs.filter(branch_id=branch_id)
+        else:
+            qs = qs.filter(branch__isnull=False)
         return qs
 
 
@@ -540,20 +606,44 @@ class BranchManagerLoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
+        business_code = request.data.get('business_code', '').strip()
+        branch_code = request.data.get('branch_code', '').strip()
         manager_id = request.data.get('manager_id', '').strip()
         pin = request.data.get('pin', request.data.get('password', ''))
 
-        if not manager_id or not pin:
+        if not business_code or not branch_code or not manager_id or not pin:
             return Response(
-                {"detail": "manager_id and pin/password are required."},
+                {"detail": "Business Code, Branch Code, Manager ID, and PIN are required."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        from .models import Tenant, Branch
         try:
-            manager = BranchManager.objects.select_related('branch').get(manager_id=manager_id)
+            tenant = Tenant.objects.get(business_code=business_code)
+        except Tenant.DoesNotExist:
+            return Response(
+                {"detail": "Invalid Business Code."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+            
+        try:
+            branch = Branch.objects.get(code=branch_code, tenant=tenant)
+        except Branch.DoesNotExist:
+            return Response(
+                {"detail": "Branch does not belong to this business or does not exist."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        try:
+            # We already know branch belongs to this tenant. Search by branch to handle legacy rows missing tenant_id.
+            manager = BranchManager.objects.select_related('branch').get(manager_id=manager_id, branch=branch)
+            # Self-heal legacy data
+            if manager.tenant_id != tenant.id:
+                manager.tenant = tenant
+                manager.save(update_fields=['tenant'])
         except BranchManager.DoesNotExist:
             return Response(
-                {"detail": "Invalid Manager ID or PIN."},
+                {"detail": "Manager not found in this business/branch."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
@@ -571,7 +661,7 @@ class BranchManagerLoginView(APIView):
 
         if not manager.check_pin(pin):
             return Response(
-                {"detail": "Invalid Manager ID or PIN."},
+                {"detail": "Invalid PIN."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
@@ -594,9 +684,13 @@ class BranchManagerLoginView(APIView):
         profile, _ = UserProfile.objects.get_or_create(user=shadow_user)
         profile.role = UserProfile.MANAGER
         profile.branch = manager.branch
+        profile.tenant = manager.tenant
         profile.save()
 
         refresh = RefreshToken.for_user(shadow_user)
+        if manager.tenant:
+            refresh['tenant_id'] = manager.tenant.id
+            refresh['business_code'] = manager.tenant.business_code
 
         return Response({
             "success": True,
@@ -628,6 +722,16 @@ class OwnerPOSTerminalViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsAdmin]
     pagination_class = None
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        branch_id = self.request.query_params.get('branch')
+        if branch_id and str(branch_id).lower() != 'all':
+            if str(branch_id).isdigit():
+                qs = qs.filter(branch_id=branch_id)
+        else:
+            qs = qs.filter(branch__isnull=False)
+        return qs
+
     @action(detail=True, methods=['patch'], url_path='status')
     def set_status(self, request, pk=None):
         terminal = self.get_object()
@@ -649,14 +753,452 @@ class OwnerSettingsView(APIView):
         return [IsAdmin()]
 
     def get(self, request):
-        settings = OwnerSettings.load()
+        from .utils import get_user_tenant
+        tenant = get_user_tenant(request)
+        settings = OwnerSettings.load(tenant=tenant)
         serializer = OwnerSettingsSerializer(settings)
         return Response(serializer.data)
 
     def put(self, request):
-        settings = OwnerSettings.load()
+        from .utils import get_user_tenant
+        tenant = get_user_tenant(request)
+        settings = OwnerSettings.load(tenant=tenant)
         serializer = OwnerSettingsSerializer(settings, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+import random
+import string
+from django.utils import timezone
+from datetime import timedelta
+from django.core.mail import send_mail
+from django.db.models import Q
+from .models import AdminOTP
+
+class AdminForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email', '').strip()
+        if not email:
+            return Response({"detail": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Find user by email, ensure they are an admin
+        users = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email))
+        admin_user = None
+        for u in users:
+            if not u.is_active:
+                continue
+            if u.is_superuser:
+                admin_user = u
+                break
+            if hasattr(u, 'profile') and u.profile.role in ['ADMIN', 'MANAGER']:
+                admin_user = u
+                break
+        
+        if not admin_user:
+            return Response({"detail": "This email is not registered as an admin."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Rate limiting: max 1 OTP per minute
+        recent_otp = AdminOTP.objects.filter(
+            user=admin_user, 
+            created_at__gte=timezone.now() - timedelta(minutes=1)
+        ).first()
+        if recent_otp:
+            return Response({"detail": "Please wait a minute before requesting another OTP."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        # Generate 6 digit OTP
+        raw_otp = ''.join(random.choices(string.digits, k=6))
+        
+        # Save securely
+        otp_record = AdminOTP(
+            user=admin_user,
+            expires_at=timezone.now() + timedelta(minutes=5)
+        )
+        otp_record.set_otp(raw_otp)
+        otp_record.save()
+
+        # Send Email
+        try:
+            send_mail(
+                subject='Admin Password Reset OTP',
+                message=f'Your Admin password reset OTP is: {raw_otp}. It will expire in 5 minutes.',
+                from_email=None,
+                recipient_list=[admin_user.email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            # Fallback for local testing or misconfiguration
+            print(f"Failed to send email: {e}. (OTP is {raw_otp})")
+            # We still return success but maybe warn in logs
+
+        return Response({"success": True, "message": "OTP sent to email."})
+
+class AdminVerifyOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email', '').strip()
+        otp = request.data.get('otp', '').strip()
+
+        if not email or not otp:
+            return Response({"detail": "Email and OTP are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        users = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email))
+        if not users.exists():
+            return Response({"detail": "Invalid email."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = users.first()
+
+        # Find latest active OTP
+        otp_record = AdminOTP.objects.filter(
+            user=user,
+            is_used=False,
+            expires_at__gte=timezone.now(),
+            attempt_count__lt=3
+        ).order_by('-created_at').first()
+
+        if not otp_record:
+            return Response({"detail": "No valid OTP found or OTP expired."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not otp_record.check_otp(otp):
+            otp_record.attempt_count += 1
+            otp_record.save()
+            return Response({"detail": "Invalid OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"success": True, "message": "OTP verified successfully."})
+
+class AdminResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email', '').strip()
+        otp = request.data.get('otp', '').strip()
+        new_password = request.data.get('new_password', '')
+        confirm_password = request.data.get('confirm_password', '')
+
+        if not email or not otp or not new_password:
+            return Response({"detail": "All fields are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if new_password != confirm_password:
+            return Response({"detail": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(new_password) < 8:
+            return Response({"detail": "Password must be at least 8 characters long."}, status=status.HTTP_400_BAD_REQUEST)
+
+        users = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email))
+        if not users.exists():
+            return Response({"detail": "Invalid email."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = users.first()
+
+        # Re-verify OTP
+        otp_record = AdminOTP.objects.filter(
+            user=user,
+            is_used=False,
+            expires_at__gte=timezone.now(),
+            attempt_count__lt=3
+        ).order_by('-created_at').first()
+
+        if not otp_record or not otp_record.check_otp(otp):
+            if otp_record:
+                otp_record.attempt_count += 1
+                otp_record.save()
+            return Response({"detail": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Reset Password
+        user.set_password(new_password)
+        user.save()
+
+        # Mark OTP as used
+        otp_record.is_used = True
+        otp_record.save()
+
+        # Invalidate all other active OTPs for this user just in case
+        AdminOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+
+        return Response({"success": True, "message": "Password reset successfully."})
+
+class AdminSignupView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = AdminSignupSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            password = serializer.validated_data['password']
+            full_name = serializer.validated_data['full_name']
+
+            from django.db import transaction
+            from django.db.models import Q
+
+            try:
+                with transaction.atomic():
+                    user = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first()
+                    
+                    if user:
+                        if user.is_active:
+                            return Response({"email": ["An account with this email already exists and is active."]}, status=status.HTTP_400_BAD_REQUEST)
+                        
+                        # Safe recovery of a pending/inactive user
+                        user.set_password(password)
+                        name_parts = full_name.split(' ', 1)
+                        user.first_name = name_parts[0][:30]
+                        if len(name_parts) > 1:
+                            user.last_name = name_parts[1][:30]
+                        user.save()
+                    else:
+                        # Create an inactive user (this triggers signal that creates UserProfile)
+                        user = User.objects.create_user(
+                            username=email,
+                            email=email,
+                            password=password,
+                            is_active=False
+                        )
+                        name_parts = full_name.split(' ', 1)
+                        user.first_name = name_parts[0][:30]
+                        if len(name_parts) > 1:
+                            user.last_name = name_parts[1][:30]
+                        user.save()
+
+                    # Safely handle the UserProfile
+                    from .models import UserProfile
+                    profile, created = UserProfile.objects.get_or_create(user=user)
+                    if profile.role != UserProfile.ADMIN:
+                        profile.role = UserProfile.ADMIN
+                        profile.save()
+
+                    # Generate OTP
+                    raw_otp = ''.join(random.choices(string.digits, k=6))
+                    otp_record = AdminOTP(
+                        user=user,
+                        expires_at=timezone.now() + timedelta(minutes=5)
+                    )
+                    otp_record.set_otp(raw_otp)
+                    otp_record.save()
+
+            except Exception as e:
+                return Response({"detail": f"Database transaction failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # Send Email outside the transaction to avoid blocking it or sending emails if db rolls back
+            try:
+                send_mail(
+                    subject='Admin Registration OTP',
+                    message=f'Your Admin registration OTP is: {raw_otp}. It will expire in 5 minutes.',
+                    from_email=None,
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                print(f"Failed to send email: {e}. (OTP is {raw_otp})")
+
+            return Response({"success": True, "message": "Signup successful. OTP sent to email."})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AdminVerifySignupOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email', '').strip()
+        otp = request.data.get('otp', '').strip()
+
+        if not email or not otp:
+            return Response({"detail": "Email and OTP are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        users = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email))
+        if not users.exists():
+            return Response({"detail": "Invalid email."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = users.first()
+
+        # Check if already active
+        if user.is_active:
+            return Response({"detail": "User is already active. Please log in."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Find latest active OTP
+        otp_record = AdminOTP.objects.filter(
+            user=user,
+            is_used=False,
+            expires_at__gte=timezone.now(),
+            attempt_count__lt=3
+        ).order_by('-created_at').first()
+
+        if not otp_record or not otp_record.check_otp(otp):
+            if otp_record:
+                otp_record.attempt_count += 1
+                otp_record.save()
+            return Response({"detail": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # OTP is valid, activate user
+        from django.db import transaction
+
+        business_code = request.data.get('business_code', '').strip()
+        from .models import Tenant
+        if business_code:
+            if Tenant.objects.filter(business_code__iexact=business_code).exists():
+                return Response({"detail": "Business Code is already taken."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                user.is_active = True
+                user.save()
+
+                # Create Tenant
+                from .models import OwnerSettings
+                tenant_name = f"{user.first_name} {user.last_name}".strip() + "'s Business"
+                if business_code:
+                    tenant = Tenant.objects.create(admin_user=user, name=tenant_name, business_code=business_code)
+                else:
+                    tenant = Tenant.objects.create(admin_user=user, name=tenant_name)
+                
+                # Link UserProfile to Tenant
+                user.profile.tenant = tenant
+                user.profile.save()
+
+                # Initialize OwnerSettings
+                OwnerSettings.objects.create(
+                    tenant=tenant,
+                    owner_name=user.get_full_name(),
+                    email=user.email,
+                    business_name=tenant_name
+                )
+
+                # Mark OTP as used
+                otp_record.is_used = True
+                otp_record.save()
+                AdminOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+
+            return Response({"success": True, "message": "Account verified and created successfully. Please log in."})
+        except Exception as e:
+            return Response({"detail": f"Database transaction failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ResendSignupOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email', '').strip()
+        if not email:
+            return Response({"detail": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        users = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email))
+        if not users.exists():
+            return Response({"detail": "Invalid email."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = users.first()
+        if user.is_active:
+            return Response({"detail": "User is already active. Please log in."}, status=status.HTTP_400_BAD_REQUEST)
+
+        recent_otp = AdminOTP.objects.filter(
+            user=user, 
+            created_at__gte=timezone.now() - timedelta(minutes=1)
+        ).first()
+        if recent_otp:
+            return Response({"detail": "Please wait a minute before requesting another OTP."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        # Generate OTP
+        raw_otp = ''.join(random.choices(string.digits, k=6))
+        otp_record = AdminOTP(
+            user=user,
+            expires_at=timezone.now() + timedelta(minutes=5)
+        )
+        otp_record.set_otp(raw_otp)
+        otp_record.save()
+
+        try:
+            send_mail(
+                subject='Admin Registration OTP',
+                message=f'Your Admin registration OTP is: {raw_otp}. It will expire in 5 minutes.',
+                from_email=None,
+                recipient_list=[user.email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            print(f"Failed to send email: {e}. (OTP is {raw_otp})")
+
+        return Response({"success": True, "message": "OTP sent to email."})
+
+
+
+class ForgotBusinessCodeOTPView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email', '').strip()
+        if not email:
+            return Response({"detail": "Email is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        users = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email))
+        if not users.exists():
+            return Response({"detail": "Invalid email."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = users.first()
+        from .models import Tenant
+        tenant = Tenant.objects.filter(admin_user=user).first()
+        if not tenant:
+            return Response({"detail": "No business found for this account."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Generate OTP
+        raw_otp = ''.join(random.choices(string.digits, k=6))
+        otp_record = AdminOTP(
+            user=user,
+            expires_at=timezone.now() + timedelta(minutes=5)
+        )
+        otp_record.set_otp(raw_otp)
+        otp_record.save()
+        
+        # In a real system, we'd send an email here.
+        # For this prototype, we'll just log or assume it sends.
+        
+        return Response({"detail": "OTP sent for Business Code recovery."}, status=status.HTTP_200_OK)
+
+
+class RegenerateBusinessCodeView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email', '').strip()
+        otp = request.data.get('otp', '').strip()
+
+        if not email or not otp:
+            return Response({"detail": "Email and OTP are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        users = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email))
+        if not users.exists():
+            return Response({"detail": "Invalid email."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = users.first()
+
+        otp_record = AdminOTP.objects.filter(
+            user=user,
+            is_used=False,
+            expires_at__gte=timezone.now(),
+            attempt_count__lt=3
+        ).order_by('-created_at').first()
+
+        if not otp_record or not otp_record.check_otp(otp):
+            if otp_record:
+                otp_record.attempt_count += 1
+                otp_record.save()
+            return Response({"detail": "Invalid or expired OTP."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # OTP valid
+        from .models import Tenant, generate_business_code
+        tenant = Tenant.objects.filter(admin_user=user).first()
+        if not tenant:
+            return Response({"detail": "No business found for this account."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        new_code = generate_business_code()
+        tenant.business_code = new_code
+        tenant.save()
+        
+        otp_record.is_used = True
+        otp_record.save()
+
+        return Response({
+            "detail": "Business Code regenerated successfully.",
+            "business_code": new_code
+        }, status=status.HTTP_200_OK)

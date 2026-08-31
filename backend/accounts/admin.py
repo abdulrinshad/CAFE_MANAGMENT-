@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.forms.models import BaseInlineFormSet
-from .models import UserProfile, Waiter, Branch, BranchManager, Cashier, KitchenStaff, POSTerminal
+from .models import UserProfile, Waiter, Branch, BranchManager, Cashier, KitchenStaff, POSTerminal, Tenant
 from django import forms
 from django.core.exceptions import ValidationError
 
@@ -41,13 +41,13 @@ class UserAdmin(BaseUserAdmin):
 
 
 class WaiterAdmin(admin.ModelAdmin):
-    list_display = ('name', 'section', 'is_active', 'created_at', 'updated_at')
-    list_filter = ('is_active', 'section')
-    search_fields = ('name', 'section')
+    list_display = ('name', 'employee_id', 'tenant', 'branch', 'is_active', 'created_at')
+    list_filter = ('is_active', 'tenant', 'branch')
+    search_fields = ('name', 'employee_id', 'tenant__name', 'tenant__business_code')
     readonly_fields = ('created_at', 'updated_at', 'pin_display')
     fieldsets = (
         (None, {
-            'fields': ('name', 'photo', 'section', 'is_active')
+            'fields': ('tenant', 'branch', 'name', 'employee_id', 'photo', 'is_active')
         }),
         ('PIN Details', {
             'fields': ('pin_display', 'new_pin'),
@@ -89,23 +89,30 @@ admin.site.register(User, UserAdmin)
 admin.site.register(Waiter, WaiterAdmin)
 
 
+@admin.register(Tenant)
+class TenantAdmin(admin.ModelAdmin):
+    list_display = ('name', 'business_code', 'admin_user', 'created_at')
+    search_fields = ('name', 'business_code', 'admin_user__username', 'admin_user__email')
+    readonly_fields = ('created_at',)
+
+
 @admin.register(Branch)
 class BranchAdmin(admin.ModelAdmin):
-    list_display = ('name', 'code', 'address', 'phone', 'active', 'created_at')
-    list_filter = ('active',)
-    search_fields = ('name', 'code')
+    list_display = ('name', 'code', 'tenant', 'address', 'phone', 'active', 'created_at')
+    list_filter = ('active', 'tenant')
+    search_fields = ('name', 'code', 'tenant__name', 'tenant__business_code')
     readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(BranchManager)
 class BranchManagerAdmin(admin.ModelAdmin):
-    list_display = ('name', 'manager_id', 'branch', 'is_active', 'created_at')
-    list_filter = ('is_active', 'branch')
-    search_fields = ('name', 'manager_id')
+    list_display = ('name', 'manager_id', 'tenant', 'branch', 'is_active', 'created_at')
+    list_filter = ('is_active', 'tenant', 'branch')
+    search_fields = ('name', 'manager_id', 'tenant__name', 'tenant__business_code')
     readonly_fields = ('created_at', 'updated_at', 'pin_display')
     fieldsets = (
         (None, {
-            'fields': ('name', 'manager_id', 'branch', 'is_active')
+            'fields': ('tenant', 'branch', 'name', 'manager_id', 'is_active')
         }),
         ('PIN', {
             'fields': ('pin_display', 'new_pin'),
@@ -142,13 +149,13 @@ class BranchManagerAdmin(admin.ModelAdmin):
 
 @admin.register(Cashier)
 class CashierAdmin(admin.ModelAdmin):
-    list_display = ('name', 'employee_id', 'branch', 'is_active', 'created_at')
-    list_filter = ('is_active', 'branch')
-    search_fields = ('name', 'employee_id')
+    list_display = ('name', 'employee_id', 'tenant', 'branch', 'is_active', 'created_at')
+    list_filter = ('is_active', 'tenant', 'branch')
+    search_fields = ('name', 'employee_id', 'tenant__name', 'tenant__business_code')
     readonly_fields = ('created_at', 'updated_at', 'pin_display')
     fieldsets = (
         (None, {
-            'fields': ('name', 'employee_id', 'branch', 'is_active')
+            'fields': ('tenant', 'branch', 'name', 'employee_id', 'is_active')
         }),
         ('PIN', {
             'fields': ('pin_display', 'new_pin'),
@@ -187,7 +194,7 @@ class CashierAdmin(admin.ModelAdmin):
 
 @admin.register(POSTerminal)
 class POSTerminalAdmin(admin.ModelAdmin):
-    list_display = ('name', 'branch', 'status', 'assigned_cashier', 'created_at')
-    list_filter = ('status', 'branch')
-    search_fields = ('name',)
+    list_display = ('name', 'tenant', 'branch', 'status', 'assigned_cashier', 'created_at')
+    list_filter = ('status', 'tenant', 'branch')
+    search_fields = ('name', 'tenant__name', 'tenant__business_code')
     readonly_fields = ('created_at', 'updated_at')

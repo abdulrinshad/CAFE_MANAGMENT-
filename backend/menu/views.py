@@ -51,6 +51,8 @@ class CategoryViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
             if branch_id and str(branch_id).lower() != 'all':
                 if str(branch_id).isdigit():
                     qs = qs.filter(branch_id=branch_id)
+            else:
+                qs = qs.filter(branch__isnull=False)
         return qs
 
     # perform_create is handled by BranchEnforceMixin
@@ -80,6 +82,8 @@ class ProductViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
             if branch_id and str(branch_id).lower() != 'all':
                 if str(branch_id).isdigit():
                     qs = qs.filter(branch_id=branch_id)
+            else:
+                qs = qs.filter(branch__isnull=False)
         return qs
 
     # perform_create is handled by BranchEnforceMixin
@@ -126,18 +130,9 @@ class TableViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
             if branch_id and str(branch_id).lower() != 'all':
                 if str(branch_id).isdigit():
                     qs = qs.filter(branch_id=branch_id)
-        return qs
-
-    def perform_create(self, serializer):
-        waiter_branch = get_waiter_branch(self.request)
-        if waiter_branch:
-            serializer.save(branch=waiter_branch)
-        else:
-            branch_id = self.request.data.get('branch') or self.request.query_params.get('branch')
-            if branch_id and str(branch_id).lower() != 'all':
-                serializer.save(branch_id=branch_id)
             else:
-                serializer.save()
+                qs = qs.filter(branch__isnull=False)
+        return qs
 
     def check_table_branch(self, table):
         waiter_branch = get_waiter_branch(self.request)
@@ -214,6 +209,8 @@ class QRCodeViewSet(viewsets.ModelViewSet):
             if branch_id and str(branch_id).lower() != 'all':
                 if str(branch_id).isdigit():
                     qs = qs.filter(table__branch_id=branch_id)
+            else:
+                qs = qs.filter(table__branch__isnull=False)
         return qs
 
     @action(detail=True, methods=['patch'], url_path='set_status')
@@ -292,6 +289,8 @@ class WaiterRequestViewSet(viewsets.ModelViewSet):
             if branch_id and str(branch_id).lower() != 'all':
                 if str(branch_id).isdigit():
                     qs = qs.filter(branch_id=branch_id)
+            else:
+                qs = qs.filter(branch__isnull=False)
         status_param = self.request.query_params.get('status')
         if status_param and status_param.lower() != 'all':
             qs = qs.filter(status=status_param.lower())

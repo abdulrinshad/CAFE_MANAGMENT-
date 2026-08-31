@@ -1,11 +1,37 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import make_password, check_password
+import string
+import random
 
+def generate_business_code():
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+class Tenant(models.Model):
+    admin_user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='tenant')
+    name = models.CharField(max_length=255)
+    business_code = models.CharField(max_length=20, unique=True, default=generate_business_code)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.business_code})"
+
+class OTPVerification(models.Model):
+    email = models.EmailField()
+    otp = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=20, choices=[('signup', 'Signup'), ('reset', 'Password Reset')])
+    expires_at = models.DateTimeField()
+    attempts = models.IntegerField(default=0)
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.email} - {self.otp}"
 
 class Branch(models.Model):
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='branches', null=True, blank=True)
     name = models.CharField(max_length=120)
-    code = models.CharField(max_length=50, unique=True, default='BRANCH-001')
+    code = models.CharField(max_length=50, default='BRANCH-001')
     address = models.TextField(blank=True, default='')
     phone = models.CharField(max_length=30, blank=True, default='')
     active = models.BooleanField(default=True)
@@ -16,6 +42,9 @@ class Branch(models.Model):
         verbose_name = 'Branch'
         verbose_name_plural = 'Branches'
         ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(fields=['tenant', 'code'], name='unique_branch_code_per_tenant')
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.code})"
@@ -29,7 +58,8 @@ class BranchManager(models.Model):
     separate from the Admin / Waiter login flows.
     """
     name = models.CharField(max_length=120)
-    manager_id = models.CharField(max_length=50, unique=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='managers', null=True, blank=True)
+    manager_id = models.CharField(max_length=50)
     branch = models.OneToOneField(
         Branch,
         on_delete=models.CASCADE,
@@ -44,6 +74,7 @@ class BranchManager(models.Model):
         verbose_name = 'Branch Manager'
         verbose_name_plural = 'Branch Managers'
         ordering = ['name']
+        unique_together = ('tenant', 'manager_id')
 
     def set_pin(self, raw_pin):
         self.pin_hash = make_password(raw_pin)
@@ -74,6 +105,7 @@ class UserProfile(models.Model):
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=STAFF)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='user_profiles', null=True, blank=True)
     branch = models.ForeignKey(
         Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name='user_profiles'
     )
@@ -84,7 +116,8 @@ class UserProfile(models.Model):
 
 class Waiter(models.Model):
     name = models.CharField(max_length=120)
-    employee_id = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='waiters', null=True, blank=True)
+    employee_id = models.CharField(max_length=50, blank=True, null=True)
     branch = models.ForeignKey(
         Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name='waiters'
     )
@@ -94,6 +127,9 @@ class Waiter(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('tenant', 'employee_id')
 
     def set_pin(self, raw_pin):
         self.pin_hash = make_password(raw_pin)
@@ -112,7 +148,8 @@ class Cashier(models.Model):
     pattern as Waiter and BranchManager.
     """
     name = models.CharField(max_length=120)
-    employee_id = models.CharField(max_length=50, unique=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='cashiers', null=True, blank=True)
+    employee_id = models.CharField(max_length=50)
     branch = models.ForeignKey(
         Branch, on_delete=models.CASCADE, related_name='cashiers'
     )
@@ -125,6 +162,7 @@ class Cashier(models.Model):
         verbose_name = 'Cashier'
         verbose_name_plural = 'Cashiers'
         ordering = ['name']
+        unique_together = ('tenant', 'employee_id')
 
     def set_pin(self, raw_pin):
         self.pin_hash = make_password(raw_pin)
@@ -143,7 +181,8 @@ class KitchenStaff(models.Model):
     pattern as Waiter and Cashier.
     """
     name = models.CharField(max_length=120)
-    employee_id = models.CharField(max_length=50, unique=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='kitchen_staff', null=True, blank=True)
+    employee_id = models.CharField(max_length=50)
     branch = models.ForeignKey(
         Branch, on_delete=models.CASCADE, related_name='kitchen_staff'
     )
@@ -156,6 +195,7 @@ class KitchenStaff(models.Model):
         verbose_name = 'Kitchen Staff'
         verbose_name_plural = 'Kitchen Staff'
         ordering = ['name']
+        unique_together = ('tenant', 'employee_id')
 
     def set_pin(self, raw_pin):
         self.pin_hash = make_password(raw_pin)
@@ -168,7 +208,8 @@ class KitchenStaff(models.Model):
 
 
 class POSTerminal(models.Model):
-    name = models.CharField(max_length=120, unique=True)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='pos_terminals', null=True, blank=True)
+    name = models.CharField(max_length=120)
     branch = models.ForeignKey(
         Branch, on_delete=models.CASCADE, related_name='pos_terminals'
     )
@@ -191,6 +232,7 @@ class POSTerminal(models.Model):
         verbose_name = 'POS Terminal'
         verbose_name_plural = 'POS Terminals'
         ordering = ['name']
+        unique_together = ('tenant', 'name')
 
     def __str__(self):
         return f"{self.name} — {self.branch.name}"
@@ -240,12 +282,19 @@ class OwnerSettings(models.Model):
     sec_login_alerts = models.BooleanField(default=True)
     sec_session_timeout = models.CharField(max_length=50, default='60')
 
+    tenant = models.OneToOneField('Tenant', on_delete=models.CASCADE, related_name='ownersettings', null=True, blank=True)
+
     def save(self, *args, **kwargs):
-        self.pk = 1
+        # We no longer hardcode self.pk = 1 globally.
+        # If tenant is set, it will be saved naturally.
         super(OwnerSettings, self).save(*args, **kwargs)
 
     @classmethod
-    def load(cls):
+    def load(cls, tenant=None):
+        if tenant:
+            obj, created = cls.objects.get_or_create(tenant=tenant)
+            return obj
+        # Fallback for old code that hasn't been updated (should not be reached ideally)
         obj, created = cls.objects.get_or_create(pk=1)
         return obj
 
@@ -281,3 +330,26 @@ class BranchSettings(models.Model):
     def load_for_branch(cls, branch):
         obj, created = cls.objects.get_or_create(branch=branch)
         return obj
+
+
+class AdminOTP(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')
+    otp_hash = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    attempt_count = models.IntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Admin OTP'
+        verbose_name_plural = 'Admin OTPs'
+        ordering = ['-created_at']
+
+    def set_otp(self, raw_otp):
+        self.otp_hash = make_password(raw_otp)
+
+    def check_otp(self, raw_otp):
+        return check_password(raw_otp, self.otp_hash)
+
+    def __str__(self):
+        return f"OTP for {self.user.email} (used: {self.is_used})"
