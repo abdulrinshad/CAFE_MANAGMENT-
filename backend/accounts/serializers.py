@@ -29,11 +29,12 @@ class BranchWriteSerializer(serializers.ModelSerializer):
     create_manager = serializers.BooleanField(write_only=True, default=False)
     manager_name = serializers.CharField(write_only=True, required=False, allow_blank=True)
     manager_id = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    manager_email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
     manager_pin = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta:
         model = Branch
-        fields = ('name', 'code', 'address', 'phone', 'active', 'create_manager', 'manager_name', 'manager_id', 'manager_pin')
+        fields = ('name', 'code', 'address', 'phone', 'active', 'create_manager', 'manager_name', 'manager_id', 'manager_email', 'manager_pin')
 
     def validate_code(self, value):
         from .utils import get_user_tenant
@@ -590,8 +591,16 @@ class POSTerminalSerializer(serializers.ModelSerializer):
 
     def validate_name(self, value):
         from accounts.models import POSTerminal
+        from accounts.utils import get_user_tenant
         val = str(value).strip()
         qs = POSTerminal.objects.filter(name__iexact=val)
+        
+        request = self.context.get('request')
+        if request:
+            tenant = get_user_tenant(request)
+            if tenant:
+                qs = qs.filter(tenant=tenant)
+                
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():

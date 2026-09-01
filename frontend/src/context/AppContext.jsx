@@ -951,6 +951,8 @@ export function AppProvider({ children }) {
         // owner branch filter state
         ownerBranchFilter,
         setOwnerBranchFilter,
+        // UI actions
+        showToast,
       }}
     >
       {children}

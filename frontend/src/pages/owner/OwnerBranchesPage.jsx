@@ -8,7 +8,7 @@ import './owner.css'
 
 // ── Empty form shapes ──────────────────────────────────────────────────────────
 const EMPTY_BRANCH_FORM = { name: '', code: '', address: '', phone: '', active: true }
-const EMPTY_MGR_FORM    = { name: '', manager_id: '', email: '', pin: '', confirm_pin: '' }
+const EMPTY_MGR_FORM    = { name: '', manager_id: '', manager_email: '', pin: '', confirm_pin: '' }
 
 export default function OwnerBranchesPage() {
   const navigate = useNavigate()
@@ -94,7 +94,7 @@ export default function OwnerBranchesPage() {
     const branch = branches.find(b => b.id === branchId)
     const existingMgr = branch?.manager
     setMgrForm(existingMgr
-      ? { name: existingMgr.name, manager_id: existingMgr.manager_id, email: existingMgr.email || '', pin: '', confirm_pin: '' }
+      ? { name: existingMgr.name, manager_id: existingMgr.manager_id, manager_email: existingMgr.email || '', pin: '', confirm_pin: '' }
       : EMPTY_MGR_FORM
     )
     setMgrBranchId(branchId)
@@ -117,7 +117,7 @@ export default function OwnerBranchesPage() {
     if (!editingId && addManager) {
       if (!mgrForm.name.trim())       { setSaveError('Manager name is required.'); return }
       if (!mgrForm.manager_id.trim()) { setSaveError('Manager ID is required.'); return }
-      if (!mgrForm.email.trim())      { setSaveError('Manager Email is required.'); return }
+      if (!mgrForm.manager_email.trim())      { setSaveError('Manager Email is required.'); return }
       if (!mgrForm.pin.trim())        { setSaveError('PIN / Password is required.'); return }
       if (mgrForm.pin !== mgrForm.confirm_pin) { setSaveError('PINs do not match.'); return }
     }
@@ -132,7 +132,7 @@ export default function OwnerBranchesPage() {
           payload.create_manager = true
           payload.manager_name = mgrForm.name
           payload.manager_id = mgrForm.manager_id
-          payload.manager_email = mgrForm.email
+          payload.manager_email = mgrForm.manager_email
           payload.manager_pin = mgrForm.pin
         }
         await branchApi.create(payload)
@@ -157,13 +157,13 @@ export default function OwnerBranchesPage() {
   const handleSaveManager = async () => {
     if (!mgrForm.name.trim())       { setSaveError('Manager name is required.');  return }
     if (!mgrForm.manager_id.trim()) { setSaveError('Manager ID is required.');    return }
-    if (!mgrForm.email.trim())      { setSaveError('Manager Email is required.'); return }
+    if (!mgrForm.manager_email.trim())      { setSaveError('Manager Email is required.'); return }
     setSaving(true); setSaveError('')
     try {
       const branch = branches.find(b => b.id === mgrBranchId)
       const existingMgr = branch?.manager
       if (existingMgr) {
-        const payload = { name: mgrForm.name, manager_id: mgrForm.manager_id, email: mgrForm.email }
+        const payload = { name: mgrForm.name, manager_id: mgrForm.manager_id, email: mgrForm.manager_email }
         if (mgrForm.pin.trim()) {
           if (mgrForm.pin !== mgrForm.confirm_pin) {
             setSaveError('PINs do not match.')
@@ -188,7 +188,7 @@ export default function OwnerBranchesPage() {
         await branchManagerApi.create({
           name:       mgrForm.name,
           manager_id: mgrForm.manager_id,
-          email:      mgrForm.email,
+          email:      mgrForm.manager_email,
           pin:        mgrForm.pin,
           branch:     mgrBranchId,
         })
@@ -428,7 +428,7 @@ export default function OwnerBranchesPage() {
               </div>
               <div className="form-group owner-form-grid--full">
                 <label className="form-label">Manager Email <span>*</span></label>
-                <input className="form-input" type="email" placeholder="e.g. manager@artisanbrew.com" value={mgrForm.email} onChange={mf('email')} id="inp-mgr-email" />
+                <input className="form-input" type="email" placeholder="e.g. manager@artisanbrew.com" value={mgrForm.manager_email} onChange={mf('manager_email')} id="inp-mgr-email" />
               </div>
               <div className="form-group">
                 <label className="form-label">PIN / Password <span>*</span></label>
@@ -521,7 +521,7 @@ export default function OwnerBranchesPage() {
                 </div>
                 <div className="form-group owner-form-grid--full">
                   <label className="form-label">Manager Email <span>*</span></label>
-                  <input className="form-input" type="email" placeholder="e.g. manager@artisanbrew.com" value={mgrForm.email} onChange={mf('email')} id="inp-modal-mgr-email" />
+                  <input className="form-input" type="email" placeholder="e.g. manager@artisanbrew.com" value={mgrForm.manager_email} onChange={mf('manager_email')} id="inp-modal-mgr-email" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">
