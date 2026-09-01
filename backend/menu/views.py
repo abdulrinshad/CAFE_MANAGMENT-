@@ -45,7 +45,8 @@ class CategoryViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
         qs = super().get_queryset()
         waiter_branch = get_waiter_branch(self.request)
         if waiter_branch:
-            qs = qs.filter(branch=waiter_branch)
+            from django.db.models import Q
+            qs = qs.filter(Q(branch=waiter_branch) | Q(branch__isnull=True))
         else:
             branch_id = self.request.query_params.get('branch')
             if branch_id and str(branch_id).lower() != 'all':
@@ -54,6 +55,14 @@ class CategoryViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
             else:
                 qs = qs.filter(branch__isnull=False)
         return qs
+
+    def get_permissions(self):
+        from rest_framework.permissions import AllowAny, IsAuthenticated
+        from accounts.permissions import IsManager, IsEmployeeOrAbove
+        
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated(), IsManager()]
+        return [IsAuthenticated(), IsEmployeeOrAbove()]
 
     # perform_create is handled by BranchEnforceMixin
 class ProductViewSet(BranchEnforceMixin, viewsets.ModelViewSet):

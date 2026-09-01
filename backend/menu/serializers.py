@@ -21,6 +21,9 @@ class CategorySerializer(serializers.ModelSerializer):
     """
 
     item_count = serializers.IntegerField(read_only=True)
+    branch_id = serializers.IntegerField(source='branch.id', read_only=True, allow_null=True)
+    branch_name = serializers.CharField(source='branch.name', read_only=True, allow_null=True)
+    tenant_id = serializers.IntegerField(source='tenant.id', read_only=True, allow_null=True)
 
     class Meta:
         model  = Category
@@ -31,6 +34,9 @@ class CategorySerializer(serializers.ModelSerializer):
             'display_order',
             'active',
             'item_count',
+            'branch_id',
+            'branch_name',
+            'tenant_id',
             'created_at',
             'updated_at',
         ]
@@ -51,6 +57,9 @@ class ProductSerializer(serializers.ModelSerializer):
     category_name  = serializers.CharField(source='category.name', read_only=True)
     category_label = serializers.CharField(read_only=True)
     image_url      = serializers.CharField(read_only=True, allow_null=True)
+    branch_id = serializers.IntegerField(source='branch.id', read_only=True, allow_null=True)
+    branch_name = serializers.CharField(source='branch.name', read_only=True, allow_null=True)
+    tenant_id = serializers.IntegerField(source='tenant.id', read_only=True, allow_null=True)
 
     class Meta:
         model  = Product
@@ -73,6 +82,9 @@ class ProductSerializer(serializers.ModelSerializer):
             'popular',
             'featured',
             'dietary_tags',
+            'branch_id',
+            'branch_name',
+            'tenant_id',
             'created_at',
             'updated_at',
         ]
@@ -144,6 +156,9 @@ class ProductListSerializer(serializers.ModelSerializer):
     category_name  = serializers.CharField(source='category.name', read_only=True)
     category_label = serializers.CharField(read_only=True)
     image_url      = serializers.CharField(read_only=True, allow_null=True)
+    branch_id = serializers.IntegerField(source='branch.id', read_only=True, allow_null=True)
+    branch_name = serializers.CharField(source='branch.name', read_only=True, allow_null=True)
+    tenant_id = serializers.IntegerField(source='tenant.id', read_only=True, allow_null=True)
 
     class Meta:
         model  = Product
@@ -161,6 +176,9 @@ class ProductListSerializer(serializers.ModelSerializer):
             'popular',
             'featured',
             'dietary_tags',
+            'branch_id',
+            'branch_name',
+            'tenant_id',
         ]
         read_only_fields = fields
 
@@ -203,6 +221,9 @@ class TableSerializer(serializers.ModelSerializer):
     qr_image_url      = serializers.SerializerMethodField()
     qr_status        = serializers.SerializerMethodField()
     current_order_id = serializers.SerializerMethodField()
+    branch_id = serializers.IntegerField(source='branch.id', read_only=True, allow_null=True)
+    branch_name = serializers.CharField(source='branch.name', read_only=True, allow_null=True)
+    tenant_id = serializers.IntegerField(source='tenant.id', read_only=True, allow_null=True)
 
     class Meta:
         model  = Table
@@ -210,6 +231,7 @@ class TableSerializer(serializers.ModelSerializer):
             'id', 'name', 'seats', 'status', 'active',
             'current_order_ref', 'current_order_id', 'amount',
             'qr_code_id', 'qr_image_url', 'qr_status',
+            'branch_id', 'branch_name', 'tenant_id',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'qr_code_id', 'qr_image_url', 'qr_status', 'current_order_id', 'created_at', 'updated_at']

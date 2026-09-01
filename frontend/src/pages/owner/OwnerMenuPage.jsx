@@ -105,10 +105,7 @@ export default function OwnerMenuPage() {
                       <div className="owner-empty" style={{ padding: '40px 20px', textAlign: 'center' }}>
                         <div className="owner-empty__icon" style={{ fontSize: '48px', marginBottom: '16px' }}>☕</div>
                         <h3 className="owner-empty__text" style={{ fontSize: '18px', fontWeight: '600', color: 'var(--color-espresso)', marginBottom: '8px' }}>No menu items yet</h3>
-                        <p style={{ color: 'var(--color-text-muted)', fontSize: '14px', marginBottom: '20px' }}>Add your first menu item to start building your menu.</p>
-                        <button className="btn btn-primary" onClick={() => window.location.href = '/menu/add'} style={{ padding: '8px 16px', background: 'var(--color-espresso)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500' }}>
-                          + Add Menu Item
-                        </button>
+                        <p style={{ color: 'var(--color-text-muted)', fontSize: '14px', marginBottom: '20px' }}>Your branch managers haven't added any menu items yet.</p>
                       </div>
                     </td>
                   </tr>

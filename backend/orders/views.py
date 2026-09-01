@@ -1046,16 +1046,19 @@ class OrderViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
                         pass
 
                 # ── Mark associated waiter bill requests completed ────────────
-                if order.table_id:
-                    try:
-                        from menu.models import WaiterRequest
-                        WaiterRequest.objects.filter(
-                            table_id=order.table_id,
-                            request_type='Bill Request',
-                            status__in=['requested', 'processing', 'ready', 'new', 'in_progress']
-                        ).update(status='completed')
-                    except Exception:
-                        pass
+                try:
+                    from menu.models import WaiterRequest
+                    from django.db.models import Q
+                    q_filter = Q(order=order)
+                    if order.table_id:
+                        q_filter |= Q(table_id=order.table_id, request_type__icontains='Bill')
+                    WaiterRequest.objects.filter(
+                        q_filter,
+                        status__in=['requested', 'processing', 'ready', 'new', 'in_progress', 
+                                    'REQUESTED', 'PROCESSING', 'READY', 'NEW', 'IN_PROGRESS']
+                    ).update(status='completed')
+                except Exception:
+                    pass
 
                 # ── Mark associated bill_share requests completed ─────────────
                 try:
