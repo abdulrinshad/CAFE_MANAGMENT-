@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
+import PasswordInput from '../components/PasswordInput'
 import './LoginPage.css'
 
 /**
@@ -65,14 +66,14 @@ export default function BranchManagerLoginPage() {
 
           <div className="login-form__field">
             <label className="login-form__label" htmlFor="bm-pin">PIN / Password</label>
-            <input
+            <PasswordInput
               id="bm-pin"
-              type="password"
               className="login-form__input"
               placeholder="••••••••"
               value={pin}
               onChange={e => setPin(e.target.value)}
               autoComplete="current-password"
+              title="PIN"
             />
           </div>
 

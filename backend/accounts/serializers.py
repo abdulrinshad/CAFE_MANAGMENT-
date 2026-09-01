@@ -11,7 +11,7 @@ class BranchManagerInlineSerializer(serializers.ModelSerializer):
     """Lightweight manager info embedded inside Branch responses."""
     class Meta:
         model = BranchManager
-        fields = ('id', 'name', 'manager_id', 'is_active')
+        fields = ('id', 'name', 'manager_id', 'email', 'is_active')
 
 
 class BranchSerializer(serializers.ModelSerializer):
@@ -56,12 +56,22 @@ class BranchWriteSerializer(serializers.ModelSerializer):
         if create_manager:
             manager_name = attrs.get('manager_name')
             manager_id = attrs.get('manager_id')
+            manager_email = attrs.get('manager_email')
             manager_pin = attrs.get('manager_pin')
 
             if not manager_name:
                 raise serializers.ValidationError({"manager_name": "Manager name is required when creating a manager."})
             if not manager_id:
                 raise serializers.ValidationError({"manager_id": "Manager ID is required when creating a manager."})
+            if not manager_email:
+                raise serializers.ValidationError({"manager_email": "Manager Email is required when creating a manager."})
+            else:
+                import re
+                email_str = str(manager_email).strip().lower()
+                if not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', email_str):
+                    raise serializers.ValidationError({"manager_email": "Enter a valid Manager Email address."})
+                attrs['manager_email'] = email_str
+
             if not manager_pin:
                 raise serializers.ValidationError({"manager_pin": "Manager PIN is required when creating a manager."})
 
@@ -82,6 +92,7 @@ class BranchWriteSerializer(serializers.ModelSerializer):
         create_manager = validated_data.pop('create_manager', False)
         manager_name = validated_data.pop('manager_name', None)
         manager_id = validated_data.pop('manager_id', None)
+        manager_email = validated_data.pop('manager_email', None)
         manager_pin = validated_data.pop('manager_pin', None)
 
         with transaction.atomic():
@@ -90,6 +101,7 @@ class BranchWriteSerializer(serializers.ModelSerializer):
                 manager = BranchManager(
                     name=manager_name,
                     manager_id=manager_id,
+                    email=manager_email,
                     branch=branch,
                     tenant=branch.tenant
                 )
@@ -103,15 +115,27 @@ class BranchWriteSerializer(serializers.ModelSerializer):
 class BranchManagerSerializer(serializers.ModelSerializer):
     """Full BranchManager serializer for create / update."""
     pin = serializers.CharField(write_only=True, required=False)
+    is_active = serializers.BooleanField(default=True)
     branch_name = serializers.CharField(source='branch.name', read_only=True)
 
     class Meta:
         model = BranchManager
         fields = (
-            'id', 'name', 'manager_id', 'branch', 'branch_name',
+            'id', 'name', 'manager_id', 'email', 'branch', 'branch_name',
             'is_active', 'created_at', 'updated_at', 'pin',
         )
         read_only_fields = ('id', 'created_at', 'updated_at', 'branch_name')
+
+    def validate_email(self, value):
+        if not value or not str(value).strip():
+            if not self.instance:
+                raise serializers.ValidationError("Manager Email is required.")
+            return value
+        import re
+        val = str(value).strip().lower()
+        if not re.match(r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$', val):
+            raise serializers.ValidationError("Enter a valid Email address.")
+        return val
 
     def validate_manager_id(self, value):
         from .utils import get_user_tenant

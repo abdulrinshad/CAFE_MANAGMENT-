@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { categoryApi, productApi, tableApi, qrCodeApi, orderApi, notificationApi, conversationApi, waiterRequestApi, authApi, branchManagerApi, settingsApi } from '../api'
+import { ToastContainer } from '../components/Toast'
 
 const AppContext = createContext(null)
 
@@ -29,6 +30,24 @@ export function AppProvider({ children }) {
   })
   const [apiError, setApiError] = useState(null)
   const pollRef = useRef(null)
+
+  // ── Toast Notifications State ─────────────────────────────────────────────
+  const [toasts, setToasts] = useState([])
+
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
+
+  const showToast = useCallback((message, type = 'success', duration = 4000) => {
+    if (!message) return
+    const id = Date.now() + Math.random().toString(36).substring(2, 5)
+    setToasts(prev => [...prev, { id, message, type }])
+    if (duration > 0) {
+      setTimeout(() => {
+        removeToast(id)
+      }, duration)
+    }
+  }, [removeToast])
 
   // ── Settings State ────────────────────────────────────────────────────────
   const [ownerSettings, setOwnerSettings] = useState(null)

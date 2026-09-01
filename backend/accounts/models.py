@@ -58,6 +58,7 @@ class BranchManager(models.Model):
     separate from the Admin / Waiter login flows.
     """
     name = models.CharField(max_length=120)
+    email = models.EmailField(blank=True, null=True)
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='managers', null=True, blank=True)
     manager_id = models.CharField(max_length=50)
     branch = models.OneToOneField(
@@ -334,6 +335,10 @@ class BranchSettings(models.Model):
 
 class AdminOTP(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otps')
+    manager = models.ForeignKey('BranchManager', on_delete=models.CASCADE, null=True, blank=True, related_name='pin_change_otps')
+    waiter = models.ForeignKey('Waiter', on_delete=models.CASCADE, null=True, blank=True, related_name='pin_change_otps')
+    cashier = models.ForeignKey('Cashier', on_delete=models.CASCADE, null=True, blank=True, related_name='pin_change_otps')
+    pending_pin_hash = models.CharField(max_length=128, blank=True, default='')
     otp_hash = models.CharField(max_length=128)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()

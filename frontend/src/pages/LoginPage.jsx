@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { authApi } from '../api'
+import PasswordInput from '../components/PasswordInput'
 import './LoginPage.css'
 
 export default function LoginPage() {
@@ -214,7 +215,7 @@ export default function LoginPage() {
     try {
       await authApi.forgotBusinessCode({ email: forgotBizEmail })
       setForgotBizStep('otp')
-      setForgotBizSuccess('OTP sent to your email.')
+      setForgotBizSuccess('Verification code sent to your email.')
     } catch (err) {
       setForgotBizError(err.message || 'Failed to send OTP.')
     } finally {
@@ -222,18 +223,33 @@ export default function LoginPage() {
     }
   }
 
-  const handleForgotBizRegenerate = async (e) => {
+  const handleForgotBizVerifyOTP = async (e) => {
     e.preventDefault()
     if (!forgotBizOTP) { setForgotBizError('Please enter the OTP.'); return }
     setForgotBizError('')
+    setForgotBizSuccess('')
     setForgotBizLoading(true)
     try {
-      const res = await authApi.regenerateBusinessCode({ email: forgotBizEmail, otp: forgotBizOTP })
+      const res = await authApi.verifyBusinessCodeOTP({ email: forgotBizEmail, otp: forgotBizOTP })
       setNewBizCode(res.business_code)
       setForgotBizStep('done')
-      setForgotBizSuccess('Business Code regenerated successfully!')
+      setForgotBizSuccess('Business Code retrieved successfully!')
     } catch (err) {
-      setForgotBizError(err.message || 'Invalid OTP.')
+      setForgotBizError(err.message || 'Invalid or expired OTP.')
+    } finally {
+      setForgotBizLoading(false)
+    }
+  }
+
+  const handleForgotBizResendOTP = async () => {
+    setForgotBizError('')
+    setForgotBizSuccess('')
+    setForgotBizLoading(true)
+    try {
+      await authApi.resendBusinessCodeOTP({ email: forgotBizEmail })
+      setForgotBizSuccess('New verification code sent to your email.')
+    } catch (err) {
+      setForgotBizError(err.message || 'Failed to resend OTP.')
     } finally {
       setForgotBizLoading(false)
     }
@@ -409,14 +425,14 @@ export default function LoginPage() {
             </div>
             <div className="login-form__field">
               <label className="login-form__label" htmlFor="password">Password</label>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 className="login-form__input"
                 placeholder="••••••••"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 autoComplete="current-password"
+                title="Password"
               />
             </div>
             <div className="login-form__row">
@@ -467,11 +483,11 @@ export default function LoginPage() {
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Password</label>
-              <input type="password" className="login-form__input" placeholder="••••••••" value={signupData.password} onChange={e => setSignupData({ ...signupData, password: e.target.value })} />
+              <PasswordInput className="login-form__input" placeholder="••••••••" value={signupData.password} onChange={e => setSignupData({ ...signupData, password: e.target.value })} title="Password" />
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Confirm Password</label>
-              <input type="password" className="login-form__input" placeholder="••••••••" value={signupData.confirm_password} onChange={e => setSignupData({ ...signupData, confirm_password: e.target.value })} />
+              <PasswordInput className="login-form__input" placeholder="••••••••" value={signupData.confirm_password} onChange={e => setSignupData({ ...signupData, confirm_password: e.target.value })} title="Confirm Password" />
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Business Code / Secret PIN (Optional)</label>
@@ -534,15 +550,59 @@ export default function LoginPage() {
           <form className="login-card__form" onSubmit={handleForgotResetPassword}>
             <div className="login-form__field">
               <label className="login-form__label">New Password</label>
-              <input type="password" className="login-form__input" value={forgotNewPassword} onChange={e => setForgotNewPassword(e.target.value)} />
+              <PasswordInput className="login-form__input" value={forgotNewPassword} onChange={e => setForgotNewPassword(e.target.value)} title="New Password" />
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Confirm Password</label>
-              <input type="password" className="login-form__input" value={forgotConfirmPassword} onChange={e => setForgotConfirmPassword(e.target.value)} />
+              <PasswordInput className="login-form__input" value={forgotConfirmPassword} onChange={e => setForgotConfirmPassword(e.target.value)} title="Confirm Password" />
             </div>
             {forgotError && <div className="pin-error-msg" style={{ color: 'red', textAlign: 'center' }}>{forgotError}</div>}
             <button type="submit" className="login-form__submit" disabled={forgotLoading}>{forgotLoading ? 'Resetting...' : 'Reset Password'}</button>
           </form>
+        )}
+
+        {/* ── Forgot Business Code ── */}
+        {loginMode === 'admin' && forgotBizStep === 'email' && (
+          <form className="login-card__form" onSubmit={handleForgotBizSendOTP}>
+            <div className="login-form__field">
+              <label className="login-form__label">Enter Admin Registered Email</label>
+              <input type="email" className="login-form__input" placeholder="admin@example.com" value={forgotBizEmail} onChange={e => setForgotBizEmail(e.target.value)} />
+            </div>
+            {forgotBizError && <div className="pin-error-msg" style={{ color: 'red', textAlign: 'center' }}>{forgotBizError}</div>}
+            <button type="submit" className="login-form__submit" disabled={forgotBizLoading}>{forgotBizLoading ? 'Sending...' : 'Send OTP'}</button>
+            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+              <button type="button" onClick={() => setForgotBizStep('none')} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }}>Back to Login</button>
+            </div>
+          </form>
+        )}
+
+        {loginMode === 'admin' && forgotBizStep === 'otp' && (
+          <form className="login-card__form" onSubmit={handleForgotBizVerifyOTP}>
+            {forgotBizSuccess && <div className="success-msg" style={{ color: 'green', textAlign: 'center', marginBottom: '1rem' }}>{forgotBizSuccess}</div>}
+            <div className="login-form__field">
+              <label className="login-form__label">Enter Verification OTP</label>
+              <input type="text" className="login-form__input" placeholder="123456" value={forgotBizOTP} onChange={e => setForgotBizOTP(e.target.value)} />
+            </div>
+            {forgotBizError && <div className="pin-error-msg" style={{ color: 'red', textAlign: 'center' }}>{forgotBizError}</div>}
+            <button type="submit" className="login-form__submit" disabled={forgotBizLoading}>{forgotBizLoading ? 'Verifying...' : 'Verify OTP & Recover Code'}</button>
+            <div style={{ textAlign: 'center', marginTop: '1rem', display: 'flex', justifyContent: 'space-between' }}>
+              <button type="button" onClick={handleForgotBizResendOTP} disabled={forgotBizLoading} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }}>Resend OTP</button>
+              <button type="button" onClick={() => setForgotBizStep('none')} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', textDecoration: 'underline' }}>Cancel</button>
+            </div>
+          </form>
+        )}
+
+        {loginMode === 'admin' && forgotBizStep === 'done' && (
+          <div className="login-card__form" style={{ textAlign: 'center' }}>
+            <div className="success-msg" style={{ color: 'green', marginBottom: '1rem', fontWeight: 'bold' }}>Business Code Recovered</div>
+            <p style={{ color: '#aaa', marginBottom: '0.5rem' }}>Your Business Code is:</p>
+            <div style={{ fontSize: '1.8rem', fontWeight: 'bold', letterSpacing: '2px', color: '#6366f1', background: 'rgba(99, 102, 241, 0.1)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
+              {newBizCode}
+            </div>
+            <button type="button" className="login-form__submit" onClick={() => { setForgotBizStep('none'); setBusinessCode(newBizCode) }}>
+              Back to Login
+            </button>
+          </div>
         )}
 
         {/* ── Waiter PIN form ── */}
@@ -582,15 +642,16 @@ export default function LoginPage() {
             </div>
             <div className="login-form__field">
               <label className="login-form__label" htmlFor="waiter-pin-input">4-Digit PIN</label>
-              <input
+              <PasswordInput
                 id="waiter-pin-input"
-                type="password"
                 className="login-form__input"
                 placeholder="••••"
                 maxLength={4}
                 value={pin}
                 onChange={e => setPin(e.target.value)}
                 autoComplete="current-password"
+                title="PIN"
+                isPin
               />
             </div>
             {pinError && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{pinError}</div>}
@@ -637,14 +698,14 @@ export default function LoginPage() {
             </div>
             <div className="login-form__field">
               <label className="login-form__label" htmlFor="bm-pin">PIN / Password</label>
-              <input
+              <PasswordInput
                 id="bm-pin"
-                type="password"
                 className="login-form__input"
                 placeholder="••••••••"
                 value={bmPin}
                 onChange={e => setBmPin(e.target.value)}
                 autoComplete="current-password"
+                title="PIN"
               />
             </div>
             {bmError && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{bmError}</div>}
@@ -692,15 +753,16 @@ export default function LoginPage() {
             </div>
             <div className="login-form__field">
               <label className="login-form__label" htmlFor="cashier-pin-input">4-Digit PIN</label>
-              <input
+              <PasswordInput
                 id="cashier-pin-input"
-                type="password"
                 className="login-form__input"
                 placeholder="••••"
                 maxLength={4}
                 value={cashierPin}
                 onChange={e => setCashierPin(e.target.value)}
                 autoComplete="current-password"
+                title="PIN"
+                isPin
               />
             </div>
             {cashierError && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{cashierError}</div>}

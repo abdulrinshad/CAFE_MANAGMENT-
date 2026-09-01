@@ -113,6 +113,10 @@ export const authApi = {
   adminSignup: (data) => request('POST', '/auth/admin-signup/', data),
   adminVerifySignupOTP: (data) => request('POST', '/auth/admin-verify-signup-otp/', data),
   adminResendSignupOTP: (data) => request('POST', '/auth/admin-resend-signup-otp/', data),
+  forgotBusinessCode: (data) => request('POST', '/auth/forgot-business-code/', data),
+  verifyBusinessCodeOTP: (data) => request('POST', '/auth/verify-business-code-otp/', data),
+  resendBusinessCodeOTP: (data) => request('POST', '/auth/resend-business-code-otp/', data),
+  regenerateBusinessCode: (data) => request('POST', '/auth/regenerate-business-code/', data),
 }
 
 
@@ -469,6 +473,12 @@ export const waiterApi = {
   /** PATCH /waiters/{id}/ — update existing waiter */
   update: (id, data) => request('PATCH', `/waiters/${id}/`, data, data instanceof FormData),
 
+  /** POST /waiters/{id}/verify_pin_change/ — verify OTP to complete PIN change */
+  verifyPinChangeOTP: (id, data) => request('POST', `/waiters/${id}/verify_pin_change/`, data),
+
+  /** POST /waiters/{id}/resend_pin_change_otp/ — resend OTP for PIN change */
+  resendPinChangeOTP: (id) => request('POST', `/waiters/${id}/resend_pin_change_otp/`),
+
   /** DELETE /waiters/{id}/ — delete waiter */
   delete: (id) => request('DELETE', `/waiters/${id}/`),
 }
@@ -519,6 +529,12 @@ export const branchManagerApi = {
   /** PATCH /branch-managers/{id}/ — update branch manager */
   update: (id, data) => request('PATCH', `/branch-managers/${id}/`, data),
 
+  /** POST /branch-managers/{id}/verify_pin_change/ — verify OTP to complete PIN change */
+  verifyPinChangeOTP: (id, data) => request('POST', `/branch-managers/${id}/verify_pin_change/`, data),
+
+  /** POST /branch-managers/{id}/resend_pin_change_otp/ — resend OTP for PIN change */
+  resendPinChangeOTP: (id) => request('POST', `/branch-managers/${id}/resend_pin_change_otp/`),
+
   /** DELETE /branch-managers/{id}/ */
   delete: (id) => request('DELETE', `/branch-managers/${id}/`),
 
@@ -565,6 +581,12 @@ export const cashierApi = {
 
   /** PATCH /cashiers/{id}/ — update existing cashier */
   update: (id, data) => request('PATCH', `/cashiers/${id}/`, data),
+
+  /** POST /cashiers/{id}/verify_pin_change/ — verify OTP to complete PIN change */
+  verifyPinChangeOTP: (id, data) => request('POST', `/cashiers/${id}/verify_pin_change/`, data),
+
+  /** POST /cashiers/{id}/resend_pin_change_otp/ — resend OTP for PIN change */
+  resendPinChangeOTP: (id) => request('POST', `/cashiers/${id}/resend_pin_change_otp/`),
 
   /** DELETE /cashiers/{id}/ — delete cashier */
   delete: (id) => request('DELETE', `/cashiers/${id}/`),

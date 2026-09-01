@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import BranchManagerLayout from '../../layouts/BranchManagerLayout';
 import Modal from '../../components/Modal';
+import PasswordInput from '../../components/PasswordInput';
 import { branchManagerService } from '../../services/branchManagerService';
 import { useApp } from '../../context/AppContext';
 import '../../pages/owner/owner.css';
@@ -22,9 +23,11 @@ const EMPTY_FORM = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+import { request } from '../../api';
+
 export default function Staff() {
-  // Auth context — read branch from the manager's session (never from user input)
-  const { currentBranch } = useApp();
+  // Auth context — read branch and showToast from AppContext
+  const { currentBranch, showToast, currentUser } = useApp();
 
   // Staff list state
   const [staff,   setStaff]   = useState([]);
@@ -38,6 +41,14 @@ export default function Staff() {
   const [saving,       setSaving]       = useState(false);
   const [error,        setError]        = useState(null);
   const [terminals,    setTerminals]    = useState([]);
+
+  // OTP Modal State
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState(null);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
+  const [pendingStaffTarget, setPendingStaffTarget] = useState(null);
 
   // Detail view modal
   const [selectedMember,  setSelectedMember]  = useState(null);
@@ -158,6 +169,66 @@ export default function Staff() {
     return true;
   };
 
+  // ── OTP Cooldown Timer ───────────────────────────────────────────────────
+  useEffect(() => {
+    let timer = null;
+    if (otpCooldown > 0) {
+      timer = setInterval(() => setOtpCooldown(prev => prev - 1), 1000);
+    }
+    return () => { if (timer) clearInterval(timer); };
+  }, [otpCooldown]);
+
+  // ── OTP Modal Helpers ─────────────────────────────────────────────────────
+
+  const handleVerifyOTP = async () => {
+    if (!otpCode || otpCode.length !== 6) {
+      setOtpError('Please enter a valid 6-digit verification code.');
+      return;
+    }
+
+    setOtpLoading(true);
+    setOtpError(null);
+    try {
+      const endpoint = `/branch/staff/${pendingStaffTarget.id}/verify_pin_change/`;
+      const res = await request('POST', endpoint, { otp: otpCode });
+      if (res && (res.success || res.message)) {
+        const title = pendingStaffTarget.type === TYPE_CASHIER ? 'Cashier' : 'Waiter';
+        showToast(`${title} PIN has been updated successfully.`, 'success');
+        setShowOtpModal(false);
+        setPendingStaffTarget(null);
+        setOtpCode('');
+        await loadStaff();
+      }
+    } catch (err) {
+      setOtpError(err.message || 'Invalid verification code.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    if (otpCooldown > 0) return;
+    setOtpLoading(true);
+    setOtpError(null);
+    try {
+      const endpoint = `/branch/staff/${pendingStaffTarget.id}/resend_pin_change_otp/`;
+      await request('POST', endpoint);
+      showToast('New verification code sent to your email.', 'success');
+      setOtpCooldown(60);
+    } catch (err) {
+      setOtpError(err.message || 'Unable to send verification email. Please try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleCancelOTP = () => {
+    setShowOtpModal(false);
+    setPendingStaffTarget(null);
+    setOtpCode('');
+    setOtpError(null);
+  };
+
   // ── Save ──────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
@@ -175,7 +246,8 @@ export default function Staff() {
         // Branch is NEVER sent — backend enforces the manager's assigned branch via JWT.
       };
 
-      if (form.pin.trim()) {
+      const hasPinChange = Boolean(form.pin.trim());
+      if (hasPinChange) {
         payload.pin         = form.pin.trim();
         payload.confirm_pin = form.pin.trim();
       }
@@ -186,10 +258,25 @@ export default function Staff() {
 
       if (editing) {
         // PATCH /branch/staff/<id>/
-        await branchManagerService.editStaff(editing.id, payload);
+        const res = await branchManagerService.editStaff(editing.id, payload);
+        if (res && res.requires_otp) {
+          setPendingStaffTarget({ id: editing.id, type: employeeType });
+          setOtpCode('');
+          setOtpError(null);
+          setShowOtpModal(true);
+          setModal(false);
+          showToast('Verification code sent to your email.', 'info');
+          return;
+        } else {
+          const title = employeeType === TYPE_CASHIER ? 'Cashier' : 'Waiter';
+          const msg = hasPinChange ? `${title} PIN has been updated successfully.` : `${title} details have been updated successfully.`;
+          showToast(msg, 'success');
+        }
       } else {
         // POST /branch/staff/
         await branchManagerService.addStaff(payload);
+        const title = employeeType === TYPE_CASHIER ? 'Cashier' : 'Waiter';
+        showToast(`${title} has been created successfully.`, 'success');
       }
 
       await loadStaff();
@@ -544,20 +631,20 @@ export default function Staff() {
               4-Digit PIN{' '}
               {!editing && <span style={{ color: '#e53e3e' }}>*</span>}
             </label>
-            <input
+            <PasswordInput
               id="inp-emp-pin"
               className="form-input"
-              type="password"
               inputMode="numeric"
               maxLength={4}
               placeholder={editing ? 'Leave blank to keep' : 'e.g. 1234'}
               value={form.pin}
               onChange={(e) => {
-                // Allow digits only
                 const val = e.target.value.replace(/\D/g, '');
                 setForm(prev => ({ ...prev, pin: val }));
               }}
               autoComplete="new-password"
+              title="PIN"
+              isPin
             />
           </div>
 
@@ -577,10 +664,9 @@ export default function Staff() {
                 </span>
               )}
             </label>
-            <input
+            <PasswordInput
               id="inp-emp-confirm-pin"
               className="form-input"
-              type="password"
               inputMode="numeric"
               maxLength={4}
               placeholder="Re-enter PIN"
@@ -590,6 +676,8 @@ export default function Staff() {
                 setForm(prev => ({ ...prev, confirm_pin: val }));
               }}
               autoComplete="new-password"
+              title="Confirm PIN"
+              isPin
             />
           </div>
 
@@ -736,6 +824,89 @@ export default function Staff() {
         </div>
       )}
 
+      {/* ── Verify PIN Change OTP Modal ────────────────────────────────────── */}
+      {showOtpModal && (
+        <Modal
+          isOpen={showOtpModal}
+          onClose={handleCancelOTP}
+          title="Verify PIN Change"
+          width="440px"
+        >
+          <div style={{ padding: '8px 4px' }}>
+            <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+              For your security, we've sent a verification code to your registered email address.
+            </p>
+
+            {otpError && (
+              <div style={{ padding: '10px 14px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '13px', marginBottom: '16px' }}>
+                {otpError}
+              </div>
+            )}
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--color-espresso)', marginBottom: '8px' }}>
+                6-Digit Verification Code
+              </label>
+              <input
+                type="text"
+                maxLength={6}
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="123456"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-border)',
+                  background: '#ffffff',
+                  color: 'var(--color-espresso)',
+                  fontSize: '18px',
+                  letterSpacing: '6px',
+                  textAlign: 'center',
+                  fontWeight: 'bold',
+                }}
+                disabled={otpLoading}
+                autoFocus
+              />
+              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '6px', display: 'block' }}>
+                Code expires in 5 minutes.
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleVerifyOTP}
+                disabled={otpLoading || otpCode.length !== 6}
+                style={{ width: '100%', padding: '12px', fontWeight: 600, fontSize: '14px' }}
+              >
+                {otpLoading ? 'Verifying…' : 'Verify & Change PIN'}
+              </button>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={handleResendOTP}
+                  disabled={otpLoading || otpCooldown > 0}
+                  style={{ background: 'none', border: 'none', color: otpCooldown > 0 ? 'var(--color-text-muted)' : 'var(--color-primary, #6366f1)', fontSize: '13px', cursor: otpCooldown > 0 ? 'not-allowed' : 'pointer', textDecoration: 'underline' }}
+                >
+                  {otpCooldown > 0 ? `Resend Code (${otpCooldown}s)` : 'Resend Code'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCancelOTP}
+                  disabled={otpLoading}
+                  style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: '13px', cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
     </BranchManagerLayout>
   );
 }

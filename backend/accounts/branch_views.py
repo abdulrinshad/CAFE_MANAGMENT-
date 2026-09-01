@@ -9,9 +9,16 @@ from rest_framework.decorators import action
 from decimal import Decimal
 import datetime
 
+import random
+import string
+from datetime import timedelta
+from django.contrib.auth.hashers import make_password
+from django.core.mail import send_mail
+
 from accounts.models import (
-    Branch, BranchManager, Waiter, Cashier, KitchenStaff, POSTerminal, BranchSettings
+    Branch, BranchManager, Waiter, Cashier, KitchenStaff, POSTerminal, BranchSettings, AdminOTP
 )
+from accounts.views import get_authenticated_manager_email
 from accounts.serializers import (
     WaiterSerializer, WaiterSafeSerializer,
     CashierSerializer, CashierSafeSerializer,
@@ -355,6 +362,110 @@ class BranchStaffView(APIView):
                 member.is_active = is_active; member.save(update_fields=['is_active'])
                 return Response(self._serialize_member(member, "KITCHEN"))
 
+        # Handle verify_pin_change shortcut  /branch/staff/<pk>/verify_pin_change/
+        if request.path.endswith('/verify_pin_change/'):
+            otp = request.data.get('otp', '').strip()
+            if not otp:
+                return Response({"detail": "OTP is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+            if role_type == 'waiter':
+                member = get_object_or_404(Waiter, pk=obj_id, branch=branch)
+                otp_kw = {'waiter': member}
+                role_title = 'Waiter'
+            elif role_type == 'cashier':
+                member = get_object_or_404(Cashier, pk=obj_id, branch=branch)
+                otp_kw = {'cashier': member}
+                role_title = 'Cashier'
+            else:
+                return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            otp_record = AdminOTP.objects.filter(
+                user=request.user,
+                is_used=False,
+                expires_at__gte=timezone.now(),
+                attempt_count__lt=3,
+                **otp_kw
+            ).order_by('-created_at').first()
+
+            if not otp_record or not otp_record.check_otp(otp):
+                if otp_record:
+                    otp_record.attempt_count += 1
+                    otp_record.save()
+                return Response({"detail": "Invalid verification code."}, status=status.HTTP_400_BAD_REQUEST)
+
+            member.pin_hash = otp_record.pending_pin_hash
+            member.save(update_fields=['pin_hash', 'updated_at'])
+
+            otp_record.is_used = True
+            otp_record.save()
+            AdminOTP.objects.filter(user=request.user, is_used=False, **otp_kw).update(is_used=True)
+
+            return Response({"success": True, "message": f"{role_title} PIN has been updated successfully."})
+
+        # Handle resend_pin_change_otp shortcut  /branch/staff/<pk>/resend_pin_change_otp/
+        if request.path.endswith('/resend_pin_change_otp/'):
+            if role_type == 'waiter':
+                member = get_object_or_404(Waiter, pk=obj_id, branch=branch)
+                otp_kw = {'waiter': member}
+                role_title = 'Waiter'
+            elif role_type == 'cashier':
+                member = get_object_or_404(Cashier, pk=obj_id, branch=branch)
+                otp_kw = {'cashier': member}
+                role_title = 'Cashier'
+            else:
+                return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+            mgr_obj, manager_email = get_authenticated_manager_email(request)
+            if not manager_email:
+                return Response({"detail": "Branch Manager email address is missing."}, status=status.HTTP_400_BAD_REQUEST)
+
+            recent_otp = AdminOTP.objects.filter(
+                user=request.user,
+                created_at__gte=timezone.now() - timedelta(minutes=1),
+                **otp_kw
+            ).first()
+            if recent_otp:
+                return Response({"detail": "Please wait a minute before requesting another OTP."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+            latest_otp = AdminOTP.objects.filter(user=request.user, **otp_kw).order_by('-created_at').first()
+            if not latest_otp or not latest_otp.pending_pin_hash:
+                return Response({"detail": "No active PIN change request found."}, status=status.HTTP_400_BAD_REQUEST)
+
+            AdminOTP.objects.filter(user=request.user, is_used=False, **otp_kw).update(is_used=True)
+
+            raw_otp = ''.join(random.choices(string.digits, k=6))
+            new_otp_record = AdminOTP(
+                user=request.user,
+                pending_pin_hash=latest_otp.pending_pin_hash,
+                expires_at=timezone.now() + timedelta(minutes=5),
+                **otp_kw
+            )
+            new_otp_record.set_otp(raw_otp)
+            new_otp_record.save()
+
+            try:
+                email_body = (
+                    f"Hello,\n\n"
+                    f"Your new verification code for changing the PIN of {role_title} '{member.name}' is:\n\n"
+                    f"{raw_otp}\n\n"
+                    f"This code will expire in 5 minutes.\n\n"
+                    f"If you did not request this change, please secure your account immediately."
+                )
+                send_mail(
+                    subject='Confirm Staff PIN Change',
+                    message=email_body,
+                    from_email=None,
+                    recipient_list=[manager_email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                from django.conf import settings
+                if settings.DEBUG:
+                    print(f"[DEBUG ONLY] Email delivery error: {e}")
+                return Response({"detail": "Unable to send verification email. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            return Response({"success": True, "message": "New verification code sent to your email."})
+
         # Normal edit (name, employee_id, section, pin, is_active)
         pin         = (request.data.get('pin') or '').strip()
         confirm_pin = (request.data.get('confirm_pin') or '').strip()
@@ -378,6 +489,10 @@ class BranchStaffView(APIView):
         if is_active_raw is not None:
             is_active = is_active_raw if isinstance(is_active_raw, bool) else str(is_active_raw).lower() not in ('false', '0', 'inactive')
 
+        requires_otp = False
+        if pin and role_type in ('waiter', 'cashier'):
+            requires_otp = True
+
         def _apply_fields(member, role_key):
             update_fields = []
             if employee_id:
@@ -399,7 +514,7 @@ class BranchStaffView(APIView):
                 update_fields.append('is_active')
                 if not is_active:
                     POSTerminal.objects.filter(assigned_cashier=member).update(assigned_cashier=None)
-            if pin:
+            if pin and not requires_otp:
                 member.set_pin(pin)
                 update_fields.append('pin_hash')
             if update_fields:
@@ -411,6 +526,67 @@ class BranchStaffView(APIView):
             member, err = _apply_fields(member, 'waiter')
             if err:
                 return Response({"employee_id": err}, status=status.HTTP_400_BAD_REQUEST)
+
+            if requires_otp:
+                mgr_obj, manager_email = get_authenticated_manager_email(request)
+                if not manager_email:
+                    return Response(
+                        {"detail": "Branch Manager email is not configured. Please add an email address before changing staff PINs."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                recent_otp = AdminOTP.objects.filter(
+                    user=request.user,
+                    waiter=member,
+                    created_at__gte=timezone.now() - timedelta(minutes=1)
+                ).first()
+                if recent_otp:
+                    return Response(
+                        {"detail": "Please wait a minute before requesting another PIN change verification code."},
+                        status=status.HTTP_429_TOO_MANY_REQUESTS
+                    )
+
+                AdminOTP.objects.filter(user=request.user, waiter=member, is_used=False).update(is_used=True)
+
+                raw_otp = ''.join(random.choices(string.digits, k=6))
+                pending_hash = make_password(pin)
+                otp_record = AdminOTP(
+                    user=request.user,
+                    waiter=member,
+                    pending_pin_hash=pending_hash,
+                    expires_at=timezone.now() + timedelta(minutes=5)
+                )
+                otp_record.set_otp(raw_otp)
+                otp_record.save()
+
+                try:
+                    email_body = (
+                        f"Hello,\n\n"
+                        f"A request was made to change the PIN for Waiter '{member.name}' in your branch.\n\n"
+                        f"Your verification code is:\n\n"
+                        f"{raw_otp}\n\n"
+                        f"This code will expire in 5 minutes.\n\n"
+                        f"If you did not request this change, please secure your account immediately."
+                    )
+                    send_mail(
+                        subject='Confirm Staff PIN Change',
+                        message=email_body,
+                        from_email=None,
+                        recipient_list=[manager_email],
+                        fail_silently=False,
+                    )
+                except Exception as e:
+                    from django.conf import settings
+                    if settings.DEBUG:
+                        print(f"[DEBUG ONLY] Email delivery error: {e}")
+                    return Response({"detail": "Unable to send verification email. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+                return Response({
+                    "requires_otp": True,
+                    "staff_id": pk,
+                    "message": "Verification code sent to your email."
+                }, status=status.HTTP_200_OK)
+
             return Response(self._serialize_member(member, "WAITER"))
 
         elif role_type == 'cashier':
@@ -433,6 +609,66 @@ class BranchStaffView(APIView):
                     except (POSTerminal.DoesNotExist, ValueError, TypeError):
                         return Response({"detail": "Invalid POS Terminal ID or terminal belongs to another branch."}, status=status.HTTP_400_BAD_REQUEST)
 
+            if requires_otp:
+                mgr_obj, manager_email = get_authenticated_manager_email(request)
+                if not manager_email:
+                    return Response(
+                        {"detail": "Branch Manager email is not configured. Please add an email address before changing staff PINs."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                recent_otp = AdminOTP.objects.filter(
+                    user=request.user,
+                    cashier=member,
+                    created_at__gte=timezone.now() - timedelta(minutes=1)
+                ).first()
+                if recent_otp:
+                    return Response(
+                        {"detail": "Please wait a minute before requesting another PIN change verification code."},
+                        status=status.HTTP_429_TOO_MANY_REQUESTS
+                    )
+
+                AdminOTP.objects.filter(user=request.user, cashier=member, is_used=False).update(is_used=True)
+
+                raw_otp = ''.join(random.choices(string.digits, k=6))
+                pending_hash = make_password(pin)
+                otp_record = AdminOTP(
+                    user=request.user,
+                    cashier=member,
+                    pending_pin_hash=pending_hash,
+                    expires_at=timezone.now() + timedelta(minutes=5)
+                )
+                otp_record.set_otp(raw_otp)
+                otp_record.save()
+
+                try:
+                    email_body = (
+                        f"Hello,\n\n"
+                        f"A request was made to change the PIN for Cashier '{member.name}' in your branch.\n\n"
+                        f"Your verification code is:\n\n"
+                        f"{raw_otp}\n\n"
+                        f"This code will expire in 5 minutes.\n\n"
+                        f"If you did not request this change, please secure your account immediately."
+                    )
+                    send_mail(
+                        subject='Confirm Staff PIN Change',
+                        message=email_body,
+                        from_email=None,
+                        recipient_list=[manager_email],
+                        fail_silently=False,
+                    )
+                except Exception as e:
+                    from django.conf import settings
+                    if settings.DEBUG:
+                        print(f"[DEBUG ONLY] Email delivery error: {e}")
+                    return Response({"detail": "Unable to send verification email. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+                return Response({
+                    "requires_otp": True,
+                    "staff_id": pk,
+                    "message": "Verification code sent to your email."
+                }, status=status.HTTP_200_OK)
+
             return Response(self._serialize_member(member, "CASHIER"))
 
         elif role_type == 'kitchen':
@@ -443,6 +679,15 @@ class BranchStaffView(APIView):
             return Response(self._serialize_member(member, "KITCHEN"))
 
         return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def post(self, request, pk=None, *args, **kwargs):
+        if pk:
+            return self.patch(request, pk, *args, **kwargs)
+        # proceed to create
+        branch = get_manager_branch(request)
+        if not branch:
+            return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
+        # rest of create logic...
 
     def put(self, request, pk, *args, **kwargs):
         return self.patch(request, pk, *args, **kwargs)

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
+import PasswordInput from '../../components/PasswordInput'
 import { useApp } from '../../context/AppContext'
 import { settingsApi, branchApi, branchManagerApi, cashierApi, waiterApi } from '../../api'
 import './owner.css'
@@ -238,6 +239,7 @@ export default function OwnerSettingsPage() {
         name: staff.name,
         employee_id: staff.employee_id || '',
         manager_id: staff.manager_id || '',
+        email: staff.email || '',
         pin: '',
         branch: staff.branch_id || staff.branch || '',
         section: staff.section || '',
@@ -245,7 +247,7 @@ export default function OwnerSettingsPage() {
       })
     } else {
       setEditingStaff(null)
-      setStaffForm({ name: '', employee_id: '', manager_id: '', pin: '', branch: branches[0]?.id || '', section: '', is_active: true })
+      setStaffForm({ name: '', employee_id: '', manager_id: '', email: '', pin: '', branch: branches[0]?.id || '', section: '', is_active: true })
     }
     setShowStaffModal(true)
   }
@@ -262,6 +264,7 @@ export default function OwnerSettingsPage() {
         const mgrPayload = {
           name: payload.name,
           manager_id: payload.manager_id,
+          email: payload.email,
           branch: payload.branch,
           is_active: payload.is_active
         }
@@ -805,12 +808,19 @@ export default function OwnerSettingsPage() {
                 <input className="form-input" required value={staffForm.name} onChange={e => setStaffForm({ ...staffForm, name: e.target.value })} />
               </div>
 
-              {staffRole === 'manager' ? (
-                <div style={{ marginBottom: 12 }}>
-                  <label className="form-label">Manager ID (Username)</label>
-                  <input className="form-input" required value={staffForm.manager_id} onChange={e => setStaffForm({ ...staffForm, manager_id: e.target.value })} />
-                </div>
-              ) : (
+              {staffRole === 'manager' && (
+                <>
+                  <div style={{ marginBottom: 12 }}>
+                    <label className="form-label">Manager ID (Username)</label>
+                    <input className="form-input" required value={staffForm.manager_id} onChange={e => setStaffForm({ ...staffForm, manager_id: e.target.value })} />
+                  </div>
+                  <div style={{ marginBottom: 12 }}>
+                    <label className="form-label">Manager Email *</label>
+                    <input className="form-input" type="email" required value={staffForm.email || ''} onChange={e => setStaffForm({ ...staffForm, email: e.target.value })} />
+                  </div>
+                </>
+              )}
+              {staffRole !== 'manager' && (
                 <div style={{ marginBottom: 12 }}>
                   <label className="form-label">Employee ID (Username)</label>
                   <input className="form-input" required value={staffForm.employee_id} onChange={e => setStaffForm({ ...staffForm, employee_id: e.target.value })} />
@@ -819,7 +829,7 @@ export default function OwnerSettingsPage() {
 
               <div style={{ marginBottom: 12 }}>
                 <label className="form-label">PIN / Password {editingStaff && '(leave empty to keep current)'}</label>
-                <input className="form-input" type="password" required={!editingStaff} value={staffForm.pin} onChange={e => setStaffForm({ ...staffForm, pin: e.target.value })} />
+                <PasswordInput required={!editingStaff} value={staffForm.pin} onChange={e => setStaffForm({ ...staffForm, pin: e.target.value })} title="PIN" />
               </div>
 
               <div style={{ marginBottom: 12 }}>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import AdminLayout from '../layouts/AdminLayout'
 import { waiterApi } from '../api'
+import PasswordInput from '../components/PasswordInput'
 import './WaitersPage.css'
 
 export default function WaitersPage() {
@@ -304,26 +305,28 @@ export default function WaitersPage() {
                   <div className="form-row">
                     <div className="form-field">
                       <label htmlFor="w-pin">{isEditing ? 'New 4-digit PIN (Optional)' : '4-digit PIN'}</label>
-                      <input
+                      <PasswordInput
                         id="w-pin"
-                        type="password"
                         placeholder="••••"
-                        maxLength="4"
+                        maxLength={4}
                         value={pin}
                         onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
                         required={!isEditing}
+                        title="PIN"
+                        isPin
                       />
                     </div>
                     <div className="form-field">
                       <label htmlFor="w-confirm-pin">{isEditing ? 'Confirm New PIN' : 'Confirm PIN'}</label>
-                      <input
+                      <PasswordInput
                         id="w-confirm-pin"
-                        type="password"
                         placeholder="••••"
-                        maxLength="4"
+                        maxLength={4}
                         value={confirmPin}
                         onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
                         required={!!pin}
+                        title="Confirm PIN"
+                        isPin
                       />
                     </div>
                   </div>

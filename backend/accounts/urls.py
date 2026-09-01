@@ -23,6 +23,8 @@ from .views import (
     AdminVerifySignupOTPView,
     ResendSignupOTPView,
     ForgotBusinessCodeOTPView,
+    VerifyBusinessCodeOTPView,
+    ResendBusinessCodeOTPView,
     RegenerateBusinessCodeView,
 )
 from .branch_views import (
@@ -62,6 +64,8 @@ urlpatterns = [
     path('auth/admin-verify-signup-otp/', AdminVerifySignupOTPView.as_view(), name='auth_admin_verify_signup_otp'),
     path('auth/resend-signup-otp/', ResendSignupOTPView.as_view(), name='auth_resend_signup_otp'),
     path('auth/forgot-business-code/', ForgotBusinessCodeOTPView.as_view(), name='auth_forgot_business_code'),
+    path('auth/verify-business-code-otp/', VerifyBusinessCodeOTPView.as_view(), name='auth_verify_business_code_otp'),
+    path('auth/resend-business-code-otp/', ResendBusinessCodeOTPView.as_view(), name='auth_resend_business_code_otp'),
     path('auth/regenerate-business-code/', RegenerateBusinessCodeView.as_view(), name='auth_regenerate_business_code'),
     path('auth/me/', CurrentUserView.as_view(), name='auth_me'),
     path('auth/change-password/', ChangePasswordView.as_view(), name='auth_change_password'),
@@ -77,6 +81,8 @@ urlpatterns = [
     path('branch/staff/', BranchStaffView.as_view(), name='branch_staff_list_create'),
     path('branch/staff/<str:pk>/', BranchStaffView.as_view(), name='branch_staff_detail_update'),
     path('branch/staff/<str:pk>/status/', BranchStaffView.as_view(), name='branch_staff_status'),
+    path('branch/staff/<str:pk>/verify_pin_change/', BranchStaffView.as_view(), name='branch_staff_verify_pin'),
+    path('branch/staff/<str:pk>/resend_pin_change_otp/', BranchStaffView.as_view(), name='branch_staff_resend_pin_otp'),
     path('branch/kitchen/orders/', BranchKitchenOrdersView.as_view(), name='branch_kitchen_orders'),
     path('branch/kitchen/orders/<int:pk>/status/', BranchOrderViewSet.as_view({'patch': 'partial_update'}), name='branch_kitchen_order_status'),
     path('branch/menu/', BranchMenuView.as_view(), name='branch_menu'),

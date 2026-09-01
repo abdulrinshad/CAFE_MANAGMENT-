@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../layouts/AdminLayout'
 import Modal from '../../components/Modal'
+import PasswordInput from '../../components/PasswordInput'
 import { branchApi, branchManagerApi } from '../../api'
 import './owner.css'
 
 // ── Empty form shapes ──────────────────────────────────────────────────────────
 const EMPTY_BRANCH_FORM = { name: '', code: '', address: '', phone: '', active: true }
-const EMPTY_MGR_FORM    = { name: '', manager_id: '', pin: '' }
+const EMPTY_MGR_FORM    = { name: '', manager_id: '', email: '', pin: '', confirm_pin: '' }
 
 export default function OwnerBranchesPage() {
   const navigate = useNavigate()
@@ -32,6 +33,14 @@ export default function OwnerBranchesPage() {
   const [mgrForm,     setMgrForm]     = useState(EMPTY_MGR_FORM)
   const [addManager,  setAddManager]  = useState(false) // toggle inside 'add' modal
   const [mgrBranchId, setMgrBranchId] = useState(null) // for standalone 'manager' modal
+
+  // ── OTP PIN Change Verification Modal State ─────────────────────────────
+  const [otpModalOpen, setOtpModalOpen] = useState(false)
+  const [pendingMgrId, setPendingMgrId] = useState(null)
+  const [otpValue,     setOtpValue]     = useState('')
+  const [otpLoading,   setOtpLoading]   = useState(false)
+  const [otpError,     setOtpError]     = useState('')
+  const [otpSuccess,   setOtpSuccess]   = useState('')
 
   // ── Fetch branches ────────────────────────────────────────────────────────
   const fetchBranches = useCallback(async () => {
@@ -85,7 +94,7 @@ export default function OwnerBranchesPage() {
     const branch = branches.find(b => b.id === branchId)
     const existingMgr = branch?.manager
     setMgrForm(existingMgr
-      ? { name: existingMgr.name, manager_id: existingMgr.manager_id, pin: '' }
+      ? { name: existingMgr.name, manager_id: existingMgr.manager_id, email: existingMgr.email || '', pin: '', confirm_pin: '' }
       : EMPTY_MGR_FORM
     )
     setMgrBranchId(branchId)
@@ -108,7 +117,9 @@ export default function OwnerBranchesPage() {
     if (!editingId && addManager) {
       if (!mgrForm.name.trim())       { setSaveError('Manager name is required.'); return }
       if (!mgrForm.manager_id.trim()) { setSaveError('Manager ID is required.'); return }
+      if (!mgrForm.email.trim())      { setSaveError('Manager Email is required.'); return }
       if (!mgrForm.pin.trim())        { setSaveError('PIN / Password is required.'); return }
+      if (mgrForm.pin !== mgrForm.confirm_pin) { setSaveError('PINs do not match.'); return }
     }
 
     setSaving(true); setSaveError('')
@@ -121,6 +132,7 @@ export default function OwnerBranchesPage() {
           payload.create_manager = true
           payload.manager_name = mgrForm.name
           payload.manager_id = mgrForm.manager_id
+          payload.manager_email = mgrForm.email
           payload.manager_pin = mgrForm.pin
         }
         await branchApi.create(payload)
@@ -145,19 +157,38 @@ export default function OwnerBranchesPage() {
   const handleSaveManager = async () => {
     if (!mgrForm.name.trim())       { setSaveError('Manager name is required.');  return }
     if (!mgrForm.manager_id.trim()) { setSaveError('Manager ID is required.');    return }
+    if (!mgrForm.email.trim())      { setSaveError('Manager Email is required.'); return }
     setSaving(true); setSaveError('')
     try {
       const branch = branches.find(b => b.id === mgrBranchId)
       const existingMgr = branch?.manager
       if (existingMgr) {
-        const payload = { name: mgrForm.name, manager_id: mgrForm.manager_id }
-        if (mgrForm.pin.trim()) payload.pin = mgrForm.pin
-        await branchManagerApi.update(existingMgr.id, payload)
+        const payload = { name: mgrForm.name, manager_id: mgrForm.manager_id, email: mgrForm.email }
+        if (mgrForm.pin.trim()) {
+          if (mgrForm.pin !== mgrForm.confirm_pin) {
+            setSaveError('PINs do not match.')
+            setSaving(false)
+            return
+          }
+          payload.pin = mgrForm.pin
+        }
+        const res = await branchManagerApi.update(existingMgr.id, payload)
+        if (res && res.requires_otp) {
+          setPendingMgrId(existingMgr.id)
+          setOtpValue('')
+          setOtpError('')
+          setOtpSuccess("For your security, we've sent a verification code to your registered email address.")
+          setModal(false)
+          setOtpModalOpen(true)
+          return
+        }
       } else {
         if (!mgrForm.pin.trim()) { setSaveError('PIN is required for a new manager.'); setSaving(false); return }
+        if (mgrForm.pin !== mgrForm.confirm_pin) { setSaveError('PINs do not match.'); setSaving(false); return }
         await branchManagerApi.create({
           name:       mgrForm.name,
           manager_id: mgrForm.manager_id,
+          email:      mgrForm.email,
           pin:        mgrForm.pin,
           branch:     mgrBranchId,
         })
@@ -175,6 +206,48 @@ export default function OwnerBranchesPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  // ── OTP PIN Change Verification Handlers ─────────────────────────────────
+  const handleVerifyPinOTP = async (e) => {
+    if (e) e.preventDefault()
+    if (!otpValue.trim()) { setOtpError('Please enter the verification code.'); return }
+    setOtpLoading(true)
+    setOtpError('')
+    try {
+      await branchManagerApi.verifyPinChangeOTP(pendingMgrId, { otp: otpValue.trim() })
+      setOtpModalOpen(false)
+      setPendingMgrId(null)
+      setOtpValue('')
+      await fetchBranches()
+      alert('Branch Manager PIN updated successfully.')
+    } catch (err) {
+      setOtpError(err.message || 'Invalid verification code.')
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
+  const handleResendPinOTP = async () => {
+    setOtpLoading(true)
+    setOtpError('')
+    setOtpSuccess('')
+    try {
+      const res = await branchManagerApi.resendPinChangeOTP(pendingMgrId)
+      setOtpSuccess(res.message || 'New verification code sent to your email.')
+    } catch (err) {
+      setOtpError(err.message || 'Failed to resend verification code.')
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
+  const handleCancelOtp = () => {
+    setOtpModalOpen(false)
+    setPendingMgrId(null)
+    setOtpValue('')
+    setOtpError('')
+    setOtpSuccess('')
   }
 
   // ── Toggle branch active/inactive ─────────────────────────────────────────
@@ -306,27 +379,27 @@ export default function OwnerBranchesPage() {
       </div>
 
       {/* ── Add Branch Modal ── */}
-      <Modal open={modal === 'add'} onClose={closeModal} title="Add Branch">
+      <Modal open={modal === 'add'} onClose={closeModal} title="Add New Branch">
         <div className="owner-form-grid">
           <div className="form-group owner-form-grid--full">
             <label className="form-label">Branch Name <span>*</span></label>
-            <input className="form-input" placeholder="e.g. Artisan Brew — MG Road" value={branchForm.name} onChange={bf('name')} id="inp-branch-name" />
+            <input className="form-input" placeholder="e.g. Indiranagar Branch" value={branchForm.name} onChange={bf('name')} id="inp-add-branch-name" />
           </div>
           <div className="form-group">
             <label className="form-label">Branch Code <span>*</span></label>
-            <input className="form-input" placeholder="e.g. BR-002" value={branchForm.code} onChange={bf('code')} id="inp-branch-code" />
+            <input className="form-input" placeholder="e.g. BR-002" value={branchForm.code} onChange={bf('code')} id="inp-add-branch-code" />
           </div>
           <div className="form-group">
             <label className="form-label">Phone</label>
-            <input className="form-input" placeholder="+91 XXXXXXXXXX" value={branchForm.phone} onChange={bf('phone')} id="inp-branch-phone" />
+            <input className="form-input" placeholder="+91 XXXXXXXXXX" value={branchForm.phone} onChange={bf('phone')} id="inp-add-branch-phone" />
           </div>
           <div className="form-group owner-form-grid--full">
             <label className="form-label">Address</label>
-            <input className="form-input" placeholder="Branch address…" value={branchForm.address} onChange={bf('address')} id="inp-branch-address" />
+            <input className="form-input" placeholder="Full branch address…" value={branchForm.address} onChange={bf('address')} id="inp-add-branch-address" />
           </div>
           <div className="form-group">
             <label className="form-label">Status</label>
-            <select className="form-select" value={branchForm.active ? 'true' : 'false'} onChange={e => setBranchForm(p => ({ ...p, active: e.target.value === 'true' }))} id="sel-branch-status">
+            <select className="form-select" value={branchForm.active ? 'true' : 'false'} onChange={e => setBranchForm(p => ({ ...p, active: e.target.value === 'true' }))} id="sel-add-branch-status">
               <option value="true">Active</option>
               <option value="false">Inactive</option>
             </select>
@@ -353,9 +426,17 @@ export default function OwnerBranchesPage() {
                 <label className="form-label">Manager ID <span>*</span></label>
                 <input className="form-input" placeholder="e.g. MGR-001" value={mgrForm.manager_id} onChange={mf('manager_id')} id="inp-mgr-id" />
               </div>
+              <div className="form-group owner-form-grid--full">
+                <label className="form-label">Manager Email <span>*</span></label>
+                <input className="form-input" type="email" placeholder="e.g. manager@artisanbrew.com" value={mgrForm.email} onChange={mf('email')} id="inp-mgr-email" />
+              </div>
               <div className="form-group">
                 <label className="form-label">PIN / Password <span>*</span></label>
-                <input className="form-input" type="password" placeholder="Set a login PIN" value={mgrForm.pin} onChange={mf('pin')} id="inp-mgr-pin" />
+                <PasswordInput placeholder="Set a login PIN" value={mgrForm.pin} onChange={mf('pin')} id="inp-mgr-pin" title="PIN" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Confirm PIN <span>*</span></label>
+                <PasswordInput placeholder="Confirm login PIN" value={mgrForm.confirm_pin} onChange={mf('confirm_pin')} id="inp-mgr-confirm-pin" title="Confirm PIN" />
               </div>
             </>
           )}
@@ -439,12 +520,28 @@ export default function OwnerBranchesPage() {
                   <input className="form-input" placeholder="e.g. MGR-001" value={mgrForm.manager_id} onChange={mf('manager_id')} id="inp-modal-mgr-id" />
                 </div>
                 <div className="form-group owner-form-grid--full">
+                  <label className="form-label">Manager Email <span>*</span></label>
+                  <input className="form-input" type="email" placeholder="e.g. manager@artisanbrew.com" value={mgrForm.email} onChange={mf('email')} id="inp-modal-mgr-email" />
+                </div>
+                <div className="form-group">
                   <label className="form-label">
                     PIN / Password {!hasManager && <span>*</span>}
                     {hasManager && <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-muted)' }}> (leave blank to keep existing)</span>}
                   </label>
-                  <input className="form-input" type="password" placeholder={hasManager ? '(unchanged)' : 'Set a login PIN'} value={mgrForm.pin} onChange={mf('pin')} id="inp-modal-mgr-pin" />
+                  <PasswordInput placeholder={hasManager ? '(unchanged)' : 'Set a login PIN'} value={mgrForm.pin} onChange={mf('pin')} id="inp-modal-mgr-pin" title="PIN" />
                 </div>
+                {hasManager && mgrForm.pin.trim() && (
+                  <div className="form-group">
+                    <label className="form-label">Confirm PIN <span>*</span></label>
+                    <PasswordInput placeholder="Confirm new login PIN" value={mgrForm.confirm_pin} onChange={mf('confirm_pin')} id="inp-modal-mgr-confirm-pin" title="Confirm PIN" />
+                  </div>
+                )}
+                {!hasManager && (
+                  <div className="form-group">
+                    <label className="form-label">Confirm PIN <span>*</span></label>
+                    <PasswordInput placeholder="Confirm login PIN" value={mgrForm.confirm_pin} onChange={mf('confirm_pin')} id="inp-modal-mgr-confirm-pin" title="Confirm PIN" />
+                  </div>
+                )}
               </div>
 
               {saveError && (
@@ -460,6 +557,69 @@ export default function OwnerBranchesPage() {
             </>
           )
         })()}
+      </Modal>
+
+      {/* ── Verify PIN Change OTP Modal ── */}
+      <Modal
+        open={otpModalOpen}
+        onClose={handleCancelOtp}
+        title="Verify PIN Change"
+      >
+        <div style={{ padding: '4px 0' }}>
+          {otpSuccess && (
+            <div style={{ color: 'green', fontSize: 13, marginBottom: 12, textAlign: 'center', fontWeight: 600 }}>
+              {otpSuccess}
+            </div>
+          )}
+          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 16 }}>
+            For your security, we've sent a 6-digit verification code to your registered email address.
+          </p>
+
+          <form onSubmit={handleVerifyPinOTP}>
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <label className="form-label">Verification Code (OTP) <span>*</span></label>
+              <input
+                className="form-input"
+                type="text"
+                maxLength={6}
+                placeholder="123456"
+                value={otpValue}
+                onChange={e => setOtpValue(e.target.value.replace(/\D/g, ''))}
+                autoFocus
+                style={{ letterSpacing: '4px', fontSize: 16, fontWeight: 700, textAlign: 'center' }}
+                id="inp-otp-pin-change"
+              />
+            </div>
+
+            {otpError && (
+              <p style={{ color: 'var(--color-danger, #c00)', fontSize: 12, marginBottom: 12, textAlign: 'center' }}>{otpError}</p>
+            )}
+
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 20, textAlign: 'center' }}>
+              Code expires in 5 minutes.
+            </p>
+
+            <div className="owner-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={handleResendPinOTP}
+                disabled={otpLoading}
+                style={{ fontSize: 12 }}
+              >
+                Resend Code
+              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" className="btn-outline" onClick={handleCancelOtp} disabled={otpLoading}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary" disabled={otpLoading} id="btn-verify-pin-otp">
+                  {otpLoading ? 'Verifying…' : 'Verify & Change PIN'}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
       </Modal>
     </AdminLayout>
   )
