@@ -18,6 +18,8 @@ class IsManager(BasePermission):
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
+        if request.user.username and request.user.username.startswith('bm_'):
+            return True
         return hasattr(request.user, 'profile') and request.user.profile.role == 'MANAGER'
 
 class IsStaff(BasePermission):
@@ -89,7 +91,7 @@ class IsEmployeeOrAbove(BasePermission):
             return False
         if user.is_superuser or user.is_staff:
             return True
-        if user.username and (user.username.startswith('waiter_') or user.username.startswith('cashier_')):
+        if user.username and (user.username.startswith('waiter_') or user.username.startswith('cashier_') or user.username.startswith('bm_')):
             return True
         if hasattr(user, 'profile') and user.profile.role in ['ADMIN', 'MANAGER', 'STAFF', 'CASHIER']:
             return True

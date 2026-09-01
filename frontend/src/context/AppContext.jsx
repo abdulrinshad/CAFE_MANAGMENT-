@@ -157,7 +157,7 @@ export function AppProvider({ children }) {
     setCurrentCashierRaw(cashier)
   }
 
-  const logout = useCallback(() => {
+  const clearAllStorage = () => {
     localStorage.removeItem('artisan_access')
     localStorage.removeItem('artisan_refresh')
     localStorage.removeItem('artisan_user')
@@ -167,6 +167,10 @@ export function AppProvider({ children }) {
     localStorage.removeItem('artisan_bm_branch')
     localStorage.removeItem('artisan_cashier')
     localStorage.removeItem('artisan_owner_branch')
+  }
+
+  const logout = useCallback(() => {
+    clearAllStorage()
     
     // Clear all state
     setCurrentUser(null)
@@ -202,6 +206,7 @@ export function AppProvider({ children }) {
 
   const loginBranchManager = async (businessCode, branchCode, managerId, pin) => {
     const res = await branchManagerApi.login({ business_code: businessCode, branch_code: branchCode, manager_id: managerId, pin })
+    clearAllStorage()
     localStorage.setItem('artisan_access', res.access)
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
@@ -214,16 +219,14 @@ export function AppProvider({ children }) {
   }
 
   const branchManagerLogout = useCallback(() => {
-    localStorage.removeItem('artisan_access')
-    localStorage.removeItem('artisan_refresh')
-    localStorage.removeItem('artisan_user')
-    localStorage.removeItem('artisan_role')
-    localStorage.removeItem('artisan_bm')
-    localStorage.removeItem('artisan_bm_branch')
+    clearAllStorage()
     setCurrentUser(null)
     setCurrentRoleRaw('admin')
+    setCurrentWaiterRaw(null)
     setCurrentBranchManagerRaw(null)
     setCurrentBranchRaw(null)
+    setCurrentCashierRaw(null)
+    window.location.href = '/login'
   }, [])
 
   const fetchOwnerSettings = useCallback(async () => {
@@ -257,6 +260,7 @@ export function AppProvider({ children }) {
 
   const login = async (email, password) => {
     const res = await authApi.login({ email, password })
+    clearAllStorage()
     localStorage.setItem('artisan_access', res.access)
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
@@ -268,6 +272,7 @@ export function AppProvider({ children }) {
 
   const loginWaiter = async (businessCode, branchCode, waiterId, pin) => {
     const res = await authApi.waiterLogin({ business_code: businessCode, branch_code: branchCode, waiter_id: waiterId, pin })
+    clearAllStorage()
     localStorage.setItem('artisan_access', res.access)
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
@@ -280,6 +285,7 @@ export function AppProvider({ children }) {
 
   const loginEmployee = async (businessCode, branchCode, employeeId, pin, role = 'cashier') => {
     const res = await authApi.employeeLogin({ business_code: businessCode, branch_code: branchCode, employee_id: employeeId, pin, role })
+    clearAllStorage()
     localStorage.setItem('artisan_access', res.access)
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
@@ -785,6 +791,8 @@ export function AppProvider({ children }) {
     await fetchTables()
     // Re-fetch orders so list page reflects COMPLETED status
     await fetchOrders()
+    // Re-fetch waiter requests so BillRequestsPage reflects COMPLETED status
+    await fetchWaiterRequests()
     // Re-fetch notifications
     await fetchNotifications()
     return result

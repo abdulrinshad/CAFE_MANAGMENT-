@@ -868,7 +868,7 @@ class BranchMenuView(APIView):
         if not branch:
             return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
             
-        products = Product.objects.filter(branch=branch)
+        products = Product.objects.filter(branch=branch, tenant=branch.tenant)
         data = [{
             "id": p.id,
             "name": p.name,
@@ -883,7 +883,7 @@ class BranchMenuView(APIView):
 
     def patch(self, request, pk=None, *args, **kwargs):
         branch = get_manager_branch(request)
-        p = get_object_or_404(Product, pk=pk, branch=branch)
+        p = get_object_or_404(Product, pk=pk, branch=branch, tenant=branch.tenant)
         p.available = not p.available
         p.save()
         return Response({"id": p.id, "available": p.available, "branchStatus": p.available})
@@ -901,7 +901,7 @@ class BranchMenuView(APIView):
             return Response({"detail": "Name, price, and category are required."}, status=status.HTTP_400_BAD_REQUEST)
             
         from menu.models import Category
-        category = get_object_or_404(Category, pk=category_id)
+        category = get_object_or_404(Category, pk=category_id, tenant=branch.tenant)
         
         image_path = None
         icon = category.icon.lower()
@@ -925,6 +925,7 @@ class BranchMenuView(APIView):
             price=price,
             category=category,
             branch=branch,
+            tenant=branch.tenant,
             available=True,
             image=image_path
         )
