@@ -225,8 +225,11 @@ class BranchStaffView(APIView):
         if not employee_id:
             errors['employee_id'] = "Employee ID is required."
         else:
-            if Waiter.objects.filter(employee_id=employee_id).exists() or Cashier.objects.filter(employee_id=employee_id).exists() or KitchenStaff.objects.filter(employee_id=employee_id).exists():
-                errors['employee_id'] = "Employee ID already exists. Please use a different Employee ID."
+            w_exists = Waiter.objects.filter(employee_id=employee_id, branch=branch).exists()
+            c_exists = Cashier.objects.filter(employee_id=employee_id, branch=branch).exists()
+            k_exists = KitchenStaff.objects.filter(employee_id=employee_id, branch=branch).exists()
+            if w_exists or c_exists or k_exists:
+                errors['employee_id'] = "Employee ID already exists in this branch."
 
         if not pin:
             errors['pin'] = "4-Digit PIN is required for new employees."
@@ -276,7 +279,7 @@ class BranchStaffView(APIView):
             }
             serializer = WaiterSerializer(data=data)
             serializer.is_valid(raise_exception=True)
-            member = serializer.save()
+            member = serializer.save(tenant=branch.tenant)
             return Response(self._serialize_member(member, "WAITER"), status=status.HTTP_201_CREATED)
 
         elif role == 'cashier':
@@ -290,7 +293,7 @@ class BranchStaffView(APIView):
             }
             serializer = CashierSerializer(data=data)
             serializer.is_valid(raise_exception=True)
-            member = serializer.save()
+            member = serializer.save(tenant=branch.tenant)
 
             # POS Terminal Assignment validation and assignment
             terminal_id = request.data.get('terminal_id')
@@ -318,7 +321,7 @@ class BranchStaffView(APIView):
             }
             serializer = KitchenStaffSerializer(data=data)
             serializer.is_valid(raise_exception=True)
-            member = serializer.save()
+            member = serializer.save(tenant=branch.tenant)
             return Response(self._serialize_member(member, "KITCHEN"), status=status.HTTP_201_CREATED)
 
         return Response({"detail": f"Unsupported role: {role}"}, status=status.HTTP_400_BAD_REQUEST)
@@ -377,18 +380,17 @@ class BranchStaffView(APIView):
 
         def _apply_fields(member, role_key):
             update_fields = []
-            if name:
-                # Check uniqueness of employee_id across all types (excluding self)
-                if employee_id:
-                    other_w = Waiter.objects.filter(employee_id=employee_id).exclude(pk=obj_id if role_key=='waiter' else -1)
-                    other_c = Cashier.objects.filter(employee_id=employee_id).exclude(pk=obj_id if role_key=='cashier' else -1)
-                    if other_w.exists() or other_c.exists():
-                        return None, "This Employee ID is already in use."
-                member.name = name
-                update_fields.append('name')
             if employee_id:
+                other_w = Waiter.objects.filter(employee_id=employee_id, branch=branch).exclude(pk=obj_id if role_key=='waiter' else -1)
+                other_c = Cashier.objects.filter(employee_id=employee_id, branch=branch).exclude(pk=obj_id if role_key=='cashier' else -1)
+                other_k = KitchenStaff.objects.filter(employee_id=employee_id, branch=branch).exclude(pk=obj_id if role_key=='kitchen' else -1)
+                if other_w.exists() or other_c.exists() or other_k.exists():
+                    return None, "Employee ID already exists in this branch."
                 member.employee_id = employee_id
                 update_fields.append('employee_id')
+            if name:
+                member.name = name
+                update_fields.append('name')
             if section is not None and hasattr(member, 'section'):
                 member.section = section
                 update_fields.append('section')

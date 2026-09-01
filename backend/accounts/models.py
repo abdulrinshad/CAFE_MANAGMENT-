@@ -129,7 +129,7 @@ class Waiter(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('tenant', 'employee_id')
+        unique_together = ('tenant', 'branch', 'employee_id')
 
     def set_pin(self, raw_pin):
         self.pin_hash = make_password(raw_pin)
@@ -162,7 +162,7 @@ class Cashier(models.Model):
         verbose_name = 'Cashier'
         verbose_name_plural = 'Cashiers'
         ordering = ['name']
-        unique_together = ('tenant', 'employee_id')
+        unique_together = ('tenant', 'branch', 'employee_id')
 
     def set_pin(self, raw_pin):
         self.pin_hash = make_password(raw_pin)
@@ -195,7 +195,7 @@ class KitchenStaff(models.Model):
         verbose_name = 'Kitchen Staff'
         verbose_name_plural = 'Kitchen Staff'
         ordering = ['name']
-        unique_together = ('tenant', 'employee_id')
+        unique_together = ('tenant', 'branch', 'employee_id')
 
     def set_pin(self, raw_pin):
         self.pin_hash = make_password(raw_pin)

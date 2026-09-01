@@ -114,65 +114,75 @@ class WaiterLoginView(APIView):
     POST /auth/waiter-login/
     Body: { business_code, branch_code, waiter_id, pin }
 
-    Legacy login for Waiters using their DB id (integer).
-    Also supports employee_id string lookup for new-style logins.
+    Authenticates a Waiter using Business Code + Branch Code + Employee ID + 4-Digit PIN.
+    Scoped by tenant + branch.
     """
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        business_code = request.data.get('business_code', '').strip()
-        branch_code = request.data.get('branch_code', '').strip()
-        waiter_id = request.data.get('waiter_id')
-        pin = request.data.get('pin')
+        business_code = str(request.data.get('business_code', '')).strip()
+        branch_code = str(request.data.get('branch_code', '')).strip()
+        waiter_id = str(request.data.get('waiter_id', '')).strip()
+        pin = str(request.data.get('pin', '')).strip()
 
         if not business_code or not branch_code or not waiter_id or not pin:
-            return Response({"detail": "Business Code, Branch Code, waiter_id, and pin are required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Business Code, Branch Code, waiter_id, and pin are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         from .models import Tenant, Branch
-        try:
-            tenant = Tenant.objects.get(business_code=business_code)
-        except Tenant.DoesNotExist:
-            return Response({"detail": "Invalid Business Code."}, status=status.HTTP_401_UNAUTHORIZED)
-            
-        try:
-            branch = Branch.objects.get(code=branch_code, tenant=tenant)
-        except Branch.DoesNotExist:
+        tenant = Tenant.objects.filter(business_code__iexact=business_code).first()
+        if not tenant:
             return Response(
-                {"detail": "Branch does not belong to this business or does not exist."},
+                {"detail": "Employee not found in this business/branch."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # Support both integer PK and string employee_id
-        waiter = None
-        try:
-            waiter_id_int = int(waiter_id)
-            try:
-                waiter = Waiter.objects.get(id=waiter_id_int, branch=branch)
-            except Waiter.DoesNotExist:
-                pass
-        except (ValueError, TypeError):
-            pass
+        branch = Branch.objects.filter(code__iexact=branch_code, tenant=tenant).first()
+        if not branch:
+            return Response(
+                {"detail": "Employee not found in this business/branch."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        waiter = Waiter.objects.select_related('branch').filter(employee_id__iexact=waiter_id, branch=branch).first()
+        if waiter is None and waiter_id.isdigit():
+            # Support legacy numeric PK lookup if string employee_id lookup misses
+            waiter = Waiter.objects.select_related('branch').filter(pk=int(waiter_id), branch=branch).first()
 
         if waiter is None:
-            try:
-                waiter = Waiter.objects.get(employee_id=str(waiter_id), branch=branch)
-            except Waiter.DoesNotExist:
-                return Response({"detail": "Employee not found in this business/branch."}, status=status.HTTP_401_UNAUTHORIZED)
-                
-        # Self-heal legacy data
+            if Cashier.objects.filter(employee_id__iexact=waiter_id, branch=branch).exists() or \
+               KitchenStaff.objects.filter(employee_id__iexact=waiter_id, branch=branch).exists():
+                return Response(
+                    {"detail": "Employee is not registered for this role."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            return Response(
+                {"detail": "Employee not found in this business/branch."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Self-heal legacy tenant assignment
         if waiter.tenant_id != tenant.id:
             waiter.tenant = tenant
             waiter.save(update_fields=['tenant'])
 
         if not waiter.is_active:
-            return Response({"detail": "This waiter account is currently inactive."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "This employee account is inactive."},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         if not waiter.check_pin(pin):
             if waiter.pin_hash == pin:
                 waiter.set_pin(pin)
                 waiter.save(update_fields=['pin_hash'])
             else:
-                return Response({"detail": "Incorrect PIN. Please try again."}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response(
+                    {"detail": "Invalid PIN."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
 
         shadow_username = f"waiter_{waiter.id}"
         shadow_user, created = User.objects.get_or_create(
@@ -181,7 +191,7 @@ class WaiterLoginView(APIView):
                 'email': f"waiter_{waiter.id}@artisanbrew.internal",
                 'is_staff': False,
                 'is_superuser': False,
-                'is_active': True
+                'is_active': True,
             }
         )
         if created:
@@ -206,10 +216,11 @@ class WaiterLoginView(APIView):
                 "id": waiter.id,
                 "name": waiter.name,
                 "employee_id": waiter.employee_id,
+                "role": "waiter",
                 "section": waiter.section,
                 "branch_id": waiter.branch_id,
                 "branch_name": waiter.branch.name if waiter.branch else None,
-                "photo": request.build_absolute_uri(waiter.photo.url) if waiter.photo else None
+                "photo": request.build_absolute_uri(waiter.photo.url) if waiter.photo else None,
             },
             "access": str(refresh.access_token),
             "refresh": str(refresh),
@@ -217,29 +228,31 @@ class WaiterLoginView(APIView):
                 "id": shadow_user.id,
                 "username": shadow_user.username,
                 "email": shadow_user.email,
-                "role": "STAFF"
+                "role": "STAFF",
             }
         }, status=status.HTTP_200_OK)
 
 
-# ── Employee Login (unified Waiter + Cashier) ──────────────────────────────────
+# ── Employee Login (unified Waiter + Cashier + Kitchen) ─────────────────────────
 
 class EmployeeLoginView(APIView):
     """
     POST /auth/employee-login/
-    Body: { employee_id, pin }
+    Body: { business_code, branch_code, employee_id, pin, role (optional) }
 
-    Authenticates either a Waiter or Cashier using their unique Employee ID + PIN.
-    Returns role ('waiter' or 'cashier') so the frontend can route correctly.
-    Inactive employees cannot log in.
+    Authenticates an employee (Cashier / Waiter / Kitchen) using Employee ID + PIN.
+    Scoped by tenant + branch.
     """
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
-        business_code = request.data.get('business_code', '').strip()
-        branch_code = request.data.get('branch_code', '').strip()
-        employee_id = request.data.get('employee_id', '').strip()
-        pin = request.data.get('pin', '')
+        business_code = str(request.data.get('business_code', '')).strip()
+        branch_code = str(request.data.get('branch_code', '')).strip()
+        employee_id = str(request.data.get('employee_id', '')).strip()
+        pin = str(request.data.get('pin', '')).strip()
+        requested_role = request.data.get('role')
+        if requested_role:
+            requested_role = str(requested_role).lower().strip()
 
         if not business_code or not branch_code or not employee_id or not pin:
             return Response(
@@ -248,42 +261,69 @@ class EmployeeLoginView(APIView):
             )
 
         from .models import Tenant, Branch
-        try:
-            tenant = Tenant.objects.get(business_code=business_code)
-        except Tenant.DoesNotExist:
+        tenant = Tenant.objects.filter(business_code__iexact=business_code).first()
+        if not tenant:
             return Response(
-                {"detail": "Invalid Business Code."},
+                {"detail": "Employee not found in this business/branch."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        try:
-            branch = Branch.objects.get(code=branch_code, tenant=tenant)
-        except Branch.DoesNotExist:
+        branch = Branch.objects.filter(code__iexact=branch_code, tenant=tenant).first()
+        if not branch:
             return Response(
-                {"detail": "Branch does not belong to this business or does not exist."},
+                {"detail": "Employee not found in this business/branch."},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # Try Waiter first
         waiter = None
         cashier = None
         kitchen = None
-        try:
-            waiter = Waiter.objects.select_related('branch').get(employee_id=employee_id, tenant=tenant, branch=branch)
-        except Waiter.DoesNotExist:
-            pass
 
-        if waiter is None:
-            try:
-                cashier = Cashier.objects.select_related('branch').get(employee_id=employee_id, tenant=tenant, branch=branch)
-            except Cashier.DoesNotExist:
-                pass
-
-        if waiter is None and cashier is None:
-            try:
-                kitchen = KitchenStaff.objects.select_related('branch').get(employee_id=employee_id, tenant=tenant, branch=branch)
-            except KitchenStaff.DoesNotExist:
-                pass
+        if requested_role == 'cashier':
+            cashier = Cashier.objects.select_related('branch').filter(employee_id__iexact=employee_id, branch=branch).first()
+            if cashier is None:
+                if Waiter.objects.filter(employee_id__iexact=employee_id, branch=branch).exists() or \
+                   KitchenStaff.objects.filter(employee_id__iexact=employee_id, branch=branch).exists():
+                    return Response(
+                        {"detail": "Employee is not registered for this role."},
+                        status=status.HTTP_401_UNAUTHORIZED
+                    )
+                return Response(
+                    {"detail": "Employee not found in this business/branch."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+        elif requested_role == 'waiter':
+            waiter = Waiter.objects.select_related('branch').filter(employee_id__iexact=employee_id, branch=branch).first()
+            if waiter is None:
+                if Cashier.objects.filter(employee_id__iexact=employee_id, branch=branch).exists() or \
+                   KitchenStaff.objects.filter(employee_id__iexact=employee_id, branch=branch).exists():
+                    return Response(
+                        {"detail": "Employee is not registered for this role."},
+                        status=status.HTTP_401_UNAUTHORIZED
+                    )
+                return Response(
+                    {"detail": "Employee not found in this business/branch."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+        elif requested_role == 'kitchen':
+            kitchen = KitchenStaff.objects.select_related('branch').filter(employee_id__iexact=employee_id, branch=branch).first()
+            if kitchen is None:
+                if Waiter.objects.filter(employee_id__iexact=employee_id, branch=branch).exists() or \
+                   Cashier.objects.filter(employee_id__iexact=employee_id, branch=branch).exists():
+                    return Response(
+                        {"detail": "Employee is not registered for this role."},
+                        status=status.HTTP_401_UNAUTHORIZED
+                    )
+                return Response(
+                    {"detail": "Employee not found in this business/branch."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+        else:
+            cashier = Cashier.objects.select_related('branch').filter(employee_id__iexact=employee_id, branch=branch).first()
+            if cashier is None:
+                waiter = Waiter.objects.select_related('branch').filter(employee_id__iexact=employee_id, branch=branch).first()
+            if cashier is None and waiter is None:
+                kitchen = KitchenStaff.objects.select_related('branch').filter(employee_id__iexact=employee_id, branch=branch).first()
 
         if waiter is None and cashier is None and kitchen is None:
             return Response(
@@ -292,16 +332,25 @@ class EmployeeLoginView(APIView):
             )
 
         if waiter is not None:
+            if waiter.tenant_id != tenant.id:
+                waiter.tenant = tenant
+                waiter.save(update_fields=['tenant'])
             return self._login_waiter(request, waiter, pin)
         elif cashier is not None:
+            if cashier.tenant_id != tenant.id:
+                cashier.tenant = tenant
+                cashier.save(update_fields=['tenant'])
             return self._login_cashier(request, cashier, pin)
         else:
+            if kitchen.tenant_id != tenant.id:
+                kitchen.tenant = tenant
+                kitchen.save(update_fields=['tenant'])
             return self._login_kitchen(request, kitchen, pin)
 
     def _login_waiter(self, request, waiter, pin):
         if not waiter.is_active:
             return Response(
-                {"detail": "This employee account is currently inactive."},
+                {"detail": "This employee account is inactive."},
                 status=status.HTTP_403_FORBIDDEN
             )
         if not waiter.check_pin(pin):
@@ -310,7 +359,7 @@ class EmployeeLoginView(APIView):
                 waiter.save(update_fields=['pin_hash'])
             else:
                 return Response(
-                    {"detail": "Invalid Employee ID or PIN."},
+                    {"detail": "Invalid PIN."},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
 
@@ -345,6 +394,7 @@ class EmployeeLoginView(APIView):
                 "id": waiter.id,
                 "name": waiter.name,
                 "employee_id": waiter.employee_id,
+                "role": "waiter",
                 "section": waiter.section,
                 "branch_id": waiter.branch_id,
                 "branch_name": waiter.branch.name if waiter.branch else None,
@@ -363,7 +413,7 @@ class EmployeeLoginView(APIView):
     def _login_cashier(self, request, cashier, pin):
         if not cashier.is_active:
             return Response(
-                {"detail": "This employee account is currently inactive."},
+                {"detail": "This employee account is inactive."},
                 status=status.HTTP_403_FORBIDDEN
             )
         if not cashier.check_pin(pin):
@@ -372,7 +422,7 @@ class EmployeeLoginView(APIView):
                 cashier.save(update_fields=['pin_hash'])
             else:
                 return Response(
-                    {"detail": "Invalid Employee ID or PIN."},
+                    {"detail": "Invalid PIN."},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
 
@@ -417,6 +467,7 @@ class EmployeeLoginView(APIView):
                 "id": cashier.id,
                 "name": cashier.name,
                 "employee_id": cashier.employee_id,
+                "role": "cashier",
                 "branch_id": cashier.branch_id,
                 "branch_name": cashier.branch.name if cashier.branch else None,
                 "terminal": terminal_info,
@@ -434,7 +485,7 @@ class EmployeeLoginView(APIView):
     def _login_kitchen(self, request, kitchen, pin):
         if not kitchen.is_active:
             return Response(
-                {"detail": "This employee account is currently inactive."},
+                {"detail": "This employee account is inactive."},
                 status=status.HTTP_403_FORBIDDEN
             )
         if not kitchen.check_pin(pin):
@@ -443,7 +494,7 @@ class EmployeeLoginView(APIView):
                 kitchen.save(update_fields=['pin_hash'])
             else:
                 return Response(
-                    {"detail": "Invalid Employee ID or PIN."},
+                    {"detail": "Invalid PIN."},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
 
@@ -478,6 +529,7 @@ class EmployeeLoginView(APIView):
                 "id": kitchen.id,
                 "name": kitchen.name,
                 "employee_id": kitchen.employee_id,
+                "role": "kitchen",
                 "branch_id": kitchen.branch_id,
                 "branch_name": kitchen.branch.name if kitchen.branch else None,
             },

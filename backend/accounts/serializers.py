@@ -272,6 +272,32 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 # ── Waiter Serializers ────────────────────────────────────────────────────────
 
+def check_employee_id_uniqueness(employee_id, branch, tenant=None, exclude_instance=None):
+    if not employee_id or not branch:
+        return
+    branch_id = branch.id if hasattr(branch, 'id') else branch
+
+    waiter_qs = Waiter.objects.filter(employee_id=employee_id, branch_id=branch_id)
+    cashier_qs = Cashier.objects.filter(employee_id=employee_id, branch_id=branch_id)
+    kitchen_qs = KitchenStaff.objects.filter(employee_id=employee_id, branch_id=branch_id)
+
+    if tenant:
+        waiter_qs = waiter_qs.filter(tenant=tenant)
+        cashier_qs = cashier_qs.filter(tenant=tenant)
+        kitchen_qs = kitchen_qs.filter(tenant=tenant)
+
+    if exclude_instance:
+        if isinstance(exclude_instance, Waiter):
+            waiter_qs = waiter_qs.exclude(pk=exclude_instance.pk)
+        elif isinstance(exclude_instance, Cashier):
+            cashier_qs = cashier_qs.exclude(pk=exclude_instance.pk)
+        elif isinstance(exclude_instance, KitchenStaff):
+            kitchen_qs = kitchen_qs.exclude(pk=exclude_instance.pk)
+
+    if waiter_qs.exists() or cashier_qs.exists() or kitchen_qs.exists():
+        raise serializers.ValidationError({"employee_id": "Employee ID already exists in this branch."})
+
+
 class WaiterSafeSerializer(serializers.ModelSerializer):
     branch_name = serializers.CharField(source='branch.name', read_only=True)
 
@@ -289,30 +315,21 @@ class WaiterSerializer(serializers.ModelSerializer):
         model = Waiter
         fields = ('id', 'name', 'employee_id', 'photo', 'section', 'branch', 'branch_name', 'is_active', 'created_at', 'updated_at', 'pin', 'confirm_pin')
 
-    def validate_employee_id(self, value):
-        if not value:
-            return value
-        from .utils import get_user_tenant
-        request = self.context.get('request')
-        tenant = get_user_tenant(request) if request else None
-
-        qs = Waiter.objects.filter(employee_id=value)
-        if tenant:
-            qs = qs.filter(tenant=tenant)
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError("This Employee ID is already in use in your business.")
-            
-        # Also check Cashier namespace to guarantee uniqueness across employees
-        cashier_qs = Cashier.objects.filter(employee_id=value)
-        if tenant:
-            cashier_qs = cashier_qs.filter(tenant=tenant)
-        if cashier_qs.exists():
-            raise serializers.ValidationError("This Employee ID is already in use by a Cashier in your business.")
-        return value
-
     def validate(self, attrs):
+        name = attrs.get('name')
+        if name is not None:
+            name_str = str(name).strip()
+            if not name_str:
+                raise serializers.ValidationError({"name": "Full Name is required."})
+            attrs['name'] = name_str
+
+        employee_id = attrs.get('employee_id')
+        if employee_id is not None:
+            emp_id_str = str(employee_id).strip()
+            if not emp_id_str:
+                raise serializers.ValidationError({"employee_id": "Employee ID is required."})
+            attrs['employee_id'] = emp_id_str
+
         pin = attrs.get('pin')
         confirm_pin = attrs.get('confirm_pin')
 
@@ -321,6 +338,18 @@ class WaiterSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"pin": "PIN must be exactly 4 digits and numeric."})
             if pin != confirm_pin:
                 raise serializers.ValidationError({"confirm_pin": "PINs do not match."})
+
+        request = self.context.get('request')
+        from .utils import get_user_tenant, get_user_branch
+        tenant = get_user_tenant(request) if request else (self.instance.tenant if self.instance else None)
+        branch = attrs.get('branch') or (self.instance.branch if self.instance else (get_user_branch(request) if request else None))
+        emp_id = attrs.get('employee_id') or (self.instance.employee_id if self.instance else None)
+
+        if branch and tenant and branch.tenant_id and tenant.id and branch.tenant_id != tenant.id:
+            raise serializers.ValidationError({"branch": "Invalid branch for your business."})
+
+        if emp_id and branch:
+            check_employee_id_uniqueness(emp_id, branch, tenant=tenant, exclude_instance=self.instance)
 
         return attrs
 
@@ -369,28 +398,21 @@ class CashierSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('id', 'created_at', 'updated_at', 'branch_name')
 
-    def validate_employee_id(self, value):
-        from .utils import get_user_tenant
-        request = self.context.get('request')
-        tenant = get_user_tenant(request) if request else None
-
-        qs = Cashier.objects.filter(employee_id=value)
-        if tenant:
-            qs = qs.filter(tenant=tenant)
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError("This Employee ID is already in use in your business.")
-            
-        # Cross-check Waiter namespace
-        waiter_qs = Waiter.objects.filter(employee_id=value)
-        if tenant:
-            waiter_qs = waiter_qs.filter(tenant=tenant)
-        if waiter_qs.exists():
-            raise serializers.ValidationError("This Employee ID is already in use by a Waiter in your business.")
-        return value
-
     def validate(self, attrs):
+        name = attrs.get('name')
+        if name is not None:
+            name_str = str(name).strip()
+            if not name_str:
+                raise serializers.ValidationError({"name": "Full Name is required."})
+            attrs['name'] = name_str
+
+        employee_id = attrs.get('employee_id')
+        if employee_id is not None:
+            emp_id_str = str(employee_id).strip()
+            if not emp_id_str:
+                raise serializers.ValidationError({"employee_id": "Employee ID is required."})
+            attrs['employee_id'] = emp_id_str
+
         pin = attrs.get('pin')
         confirm_pin = attrs.get('confirm_pin')
 
@@ -399,6 +421,18 @@ class CashierSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"pin": "PIN must be exactly 4 digits and numeric."})
             if confirm_pin and pin != confirm_pin:
                 raise serializers.ValidationError({"confirm_pin": "PINs do not match."})
+
+        request = self.context.get('request')
+        from .utils import get_user_tenant, get_user_branch
+        tenant = get_user_tenant(request) if request else (self.instance.tenant if self.instance else None)
+        branch = attrs.get('branch') or (self.instance.branch if self.instance else (get_user_branch(request) if request else None))
+        emp_id = attrs.get('employee_id') or (self.instance.employee_id if self.instance else None)
+
+        if branch and tenant and branch.tenant_id and tenant.id and branch.tenant_id != tenant.id:
+            raise serializers.ValidationError({"branch": "Invalid branch for your business."})
+
+        if emp_id and branch:
+            check_employee_id_uniqueness(emp_id, branch, tenant=tenant, exclude_instance=self.instance)
 
         return attrs
 
@@ -447,41 +481,41 @@ class KitchenStaffSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('id', 'created_at', 'updated_at', 'branch_name')
 
-    def validate_employee_id(self, value):
-        from .utils import get_user_tenant
-        request = self.context.get('request')
-        tenant = get_user_tenant(request) if request else None
-
-        qs = KitchenStaff.objects.filter(employee_id=value)
-        if tenant:
-            qs = qs.filter(tenant=tenant)
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError("This Employee ID is already in use in your business.")
-            
-        # Cross-check Waiter and Cashier namespaces
-        waiter_qs = Waiter.objects.filter(employee_id=value)
-        cashier_qs = Cashier.objects.filter(employee_id=value)
-        if tenant:
-            waiter_qs = waiter_qs.filter(tenant=tenant)
-            cashier_qs = cashier_qs.filter(tenant=tenant)
-            
-        if waiter_qs.exists():
-            raise serializers.ValidationError("This Employee ID is already in use by a Waiter in your business.")
-        if cashier_qs.exists():
-            raise serializers.ValidationError("This Employee ID is already in use by a Cashier in your business.")
-        return value
-
     def validate(self, attrs):
+        name = attrs.get('name')
+        if name is not None:
+            name_str = str(name).strip()
+            if not name_str:
+                raise serializers.ValidationError({"name": "Full Name is required."})
+            attrs['name'] = name_str
+
+        employee_id = attrs.get('employee_id')
+        if employee_id is not None:
+            emp_id_str = str(employee_id).strip()
+            if not emp_id_str:
+                raise serializers.ValidationError({"employee_id": "Employee ID is required."})
+            attrs['employee_id'] = emp_id_str
+
         pin = attrs.get('pin')
         confirm_pin = attrs.get('confirm_pin')
 
         if pin:
             if not pin.isdigit() or len(pin) != 4:
                 raise serializers.ValidationError({"pin": "PIN must be exactly 4 digits and numeric."})
-            if confirm_pin and pin != confirm_pin:
+            if pin != confirm_pin:
                 raise serializers.ValidationError({"confirm_pin": "PINs do not match."})
+
+        request = self.context.get('request')
+        from .utils import get_user_tenant, get_user_branch
+        tenant = get_user_tenant(request) if request else (self.instance.tenant if self.instance else None)
+        branch = attrs.get('branch') or (self.instance.branch if self.instance else (get_user_branch(request) if request else None))
+        emp_id = attrs.get('employee_id') or (self.instance.employee_id if self.instance else None)
+
+        if branch and tenant and branch.tenant_id and tenant.id and branch.tenant_id != tenant.id:
+            raise serializers.ValidationError({"branch": "Invalid branch for your business."})
+
+        if emp_id and branch:
+            check_employee_id_uniqueness(emp_id, branch, tenant=tenant, exclude_instance=self.instance)
 
         return attrs
 

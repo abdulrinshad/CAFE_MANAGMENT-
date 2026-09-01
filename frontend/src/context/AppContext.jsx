@@ -256,25 +256,25 @@ export function AppProvider({ children }) {
     setCurrentWaiter(res.waiter)
     setCurrentRole('waiter')
     fetchOwnerSettings()
-    return res.waiter
+    return res
   }
 
-  const loginEmployee = async (businessCode, branchCode, employeeId, pin) => {
-    const res = await authApi.employeeLogin({ business_code: businessCode, branch_code: branchCode, employee_id: employeeId, pin })
+  const loginEmployee = async (businessCode, branchCode, employeeId, pin, role = 'cashier') => {
+    const res = await authApi.employeeLogin({ business_code: businessCode, branch_code: branchCode, employee_id: employeeId, pin, role })
     localStorage.setItem('artisan_access', res.access)
     localStorage.setItem('artisan_refresh', res.refresh)
     localStorage.setItem('artisan_user', JSON.stringify(res.user))
     setCurrentUser(res.user)
     
-    const role = normalizeRole(res.role)
-    setCurrentRole(role)
+    const normalizedRole = normalizeRole(res.role)
+    setCurrentRole(normalizedRole)
     
-    if (role === 'cashier') {
+    if (normalizedRole === 'cashier') {
       setCurrentCashier(res.employee)
-    } else if (role === 'branch_manager') {
+    } else if (normalizedRole === 'branch_manager') {
       setCurrentBranchManagerRaw(res.employee)
       setCurrentBranchRaw(res.branch)
-    } else if (role === 'waiter') {
+    } else if (normalizedRole === 'waiter') {
       setCurrentWaiter(res.employee)
     }
     return res
