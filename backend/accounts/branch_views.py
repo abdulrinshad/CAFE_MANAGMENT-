@@ -247,7 +247,9 @@ class BranchStaffView(APIView):
 
         return errors, name, employee_id, pin
 
-    def post(self, request, *args, **kwargs):
+    def post(self, request, pk=None, *args, **kwargs):
+        if pk:
+            return self.patch(request, pk, *args, **kwargs)
         """
         Create a Waiter, Cashier, or Kitchen staff.
         Security: branch is ALWAYS forced from the manager's JWT.
@@ -680,14 +682,6 @@ class BranchStaffView(APIView):
 
         return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    def post(self, request, pk=None, *args, **kwargs):
-        if pk:
-            return self.patch(request, pk, *args, **kwargs)
-        # proceed to create
-        branch = get_manager_branch(request)
-        if not branch:
-            return Response({"detail": "Access Denied"}, status=status.HTTP_403_FORBIDDEN)
-        # rest of create logic...
 
     def put(self, request, pk, *args, **kwargs):
         return self.patch(request, pk, *args, **kwargs)
