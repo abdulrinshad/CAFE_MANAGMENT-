@@ -168,7 +168,11 @@ class WaiterLoginView(APIView):
             return Response({"detail": "This waiter account is currently inactive."}, status=status.HTTP_403_FORBIDDEN)
 
         if not waiter.check_pin(pin):
-            return Response({"detail": "Incorrect PIN. Please try again."}, status=status.HTTP_401_UNAUTHORIZED)
+            if waiter.pin_hash == pin:
+                waiter.set_pin(pin)
+                waiter.save(update_fields=['pin_hash'])
+            else:
+                return Response({"detail": "Incorrect PIN. Please try again."}, status=status.HTTP_401_UNAUTHORIZED)
 
         shadow_username = f"waiter_{waiter.id}"
         shadow_user, created = User.objects.get_or_create(
@@ -301,10 +305,14 @@ class EmployeeLoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         if not waiter.check_pin(pin):
-            return Response(
-                {"detail": "Invalid Employee ID or PIN."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            if waiter.pin_hash == pin:
+                waiter.set_pin(pin)
+                waiter.save(update_fields=['pin_hash'])
+            else:
+                return Response(
+                    {"detail": "Invalid Employee ID or PIN."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
 
         shadow_username = f"waiter_{waiter.id}"
         shadow_user, created = User.objects.get_or_create(
@@ -359,10 +367,14 @@ class EmployeeLoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         if not cashier.check_pin(pin):
-            return Response(
-                {"detail": "Invalid Employee ID or PIN."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            if cashier.pin_hash == pin:
+                cashier.set_pin(pin)
+                cashier.save(update_fields=['pin_hash'])
+            else:
+                return Response(
+                    {"detail": "Invalid Employee ID or PIN."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
 
         shadow_username = f"cashier_{cashier.id}"
         shadow_user, created = User.objects.get_or_create(
@@ -426,10 +438,14 @@ class EmployeeLoginView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         if not kitchen.check_pin(pin):
-            return Response(
-                {"detail": "Invalid Employee ID or PIN."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            if kitchen.pin_hash == pin:
+                kitchen.set_pin(pin)
+                kitchen.save(update_fields=['pin_hash'])
+            else:
+                return Response(
+                    {"detail": "Invalid Employee ID or PIN."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
 
         shadow_username = f"kitchen_{kitchen.id}"
         shadow_user, created = User.objects.get_or_create(
@@ -660,10 +676,15 @@ class BranchManagerLoginView(APIView):
             )
 
         if not manager.check_pin(pin):
-            return Response(
-                {"detail": "Invalid PIN."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            # Fallback for old plaintext passwords
+            if manager.pin_hash == pin:
+                manager.set_pin(pin)
+                manager.save(update_fields=['pin_hash'])
+            else:
+                return Response(
+                    {"detail": "Invalid PIN."},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
 
         # Create / reuse a shadow Django user for JWT issuance
         shadow_username = f"bm_{manager.id}"
