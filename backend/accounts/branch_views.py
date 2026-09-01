@@ -482,6 +482,22 @@ class BranchStaffView(APIView):
             if pin != confirm_pin:
                 return Response({"confirm_pin": "PINs do not match."}, status=status.HTTP_400_BAD_REQUEST)
 
+            # Check if new PIN is the same as existing PIN
+            if role_type == 'waiter':
+                existing_member = Waiter.objects.filter(pk=obj_id, branch=branch).first()
+            elif role_type == 'cashier':
+                existing_member = Cashier.objects.filter(pk=obj_id, branch=branch).first()
+            elif role_type == 'kitchen':
+                existing_member = KitchenStaff.objects.filter(pk=obj_id, branch=branch).first()
+            else:
+                existing_member = None
+
+            if existing_member and existing_member.check_pin(pin):
+                return Response(
+                    {"detail": "New PIN cannot be the same as your current PIN. Please choose a different PIN."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         # Validate name if provided
         if name is not None and not name:
             return Response({"name": "Name cannot be empty."}, status=status.HTTP_400_BAD_REQUEST)
@@ -586,6 +602,7 @@ class BranchStaffView(APIView):
                 return Response({
                     "requires_otp": True,
                     "staff_id": pk,
+                    "email": manager_email,
                     "message": "Verification code sent to your email."
                 }, status=status.HTTP_200_OK)
 
@@ -668,6 +685,7 @@ class BranchStaffView(APIView):
                 return Response({
                     "requires_otp": True,
                     "staff_id": pk,
+                    "email": manager_email,
                     "message": "Verification code sent to your email."
                 }, status=status.HTTP_200_OK)
 

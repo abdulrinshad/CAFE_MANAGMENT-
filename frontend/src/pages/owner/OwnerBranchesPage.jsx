@@ -198,7 +198,10 @@ export default function OwnerBranchesPage() {
     } catch (err) {
       const data = err.data
       if (data && typeof data === 'object') {
-        const msgs = Object.entries(data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v[0] : v}`)
+        const msgs = Object.entries(data).map(([k, v]) => {
+          const val = Array.isArray(v) ? v[0] : v;
+          return k === 'detail' ? String(val) : `${k}: ${val}`;
+        })
         setSaveError(msgs.join(' | '))
       } else {
         setSaveError(err.message || 'Failed to save manager.')

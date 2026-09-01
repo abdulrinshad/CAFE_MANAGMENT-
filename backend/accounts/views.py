@@ -69,6 +69,11 @@ class ChangePasswordView(APIView):
             user = request.user
             if not user.check_password(serializer.validated_data['old_password']):
                 return Response({"old_password": ["Wrong password."]}, status=status.HTTP_400_BAD_REQUEST)
+            if user.check_password(serializer.validated_data['new_password']):
+                return Response(
+                    {"detail": "New PIN cannot be the same as your current PIN. Please choose a different PIN."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             user.set_password(serializer.validated_data['new_password'])
             user.save()
             return Response({"message": "Password updated successfully."}, status=status.HTTP_200_OK)
@@ -166,6 +171,11 @@ class WaiterViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
             raw_pin = ''
 
         if raw_pin:
+            if instance.check_pin(raw_pin):
+                return Response(
+                    {"detail": "New PIN cannot be the same as your current PIN. Please choose a different PIN."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             mgr_obj, manager_email = get_authenticated_manager_email(request)
             if not manager_email:
                 return Response(
@@ -222,6 +232,7 @@ class WaiterViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
             return Response({
                 "requires_otp": True,
                 "staff_id": instance.id,
+                "email": manager_email,
                 "message": "Verification code sent to your email."
             }, status=status.HTTP_200_OK)
 
@@ -834,6 +845,11 @@ class CashierViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
             raw_pin = ''
 
         if raw_pin:
+            if instance.check_pin(raw_pin):
+                return Response(
+                    {"detail": "New PIN cannot be the same as your current PIN. Please choose a different PIN."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             mgr_obj, manager_email = get_authenticated_manager_email(request)
             if not manager_email:
                 return Response(
@@ -890,6 +906,7 @@ class CashierViewSet(BranchEnforceMixin, viewsets.ModelViewSet):
             return Response({
                 "requires_otp": True,
                 "staff_id": instance.id,
+                "email": manager_email,
                 "message": "Verification code sent to your email."
             }, status=status.HTTP_200_OK)
 
@@ -1112,6 +1129,11 @@ class BranchManagerViewSet(TenantEnforceMixin, viewsets.ModelViewSet):
             raw_pin = ''
 
         if raw_pin:
+            if instance.check_pin(raw_pin):
+                return Response(
+                    {"detail": "New PIN cannot be the same as your current PIN. Please choose a different PIN."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             recent_otp = AdminOTP.objects.filter(
                 user=request.user,
                 manager=instance,
@@ -1588,6 +1610,12 @@ class AdminResetPasswordView(APIView):
             return Response({"detail": "Invalid email."}, status=status.HTTP_400_BAD_REQUEST)
         
         user = users.first()
+
+        if user.check_password(new_password):
+            return Response(
+                {"detail": "New PIN cannot be the same as your current PIN. Please choose a different PIN."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Re-verify OTP
         otp_record = AdminOTP.objects.filter(

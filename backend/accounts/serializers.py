@@ -153,6 +153,12 @@ class BranchManagerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("This Manager ID is already in use in your business.")
         return value
 
+    def validate(self, attrs):
+        pin = attrs.get('pin')
+        if pin and self.instance and self.instance.check_pin(pin):
+            raise serializers.ValidationError({"detail": "New PIN cannot be the same as your current PIN. Please choose a different PIN."})
+        return attrs
+
     def create(self, validated_data):
         pin = validated_data.pop('pin', None)
         manager = BranchManager(**validated_data)
@@ -363,6 +369,8 @@ class WaiterSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"pin": "PIN must be exactly 4 digits and numeric."})
             if pin != confirm_pin:
                 raise serializers.ValidationError({"confirm_pin": "PINs do not match."})
+            if self.instance and self.instance.check_pin(pin):
+                raise serializers.ValidationError({"detail": "New PIN cannot be the same as your current PIN. Please choose a different PIN."})
 
         request = self.context.get('request')
         from .utils import get_user_tenant, get_user_branch
@@ -446,6 +454,8 @@ class CashierSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"pin": "PIN must be exactly 4 digits and numeric."})
             if confirm_pin and pin != confirm_pin:
                 raise serializers.ValidationError({"confirm_pin": "PINs do not match."})
+            if self.instance and self.instance.check_pin(pin):
+                raise serializers.ValidationError({"detail": "New PIN cannot be the same as your current PIN. Please choose a different PIN."})
 
         request = self.context.get('request')
         from .utils import get_user_tenant, get_user_branch
@@ -529,6 +539,8 @@ class KitchenStaffSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"pin": "PIN must be exactly 4 digits and numeric."})
             if pin != confirm_pin:
                 raise serializers.ValidationError({"confirm_pin": "PINs do not match."})
+            if self.instance and self.instance.check_pin(pin):
+                raise serializers.ValidationError({"detail": "New PIN cannot be the same as your current PIN. Please choose a different PIN."})
 
         request = self.context.get('request')
         from .utils import get_user_tenant, get_user_branch

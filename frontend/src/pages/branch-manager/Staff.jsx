@@ -260,7 +260,8 @@ export default function Staff() {
         // PATCH /branch/staff/<id>/
         const res = await branchManagerService.editStaff(editing.id, payload);
         if (res && res.requires_otp) {
-          setPendingStaffTarget({ id: editing.id, type: employeeType });
+          const managerEmail = res.email || currentUser?.email || currentBranchManager?.email || '';
+          setPendingStaffTarget({ id: editing.id, type: employeeType, email: managerEmail });
           setOtpCode('');
           setOtpError(null);
           setShowOtpModal(true);
@@ -827,18 +828,25 @@ export default function Staff() {
       {/* ── Verify PIN Change OTP Modal ────────────────────────────────────── */}
       {showOtpModal && (
         <Modal
-          isOpen={showOtpModal}
+          open={showOtpModal}
           onClose={handleCancelOTP}
           title="Verify PIN Change"
-          width="440px"
+          size="sm"
         >
           <div style={{ padding: '8px 4px' }}>
             <p style={{ margin: '0 0 12px 0', fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-              For your security, we've sent a verification code to your registered email address.
+              For your security, a verification code has been sent to your registered email address.
             </p>
 
+            {pendingStaffTarget?.email && (
+              <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: 'var(--color-espresso)' }}>
+                Code sent to:<br />
+                <strong style={{ fontFamily: 'monospace', fontSize: '14px' }}>{maskEmail(pendingStaffTarget.email)}</strong>
+              </p>
+            )}
+
             {otpError && (
-              <div style={{ padding: '10px 14px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', fontSize: '13px', marginBottom: '16px' }}>
+              <div style={{ padding: '10px 14px', borderRadius: '6px', background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', fontSize: '13px', marginBottom: '16px', lineHeight: 1.4 }}>
                 {otpError}
               </div>
             )}
@@ -852,7 +860,7 @@ export default function Staff() {
                 maxLength={6}
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                placeholder="123456"
+                placeholder="_ _ _ _ _ _"
                 style={{
                   width: '100%',
                   padding: '12px',
@@ -860,16 +868,17 @@ export default function Staff() {
                   border: '1px solid var(--color-border)',
                   background: '#ffffff',
                   color: 'var(--color-espresso)',
-                  fontSize: '18px',
-                  letterSpacing: '6px',
+                  fontSize: '20px',
+                  letterSpacing: '8px',
                   textAlign: 'center',
                   fontWeight: 'bold',
+                  boxSizing: 'border-box',
                 }}
                 disabled={otpLoading}
                 autoFocus
               />
-              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '6px', display: 'block' }}>
-                Code expires in 5 minutes.
+              <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '6px', display: 'block', textAlign: 'center' }}>
+                Verification code expires in 5 minutes.
               </span>
             </div>
 
@@ -909,6 +918,15 @@ export default function Staff() {
       )}
     </BranchManagerLayout>
   );
+}
+
+// ── Small helper component ────────────────────────────────────────────────────
+
+function maskEmail(email) {
+  if (!email || typeof email !== 'string' || !email.includes('@')) return '';
+  const [user, domain] = email.split('@');
+  if (user.length <= 1) return `${user}***@${domain}`;
+  return `${user.charAt(0)}***@${domain}`;
 }
 
 // ── Small helper component ────────────────────────────────────────────────────
