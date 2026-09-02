@@ -48,10 +48,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',       # must be before CommonMiddleware
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -164,12 +164,37 @@ SIMPLE_JWT = {
     'JTI_CLAIM': 'jti',
 }
 
-# ── CORS ───────────────────────────────────────────────────────────────────────
-_cors_raw = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173,http://localhost:5174')
-CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_raw.split(',') if o.strip()]
+# ── CORS & CSRF ────────────────────────────────────────────────────────────────
+_default_cors_origins = [
+    'https://cafe-managment-ruddy.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+]
 
-# Allow cookies / auth headers from the React dev server
+_cors_env_raw = os.getenv('CORS_ALLOWED_ORIGINS', '')
+_cors_env_origins = [o.strip() for o in _cors_env_raw.split(',') if o.strip()]
+
+# Merge default origins and environment origins while preserving order & eliminating duplicates
+CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_default_cors_origins + _cors_env_origins))
+
+# Allow cookies / auth headers
 CORS_ALLOW_CREDENTIALS = True
+
+# CSRF Trusted Origins for cross-origin requests
+_default_csrf_origins = [
+    'https://cafe-managment-ruddy.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+]
+
+_csrf_env_raw = os.getenv('CSRF_TRUSTED_ORIGINS', '')
+_csrf_env_origins = [o.strip() for o in _csrf_env_raw.split(',') if o.strip()]
+
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_default_csrf_origins + _csrf_env_origins))
 
 # ── Email Settings ─────────────────────────────────────────────────────────────
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND')
