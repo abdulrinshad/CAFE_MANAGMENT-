@@ -73,7 +73,7 @@ export default function PasswordInput({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: showPassword ? '#6366f1' : '#64748b',
+          color: showPassword ? 'var(--color-espresso, #2c1810)' : '#8c7b70',
           borderRadius: '4px',
           outline: 'none',
           transition: 'color 0.2s ease',
