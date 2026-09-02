@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import AdminLayout from '../../layouts/AdminLayout'
 import PasswordInput from '../../components/PasswordInput'
 import { useApp } from '../../context/AppContext'
@@ -11,7 +11,6 @@ const SETTINGS_SECTIONS = [
   { key: 'users',      label: 'Users & Roles',     icon: '👥' },
   { key: 'permissions',label: 'Permissions',       icon: '🔐' },
   { key: 'tax',        label: 'Tax & Billing',     icon: '🧾' },
-  { key: 'payments',   label: 'Payment Methods',   icon: '💳' },
   { key: 'notifs',     label: 'Notifications',     icon: '🔔' },
   { key: 'security',   label: 'Security',          icon: '🛡️' },
 ]
@@ -42,6 +41,7 @@ export default function OwnerSettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [successMessage, setSuccessMessage] = useState(null)
   const [fieldErrors, setFieldErrors] = useState({})
   
   const [settings, setSettings] = useState({
@@ -93,7 +93,7 @@ export default function OwnerSettingsPage() {
   const [showStaffModal, setShowStaffModal] = useState(false)
   const [staffRole, setStaffRole] = useState('manager') // manager, cashier, waiter
   const [editingStaff, setEditingStaff] = useState(null)
-  const [staffForm, setStaffForm] = useState({ name: '', employee_id: '', manager_id: '', pin: '', branch: '', section: '', is_active: true })
+  const [staffForm, setStaffForm] = useState({ name: '', employee_id: '', manager_id: '', email: '', pin: '', branch: '', section: '', is_active: true })
 
   useEffect(() => {
     fetchSettings()
@@ -107,6 +107,17 @@ export default function OwnerSettingsPage() {
       fetchStaff()
     }
   }, [section])
+
+  // Lookup map for display branch names
+  const branchMap = useMemo(() => {
+    const map = {}
+    branches.forEach(b => {
+      if (b && b.id) {
+        map[b.id] = b.name
+      }
+    })
+    return map
+  }, [branches])
 
   const fetchSettings = async () => {
     try {
@@ -149,6 +160,7 @@ export default function OwnerSettingsPage() {
   const handleSave = async () => {
     setSaving(true)
     setError(null)
+    setSuccessMessage(null)
     setFieldErrors({})
 
     let normalizedWebsite = settings.website ? settings.website.trim() : ''
@@ -171,7 +183,8 @@ export default function OwnerSettingsPage() {
       const res = await settingsApi.update(payload)
       setSettings(res)
       await fetchOwnerSettings()
-      alert('Settings saved successfully!')
+      setSuccessMessage('Settings saved successfully!')
+      setTimeout(() => setSuccessMessage(null), 4000)
     } catch (err) {
       console.error('Failed to save settings', err)
       if (err.data && typeof err.data === 'object') {
@@ -216,6 +229,8 @@ export default function OwnerSettingsPage() {
       }
       setShowBranchModal(false)
       fetchBranches()
+      setSuccessMessage(editingBranch ? 'Branch updated successfully!' : 'Branch created successfully!')
+      setTimeout(() => setSuccessMessage(null), 4000)
     } catch (err) {
       alert(err.message || 'Failed to save branch')
     }
@@ -225,6 +240,8 @@ export default function OwnerSettingsPage() {
     try {
       await branchApi.setActive(branch.id, !branch.active)
       fetchBranches()
+      setSuccessMessage(`Branch ${branch.name} status updated.`)
+      setTimeout(() => setSuccessMessage(null), 4000)
     } catch (err) {
       alert('Failed to toggle branch status')
     }
@@ -307,6 +324,8 @@ export default function OwnerSettingsPage() {
       }
       setShowStaffModal(false)
       fetchStaff()
+      setSuccessMessage('Staff account saved successfully!')
+      setTimeout(() => setSuccessMessage(null), 4000)
     } catch (err) {
       alert(err.message || 'Failed to save staff')
     }
@@ -319,15 +338,36 @@ export default function OwnerSettingsPage() {
       else if (role === 'cashier') await cashierApi.delete(id)
       else if (role === 'waiter') await waiterApi.delete(id)
       fetchStaff()
+      setSuccessMessage('Staff account deleted.')
+      setTimeout(() => setSuccessMessage(null), 4000)
     } catch (err) {
       alert('Failed to delete staff')
     }
   }
 
+  const getBranchDisplayName = (staff) => {
+    if (staff.branch_name) return staff.branch_name
+    const bId = staff.branch_id || staff.branch
+    if (bId && branchMap[bId]) return branchMap[bId]
+    if (bId) return `Branch #${bId}`
+    return '—'
+  }
+
   const sf = (key) => (e) => setSettings(prev => ({ ...prev, [key]: e.target.value }))
   const setToggle = (key) => (v) => setSettings(prev => ({ ...prev, [key]: v }))
 
-  if (loading) return <AdminLayout pageTitle="Settings" pageIcon="⚙️"><div>Loading settings...</div></AdminLayout>
+  if (loading) {
+    return (
+      <AdminLayout pageTitle="Settings" pageIcon="⚙️">
+        <div className="owner-page">
+          <div className="owner-section-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+            <div style={{ fontSize: '24px', marginBottom: '8px' }}>⚙️</div>
+            <p style={{ margin: 0, fontSize: '14px' }}>Loading owner settings...</p>
+          </div>
+        </div>
+      </AdminLayout>
+    )
+  }
 
   return (
     <AdminLayout pageTitle="Settings" pageIcon="⚙️">
@@ -335,10 +375,28 @@ export default function OwnerSettingsPage() {
 
         <div className="owner-page-header">
           <div className="owner-page-header__left">
-            <h1 className="owner-page-header__title">Settings</h1>
-            <p className="owner-page-header__sub">Manage your business configuration and system preferences.</p>
+            <h1 className="owner-page-header__title">Owner Settings</h1>
+            <p className="owner-page-header__sub">Manage business configuration, branch options, staff access, and operational preferences.</p>
           </div>
         </div>
+
+        {successMessage && (
+          <div style={{
+            background: 'rgba(74,124,89,0.12)',
+            color: 'var(--color-green)',
+            border: '1px solid rgba(74,124,89,0.3)',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            fontSize: '13px',
+            fontWeight: '500',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <span>✓ {successMessage}</span>
+            <button onClick={() => setSuccessMessage(null)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '14px' }}>✕</button>
+          </div>
+        )}
 
         {error && <div style={{color: 'red', marginBottom: 15, padding: '10px 15px', background: '#ffebeb', borderRadius: 6}}>{error}</div>}
 
@@ -364,7 +422,7 @@ export default function OwnerSettingsPage() {
           {/* Content */}
           <div className="owner-settings-section">
 
-            {/* Business Profile */}
+            {/* Business Profile — OUT OF SCOPE (UNTOUCHED) */}
             {section === 'business' && (
               <div className="owner-settings-block">
                 <div className="owner-settings-block__title">Business Profile</div>
@@ -416,36 +474,11 @@ export default function OwnerSettingsPage() {
             {/* Branches */}
             {section === 'branches' && (
               <div className="owner-settings-block">
-                <div className="owner-settings-block__title">Global Branch Settings</div>
-                <div className="owner-settings-row">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
                   <div>
-                    <div className="owner-settings-row__label">Auto-disable inactive branches</div>
-                    <div className="owner-settings-row__sub">Automatically mark branches as inactive after 30 days of no activity.</div>
+                    <h2 className="owner-settings-block__title" style={{ margin: 0, paddingBottom: 4, borderBottom: 'none' }}>Manage Branches</h2>
+                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-muted)' }}>Configure active branches, location codes, contact info, and operational status.</p>
                   </div>
-                  <Toggle checked={settings.auto_disable_inactive_branches} onChange={setToggle('auto_disable_inactive_branches')} id="toggle-auto-disable" />
-                </div>
-                <div className="owner-settings-row">
-                  <div>
-                    <div className="owner-settings-row__label">Cross-branch inventory sharing</div>
-                    <div className="owner-settings-row__sub">Allow branches to share inventory records.</div>
-                  </div>
-                  <Toggle checked={settings.cross_branch_inventory_sharing} onChange={setToggle('cross_branch_inventory_sharing')} id="toggle-inv-share" />
-                </div>
-                <div className="owner-settings-row" style={{ marginBottom: 25 }}>
-                  <div>
-                    <div className="owner-settings-row__label">Unified menu across branches</div>
-                    <div className="owner-settings-row__sub">Changes to the menu apply to all branches by default.</div>
-                  </div>
-                  <Toggle checked={settings.unified_menu_across_branches} onChange={setToggle('unified_menu_across_branches')} id="toggle-unified-menu" />
-                </div>
-                <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ marginBottom: 35 }}>
-                  {saving ? 'Saving...' : 'Save Global Branch Settings'}
-                </button>
-
-                <hr style={{ borderColor: 'var(--color-cream-dark)', margin: '20px 0' }} />
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                  <h3 className="owner-settings-block__title" style={{ margin: 0 }}>Manage Branches</h3>
                   <button className="btn-primary" onClick={() => handleOpenBranchModal()}>➕ Add Branch</button>
                 </div>
 
@@ -463,7 +496,7 @@ export default function OwnerSettingsPage() {
                     </thead>
                     <tbody>
                       {branches.length === 0 ? (
-                        <tr><td colSpan="6" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>No branches found in database.</td></tr>
+                        <tr><td colSpan="6" style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '24px' }}>No branches found in database. Click "Add Branch" to create a branch.</td></tr>
                       ) : (
                         branches.map(b => (
                           <tr key={b.id}>
@@ -496,33 +529,11 @@ export default function OwnerSettingsPage() {
             {/* Users & Roles */}
             {section === 'users' && (
               <div className="owner-settings-block">
-                <div className="owner-settings-block__title">User &amp; Manager System Settings</div>
-                <div className="owner-settings-row">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 12 }}>
                   <div>
-                    <div className="owner-settings-row__label">Require email verification for new staff</div>
+                    <h2 className="owner-settings-block__title" style={{ margin: 0, paddingBottom: 4, borderBottom: 'none' }}>Staff Accounts</h2>
+                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-text-muted)' }}>Manage employee accounts, credentials, role assignments, and branch access.</p>
                   </div>
-                  <Toggle checked={settings.require_email_verification} onChange={setToggle('require_email_verification')} id="toggle-email-verify" />
-                </div>
-                <div className="owner-settings-row">
-                  <div>
-                    <div className="owner-settings-row__label">Allow managers to create staff accounts</div>
-                  </div>
-                  <Toggle checked={settings.allow_managers_create_staff} onChange={setToggle('allow_managers_create_staff')} id="toggle-manager-create-staff" />
-                </div>
-                <div className="owner-settings-row" style={{ marginBottom: 25 }}>
-                  <div>
-                    <div className="owner-settings-row__label">Allow managers to view financial reports</div>
-                  </div>
-                  <Toggle checked={settings.allow_managers_view_reports} onChange={setToggle('allow_managers_view_reports')} id="toggle-manager-reports" />
-                </div>
-                <button className="btn-primary" onClick={handleSave} disabled={saving} style={{ marginBottom: 35 }}>
-                  {saving ? 'Saving...' : 'Save User Settings'}
-                </button>
-
-                <hr style={{ borderColor: 'var(--color-cream-dark)', margin: '20px 0' }} />
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                  <h3 className="owner-settings-block__title" style={{ margin: 0 }}>Staff Accounts</h3>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button className="btn-primary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => handleOpenStaffModal('manager')}>➕ Manager</button>
                     <button className="btn-primary" style={{ fontSize: 12, padding: '6px 12px' }} onClick={() => handleOpenStaffModal('cashier')}>➕ Cashier</button>
@@ -549,7 +560,7 @@ export default function OwnerSettingsPage() {
                           <td className="td-name">{bm.name}</td>
                           <td><code>{bm.manager_id}</code></td>
                           <td><span className="owner-kpi-badge owner-kpi-badge--blue">Manager</span></td>
-                          <td>{bm.branch_name || bm.branch || '—'}</td>
+                          <td>{getBranchDisplayName(bm)}</td>
                           <td>
                             <span className={`owner-kpi-badge owner-kpi-badge--${bm.is_active ? 'green' : 'red'}`}>
                               {bm.is_active ? 'Active' : 'Inactive'}
@@ -570,7 +581,7 @@ export default function OwnerSettingsPage() {
                           <td className="td-name">{c.name}</td>
                           <td><code>{c.employee_id}</code></td>
                           <td><span className="owner-kpi-badge owner-kpi-badge--yellow">Cashier</span></td>
-                          <td>{c.branch_name || c.branch || '—'}</td>
+                          <td>{getBranchDisplayName(c)}</td>
                           <td>
                             <span className={`owner-kpi-badge owner-kpi-badge--${c.is_active ? 'green' : 'red'}`}>
                               {c.is_active ? 'Active' : 'Inactive'}
@@ -591,7 +602,7 @@ export default function OwnerSettingsPage() {
                           <td className="td-name">{w.name}</td>
                           <td><code>{w.employee_id || w.id}</code></td>
                           <td><span className="owner-kpi-badge owner-kpi-badge--green">Waiter</span></td>
-                          <td>{w.branch_name || w.branch || '—'}</td>
+                          <td>{getBranchDisplayName(w)}</td>
                           <td>
                             <span className={`owner-kpi-badge owner-kpi-badge--${w.is_active ? 'green' : 'red'}`}>
                               {w.is_active ? 'Active' : 'Inactive'}
@@ -618,24 +629,58 @@ export default function OwnerSettingsPage() {
             {/* Permissions */}
             {section === 'permissions' && (
               <div className="owner-settings-block">
-                <div className="owner-settings-block__title">Permissions Matrix (Read-Only)</div>
+                <div className="owner-settings-block__title">System Permissions Matrix (Read-Only)</div>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                  Overview of default access permissions across different staff roles in the Café Management System.
+                </p>
                 <div className="owner-table-wrap">
-                  <table className="owner-table" style={{ minWidth: 400 }}>
-                    <thead><tr><th>Permission</th><th>Owner</th><th>Manager</th><th>POS</th><th>Waiter</th></tr></thead>
+                  <table className="owner-table" style={{ minWidth: 550 }}>
+                    <thead>
+                      <tr>
+                        <th>Permission Module</th>
+                        <th style={{ textAlign: 'center' }}>Owner</th>
+                        <th style={{ textAlign: 'center' }}>Manager</th>
+                        <th style={{ textAlign: 'center' }}>POS / Cashier</th>
+                        <th style={{ textAlign: 'center' }}>Waiter</th>
+                      </tr>
+                    </thead>
                     <tbody>
                       {[
-                        ['View All Branches', '✅', '✅', '—', '—'],
-                        ['Edit Branch Settings', '✅', '—', '—', '—'],
-                        ['Manage Staff', '✅', '✅', '—', '—'],
-                        ['View Reports', '✅', '✅', '—', '—'],
-                        ['Edit Menu', '✅', '✅', '—', '—'],
-                        ['Process Orders', '✅', '✅', '✅', '✅'],
-                        ['View Expenses', '✅', '✅', '—', '—'],
-                        ['Add Expenses', '✅', '✅', '—', '—'],
-                      ].map(([perm, ...roles]) => (
+                        ['View Multi-Branch Operations', 'Full Access', 'Assigned Branch', '—', '—'],
+                        ['Configure System & Branch Settings', 'Full Access', '—', '—', '—'],
+                        ['Manage Staff Accounts', 'Full Access', 'Configurable', '—', '—'],
+                        ['View Financial & Sales Reports', 'Full Access', 'Configurable', '—', '—'],
+                        ['Manage Menu & Products', 'Full Access', 'Allowed', '—', '—'],
+                        ['Process POS Orders & Payments', 'Full Access', 'Allowed', 'Full Access', 'Allowed'],
+                        ['Manage Customer QRs & Tables', 'Full Access', 'Allowed', 'Allowed', 'Allowed'],
+                        ['View & Record Expenses', 'Full Access', 'Allowed', '—', '—'],
+                      ].map(([perm, owner, manager, pos, waiter]) => (
                         <tr key={perm}>
                           <td className="td-name">{perm}</td>
-                          {roles.map((v, i) => <td key={i} style={{ textAlign: 'center' }}>{v}</td>)}
+                          <td style={{ textAlign: 'center' }}>
+                            <span className="owner-kpi-badge owner-kpi-badge--green">{owner}</span>
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {manager === '—' ? (
+                              <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                            ) : (
+                              <span className={`owner-kpi-badge owner-kpi-badge--${manager === 'Full Access' ? 'green' : manager === 'Configurable' ? 'orange' : 'blue'}`}>{manager}</span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {pos === '—' ? (
+                              <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                            ) : (
+                              <span className={`owner-kpi-badge owner-kpi-badge--${pos === 'Full Access' ? 'green' : 'blue'}`}>{pos}</span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {waiter === '—' ? (
+                              <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                            ) : (
+                              <span className={`owner-kpi-badge owner-kpi-badge--${waiter === 'Full Access' ? 'green' : 'blue'}`}>{waiter}</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -647,19 +692,53 @@ export default function OwnerSettingsPage() {
             {/* Tax & Billing */}
             {section === 'tax' && (
               <div className="owner-settings-block">
-                <div className="owner-settings-block__title">Tax &amp; Billing</div>
+                <div className="owner-settings-block__title">Tax &amp; Billing Settings</div>
                 <div className="owner-form-grid">
                   <div className="form-group">
                     <label className="form-label">Default Tax Rate (%)</label>
-                    <input className="form-input" type="number" value={settings.default_tax_rate} onChange={sf('default_tax_rate')} id="settings-tax-rate" />
+                    <input
+                      className="form-input"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={settings.default_tax_rate}
+                      onChange={sf('default_tax_rate')}
+                      id="settings-tax-rate"
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block' }}>
+                      Base GST/tax percentage applied automatically to orders and menu items.
+                    </span>
                   </div>
                   <div className="form-group">
                     <label className="form-label">Service Charge (%)</label>
-                    <input className="form-input" type="number" value={settings.service_charge} onChange={sf('service_charge')} id="settings-service-charge" />
+                    <input
+                      className="form-input"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={settings.service_charge}
+                      onChange={sf('service_charge')}
+                      id="settings-service-charge"
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block' }}>
+                      Optional service percentage added to dine-in bills.
+                    </span>
                   </div>
                   <div className="form-group owner-form-grid--full">
                     <label className="form-label">Invoice Footer Text</label>
-                    <textarea className="form-textarea" value={settings.invoice_footer_text} onChange={sf('invoice_footer_text')} id="settings-invoice-footer" />
+                    <textarea
+                      className="form-textarea"
+                      rows={3}
+                      value={settings.invoice_footer_text}
+                      onChange={sf('invoice_footer_text')}
+                      id="settings-invoice-footer"
+                      placeholder="Thank you for dining with us!"
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', display: 'block' }}>
+                      Custom thank-you message or tax disclaimer printed on receipts.
+                    </span>
                   </div>
                 </div>
                 <div style={{ marginTop: 20 }}>
@@ -668,42 +747,21 @@ export default function OwnerSettingsPage() {
               </div>
             )}
 
-            {/* Payment Methods */}
-            {section === 'payments' && (
-              <div className="owner-settings-block">
-                <div className="owner-settings-block__title">Accepted Payment Methods</div>
-                {[
-                  { id: 'pm_cash',   label: 'Cash',          sub: 'Accept cash payments at POS' },
-                  { id: 'pm_upi',    label: 'UPI',           sub: 'GPay, PhonePe, Paytm, etc.' },
-                  { id: 'pm_card',   label: 'Debit/Credit Card', sub: 'Visa, Mastercard, RuPay' },
-                  { id: 'pm_swiggy', label: 'Swiggy Online', sub: 'Online payments from Swiggy orders' },
-                  { id: 'pm_zomato', label: 'Zomato Online', sub: 'Online payments from Zomato orders' },
-                ].map(pm => (
-                  <div key={pm.id} className="owner-settings-row">
-                    <div>
-                      <div className="owner-settings-row__label">{pm.label}</div>
-                      <div className="owner-settings-row__sub">{pm.sub}</div>
-                    </div>
-                    <Toggle checked={settings[pm.id]} onChange={setToggle(pm.id)} id={pm.id} />
-                  </div>
-                ))}
-                <div style={{ marginTop: 20 }}>
-                  <button className="btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Payment Settings'}</button>
-                </div>
-              </div>
-            )}
 
             {/* Notifications */}
             {section === 'notifs' && (
               <div className="owner-settings-block">
                 <div className="owner-settings-block__title">Notification Preferences</div>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
+                  Choose which operational alerts and system updates trigger notifications for the owner account.
+                </p>
                 {[
-                  { key: 'notif_new_order',     label: 'New Orders',          sub: 'Get notified when a new order is placed' },
-                  { key: 'notif_payment_done',  label: 'Payment Completed',   sub: 'Alert when payment is confirmed' },
-                  { key: 'notif_low_stock',     label: 'Low Stock Alerts',    sub: 'Notify when stock falls below minimum' },
-                  { key: 'notif_expense_added', label: 'Expense Added',       sub: 'When a branch manager adds an expense' },
-                  { key: 'notif_branch_report', label: 'Daily Branch Report', sub: 'End-of-day summary from each branch' },
-                  { key: 'notif_email_digest',  label: 'Weekly Email Digest', sub: 'Summary sent every Monday morning' },
+                  { key: 'notif_new_order',     label: 'New Order Alerts',          sub: 'Receive real-time notifications when a new order is placed' },
+                  { key: 'notif_payment_done',  label: 'Payment Confirmations',     sub: 'Get notified when an order bill payment is settled' },
+                  { key: 'notif_low_stock',     label: 'Low Stock Warnings',        sub: 'Alert when ingredient inventory drops below threshold levels' },
+                  { key: 'notif_expense_added', label: 'Branch Expense Entries',    sub: 'Notify when a branch manager records a new expense' },
+                  { key: 'notif_branch_report', label: 'Daily Branch Summaries',    sub: 'End-of-day revenue and sales report notifications' },
+                  { key: 'notif_email_digest',  label: 'Weekly Executive Email',    sub: 'Weekly executive sales & performance digest sent via email' },
                 ].map(n => (
                   <div key={n.key} className="owner-settings-row">
                     <div>
@@ -726,34 +784,34 @@ export default function OwnerSettingsPage() {
             {/* Security */}
             {section === 'security' && (
               <div className="owner-settings-block">
-                <div className="owner-settings-block__title">Security Settings</div>
+                <div className="owner-settings-block__title">Security &amp; Account Protection</div>
                 <div className="owner-settings-row">
                   <div>
-                    <div className="owner-settings-row__label">Two-Factor Authentication</div>
-                    <div className="owner-settings-row__sub">Require OTP at every login</div>
+                    <div className="owner-settings-row__label">Two-Factor Authentication (2FA)</div>
+                    <div className="owner-settings-row__sub">Require OTP verification on login for administrative accounts</div>
                   </div>
                   <Toggle checked={settings.sec_two_fa} onChange={setToggle('sec_two_fa')} id="toggle-2fa" />
                 </div>
                 <div className="owner-settings-row">
                   <div>
-                    <div className="owner-settings-row__label">Login Alerts</div>
-                    <div className="owner-settings-row__sub">Email alert on new login from unknown device</div>
+                    <div className="owner-settings-row__label">Security Login Alerts</div>
+                    <div className="owner-settings-row__sub">Receive email alerts when a login occurs from an unrecognized device or IP</div>
                   </div>
                   <Toggle checked={settings.sec_login_alerts} onChange={setToggle('sec_login_alerts')} id="toggle-login-alerts" />
                 </div>
                 <div className="owner-settings-row">
                   <div>
-                    <div className="owner-settings-row__label">Session Timeout</div>
-                    <div className="owner-settings-row__sub">Automatically log out after inactivity</div>
+                    <div className="owner-settings-row__label">Automated Session Timeout</div>
+                    <div className="owner-settings-row__sub">Automatically end idle management sessions to prevent unauthorized access</div>
                   </div>
                   <select className="form-select" style={{ width: 'auto' }} value={settings.sec_session_timeout} onChange={sf('sec_session_timeout')} id="settings-session-timeout">
                     <option value="30">30 minutes</option>
                     <option value="60">1 hour</option>
                     <option value="240">4 hours</option>
-                    <option value="0">Never</option>
+                    <option value="0">Never (Stay logged in)</option>
                   </select>
                 </div>
-                <div style={{ marginTop: 20, display: 'flex', gap: 8 }}>
+                <div style={{ marginTop: 20 }}>
                   <button className="btn-primary" id="settings-save-security" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save Security Settings'}</button>
                 </div>
               </div>
