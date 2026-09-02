@@ -5,7 +5,7 @@
  * No base URL hardcoding needed; the proxy handles routing.
  */
 
-const BASE = '/api/v1'
+const BASE = import.meta.env.VITE_API_URL || '/api/v1'
 
 // ── Generic fetch helper ──────────────────────────────────────────────────────
 
