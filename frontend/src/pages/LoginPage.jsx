@@ -410,7 +410,7 @@ export default function LoginPage() {
         {/* ── Admin form ── */}
         {loginMode === 'admin' && signupStep === 'none' && forgotStep === 'none' && forgotBizStep === 'none' && (
           <form className="login-card__form" onSubmit={handleAdminLogin} id="login-form">
-            {forgotSuccess && <div className="success-msg" style={{ marginBottom: '1rem', textAlign: 'center', color: 'green' }}>{forgotSuccess}</div>}
+            {forgotSuccess && <div className="success-msg">{forgotSuccess}</div>}
             <div className="login-form__field">
               <label className="login-form__label" htmlFor="email">Email</label>
               <input
@@ -446,20 +446,22 @@ export default function LoginPage() {
                 />
                 <span>Remember me</span>
               </label>
-              <button type="button" className="login-form__forgot" id="btn-forgot-password" onClick={() => setForgotStep('email')}>
-                Forgot password?
-              </button>
-              <button type="button" className="login-form__forgot" onClick={() => setForgotBizStep('email')}>
-                Forgot Business Code?
-              </button>
+              <div className="login-form__forgot-links">
+                <button type="button" className="login-form__forgot" id="btn-forgot-password" onClick={() => setForgotStep('email')}>
+                  Forgot password?
+                </button>
+                <button type="button" className="login-form__forgot" onClick={() => setForgotBizStep('email')}>
+                  Forgot Code?
+                </button>
+              </div>
             </div>
-            {error && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center', color: 'red' }}>{error}</div>}
+            {error && <div className="pin-error-msg">{error}</div>}
             <button type="submit" className="login-form__submit" id="btn-login" disabled={loading}>
               {loading ? 'Logging in...' : 'Login'}
               <span className="login-form__submit-arrow">→</span>
             </button>
-            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-              <button type="button" onClick={() => setSignupStep('form')} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }}>
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <button type="button" className="login-card__secondary-link" onClick={() => setSignupStep('form')}>
                 Don't have an account? Sign Up
               </button>
             </div>
@@ -493,25 +495,25 @@ export default function LoginPage() {
               <label className="login-form__label">Business Code / Secret PIN (Optional)</label>
               <input type="text" className="login-form__input" placeholder="Leave blank to auto-generate" value={signupData.business_code} onChange={e => setSignupData({ ...signupData, business_code: e.target.value })} />
             </div>
-            {signupError && <div className="pin-error-msg" style={{ color: 'red', textAlign: 'center' }}>{signupError}</div>}
+            {signupError && <div className="pin-error-msg">{signupError}</div>}
             <button type="submit" className="login-form__submit" disabled={signupLoading}>{signupLoading ? 'Creating Account...' : 'Sign Up'}</button>
-            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-              <button type="button" onClick={() => setSignupStep('none')} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }}>Already have an account? Log In</button>
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <button type="button" className="login-card__secondary-link" onClick={() => setSignupStep('none')}>Already have an account? Log In</button>
             </div>
           </form>
         )}
 
         {loginMode === 'admin' && signupStep === 'otp' && (
           <form className="login-card__form" onSubmit={handleSignupOTPVerify}>
-            {signupSuccess && <div className="success-msg" style={{ color: 'green', textAlign: 'center', marginBottom: '1rem' }}>{signupSuccess}</div>}
+            {signupSuccess && <div className="success-msg">{signupSuccess}</div>}
             <div className="login-form__field">
               <label className="login-form__label">Enter OTP</label>
               <input type="text" className="login-form__input" placeholder="123456" value={signupOTP} onChange={e => setSignupOTP(e.target.value)} />
             </div>
-            {signupError && <div className="pin-error-msg" style={{ color: 'red', textAlign: 'center' }}>{signupError}</div>}
+            {signupError && <div className="pin-error-msg">{signupError}</div>}
             <button type="submit" className="login-form__submit" disabled={signupLoading}>{signupLoading ? 'Verifying...' : 'Verify OTP'}</button>
-            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-              <button type="button" onClick={handleSignupResendOTP} disabled={signupLoading} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }}>Resend OTP</button>
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <button type="button" className="login-card__secondary-link" onClick={handleSignupResendOTP} disabled={signupLoading}>Resend OTP</button>
             </div>
           </form>
         )}
@@ -521,27 +523,27 @@ export default function LoginPage() {
           <form className="login-card__form" onSubmit={handleForgotSendOTP}>
             <div className="login-form__field">
               <label className="login-form__label">Enter your Email</label>
-              <input type="email" className="login-form__input" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} />
+              <input type="email" className="login-form__input" placeholder="admin@artisanbrew.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} />
             </div>
-            {forgotError && <div className="pin-error-msg" style={{ color: 'red', textAlign: 'center' }}>{forgotError}</div>}
+            {forgotError && <div className="pin-error-msg">{forgotError}</div>}
             <button type="submit" className="login-form__submit" disabled={forgotLoading}>{forgotLoading ? 'Sending...' : 'Send OTP'}</button>
-            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-              <button type="button" onClick={() => setForgotStep('none')} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }}>Back to Login</button>
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <button type="button" className="login-card__secondary-link" onClick={() => setForgotStep('none')}>Back to Login</button>
             </div>
           </form>
         )}
 
         {loginMode === 'admin' && forgotStep === 'otp' && (
           <form className="login-card__form" onSubmit={handleForgotVerifyOTP}>
-            {forgotSuccess && <div className="success-msg" style={{ color: 'green', textAlign: 'center', marginBottom: '1rem' }}>{forgotSuccess}</div>}
+            {forgotSuccess && <div className="success-msg">{forgotSuccess}</div>}
             <div className="login-form__field">
               <label className="login-form__label">Enter OTP</label>
-              <input type="text" className="login-form__input" value={forgotOTP} onChange={e => setForgotOTP(e.target.value)} />
+              <input type="text" className="login-form__input" placeholder="123456" value={forgotOTP} onChange={e => setForgotOTP(e.target.value)} />
             </div>
-            {forgotError && <div className="pin-error-msg" style={{ color: 'red', textAlign: 'center' }}>{forgotError}</div>}
+            {forgotError && <div className="pin-error-msg">{forgotError}</div>}
             <button type="submit" className="login-form__submit" disabled={forgotLoading}>{forgotLoading ? 'Verifying...' : 'Verify OTP'}</button>
-            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-              <button type="button" onClick={() => setForgotStep('none')} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }}>Cancel</button>
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <button type="button" className="login-card__secondary-link" onClick={() => setForgotStep('none')}>Cancel</button>
             </div>
           </form>
         )}
@@ -550,13 +552,13 @@ export default function LoginPage() {
           <form className="login-card__form" onSubmit={handleForgotResetPassword}>
             <div className="login-form__field">
               <label className="login-form__label">New Password</label>
-              <PasswordInput className="login-form__input" value={forgotNewPassword} onChange={e => setForgotNewPassword(e.target.value)} title="New Password" />
+              <PasswordInput className="login-form__input" placeholder="••••••••" value={forgotNewPassword} onChange={e => setForgotNewPassword(e.target.value)} title="New Password" />
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Confirm Password</label>
-              <PasswordInput className="login-form__input" value={forgotConfirmPassword} onChange={e => setForgotConfirmPassword(e.target.value)} title="Confirm Password" />
+              <PasswordInput className="login-form__input" placeholder="••••••••" value={forgotConfirmPassword} onChange={e => setForgotConfirmPassword(e.target.value)} title="Confirm Password" />
             </div>
-            {forgotError && <div className="pin-error-msg" style={{ color: 'red', textAlign: 'center' }}>{forgotError}</div>}
+            {forgotError && <div className="pin-error-msg">{forgotError}</div>}
             <button type="submit" className="login-form__submit" disabled={forgotLoading}>{forgotLoading ? 'Resetting...' : 'Reset Password'}</button>
           </form>
         )}
@@ -568,35 +570,35 @@ export default function LoginPage() {
               <label className="login-form__label">Enter Admin Registered Email</label>
               <input type="email" className="login-form__input" placeholder="admin@example.com" value={forgotBizEmail} onChange={e => setForgotBizEmail(e.target.value)} />
             </div>
-            {forgotBizError && <div className="pin-error-msg" style={{ color: 'red', textAlign: 'center' }}>{forgotBizError}</div>}
+            {forgotBizError && <div className="pin-error-msg">{forgotBizError}</div>}
             <button type="submit" className="login-form__submit" disabled={forgotBizLoading}>{forgotBizLoading ? 'Sending...' : 'Send OTP'}</button>
-            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-              <button type="button" onClick={() => setForgotBizStep('none')} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }}>Back to Login</button>
+            <div style={{ textAlign: 'center', marginTop: '12px' }}>
+              <button type="button" className="login-card__secondary-link" onClick={() => setForgotBizStep('none')}>Back to Login</button>
             </div>
           </form>
         )}
 
         {loginMode === 'admin' && forgotBizStep === 'otp' && (
           <form className="login-card__form" onSubmit={handleForgotBizVerifyOTP}>
-            {forgotBizSuccess && <div className="success-msg" style={{ color: 'green', textAlign: 'center', marginBottom: '1rem' }}>{forgotBizSuccess}</div>}
+            {forgotBizSuccess && <div className="success-msg">{forgotBizSuccess}</div>}
             <div className="login-form__field">
               <label className="login-form__label">Enter Verification OTP</label>
               <input type="text" className="login-form__input" placeholder="123456" value={forgotBizOTP} onChange={e => setForgotBizOTP(e.target.value)} />
             </div>
-            {forgotBizError && <div className="pin-error-msg" style={{ color: 'red', textAlign: 'center' }}>{forgotBizError}</div>}
+            {forgotBizError && <div className="pin-error-msg">{forgotBizError}</div>}
             <button type="submit" className="login-form__submit" disabled={forgotBizLoading}>{forgotBizLoading ? 'Verifying...' : 'Verify OTP & Recover Code'}</button>
-            <div style={{ textAlign: 'center', marginTop: '1rem', display: 'flex', justifyContent: 'space-between' }}>
-              <button type="button" onClick={handleForgotBizResendOTP} disabled={forgotBizLoading} style={{ background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', textDecoration: 'underline' }}>Resend OTP</button>
-              <button type="button" onClick={() => setForgotBizStep('none')} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', textDecoration: 'underline' }}>Cancel</button>
+            <div style={{ textAlign: 'center', marginTop: '12px', display: 'flex', justifyContent: 'space-between' }}>
+              <button type="button" className="login-card__secondary-link" onClick={handleForgotBizResendOTP} disabled={forgotBizLoading}>Resend OTP</button>
+              <button type="button" className="login-card__secondary-link" onClick={() => setForgotBizStep('none')}>Cancel</button>
             </div>
           </form>
         )}
 
         {loginMode === 'admin' && forgotBizStep === 'done' && (
           <div className="login-card__form" style={{ textAlign: 'center' }}>
-            <div className="success-msg" style={{ color: 'green', marginBottom: '1rem', fontWeight: 'bold' }}>Business Code Recovered</div>
-            <p style={{ color: '#aaa', marginBottom: '0.5rem' }}>Your Business Code is:</p>
-            <div style={{ fontSize: '1.8rem', fontWeight: 'bold', letterSpacing: '2px', color: '#6366f1', background: 'rgba(99, 102, 241, 0.1)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
+            <div className="success-msg">Business Code Recovered</div>
+            <p style={{ color: 'var(--color-text-secondary)', marginBottom: '8px', fontSize: '13px' }}>Your Business Code is:</p>
+            <div className="biz-code-display">
               {newBizCode}
             </div>
             <button type="button" className="login-form__submit" onClick={() => { setForgotBizStep('none'); setBusinessCode(newBizCode) }}>
@@ -654,9 +656,10 @@ export default function LoginPage() {
                 isPin
               />
             </div>
-            {pinError && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{pinError}</div>}
+            {pinError && <div className="pin-error-msg">{pinError}</div>}
             <button type="submit" className="login-form__submit" id="btn-waiter-login" disabled={waiterLoginLoading}>
-              {waiterLoginLoading ? 'Verifying...' : 'Login as Waiter →'}
+              {waiterLoginLoading ? 'Verifying...' : 'Login as Waiter'}
+              <span className="login-form__submit-arrow">→</span>
             </button>
           </form>
         )}
@@ -708,7 +711,7 @@ export default function LoginPage() {
                 title="PIN"
               />
             </div>
-            {bmError && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{bmError}</div>}
+            {bmError && <div className="pin-error-msg">{bmError}</div>}
             <button type="submit" className="login-form__submit" id="btn-bm-login" disabled={bmLoading}>
               {bmLoading ? 'Logging in...' : 'Login as Branch Manager'}
               <span className="login-form__submit-arrow">→</span>
@@ -765,7 +768,7 @@ export default function LoginPage() {
                 isPin
               />
             </div>
-            {cashierError && <div className="pin-error-msg" style={{ marginBottom: '1rem', textAlign: 'center' }}>{cashierError}</div>}
+            {cashierError && <div className="pin-error-msg">{cashierError}</div>}
             <button type="submit" className="login-form__submit" id="btn-cashier-login" disabled={cashierLoading}>
               {cashierLoading ? 'Verifying...' : 'Login to POS'}
               <span className="login-form__submit-arrow">→</span>
