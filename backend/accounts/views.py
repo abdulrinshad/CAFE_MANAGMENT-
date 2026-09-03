@@ -1705,7 +1705,7 @@ class AdminSignupView(APIView):
             except Exception as e:
                 return Response({"detail": f"Database transaction failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            # Send Email outside the transaction to avoid blocking it or sending emails if db rolls back
+            # Send Email outside the transaction
             try:
                 email_body = (
                     f"Hello,\n\n"
@@ -1719,13 +1719,11 @@ class AdminSignupView(APIView):
                     message=email_body,
                     from_email=None,
                     recipient_list=[user.email],
-                    fail_silently=False,
+                    fail_silently=True,
                 )
             except Exception as e:
-                from django.conf import settings
-                if settings.DEBUG:
-                    print(f"[DEBUG ONLY] Email delivery error: {e}")
-                return Response({"detail": "Unable to send verification email. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                import logging
+                logging.getLogger(__name__).warning(f"Email delivery error during admin signup: {e}")
 
             return Response({"success": True, "message": "Signup successful. OTP sent to email."})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -1853,13 +1851,11 @@ class ResendSignupOTPView(APIView):
                 message=email_body,
                 from_email=None,
                 recipient_list=[user.email],
-                fail_silently=False,
+                fail_silently=True,
             )
         except Exception as e:
-            from django.conf import settings
-            if settings.DEBUG:
-                print(f"[DEBUG ONLY] Email delivery error: {e}")
-            return Response({"detail": "Unable to send verification email. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            import logging
+            logging.getLogger(__name__).warning(f"Email delivery error on resend OTP: {e}")
 
         return Response({"success": True, "message": "OTP sent to email."})
 
