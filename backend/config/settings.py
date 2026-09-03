@@ -174,7 +174,7 @@ _default_cors_origins = [
 ]
 
 _cors_env_raw = os.getenv('CORS_ALLOWED_ORIGINS', '')
-_cors_env_origins = [o.strip() for o in _cors_env_raw.split(',') if o.strip()]
+_cors_env_origins = [o.strip().strip('\'"').rstrip('/') for o in _cors_env_raw.split(',') if o.strip()]
 
 # Merge default origins and environment origins while preserving order & eliminating duplicates
 CORS_ALLOWED_ORIGINS = list(dict.fromkeys(_default_cors_origins + _cors_env_origins))
@@ -192,7 +192,7 @@ _default_csrf_origins = [
 ]
 
 _csrf_env_raw = os.getenv('CSRF_TRUSTED_ORIGINS', '')
-_csrf_env_origins = [o.strip() for o in _csrf_env_raw.split(',') if o.strip()]
+_csrf_env_origins = [o.strip().strip('\'"').rstrip('/') for o in _csrf_env_raw.split(',') if o.strip()]
 
 CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_default_csrf_origins + _csrf_env_origins))
 
