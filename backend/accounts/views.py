@@ -1649,64 +1649,65 @@ class AdminSignupView(APIView):
 
     def post(self, request, *args, **kwargs):
         serializer = AdminSignupSerializer(data=request.data)
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
-            password = serializer.validated_data['password']
-            full_name = serializer.validated_data['full_name']
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            from django.db import transaction
-            from django.db.models import Q
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
+        full_name = serializer.validated_data['full_name']
 
-            try:
-                with transaction.atomic():
-                    user = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first()
+        from django.db import transaction
+        from django.db.models import Q
+        from django.conf import settings
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            with transaction.atomic():
+                user = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first()
+                
+                if user:
+                    if user.is_active:
+                        return Response({"email": ["An account with this email already exists and is active."]}, status=status.HTTP_400_BAD_REQUEST)
                     
-                    if user:
-                        if user.is_active:
-                            return Response({"email": ["An account with this email already exists and is active."]}, status=status.HTTP_400_BAD_REQUEST)
-                        
-                        # Safe recovery of a pending/inactive user
-                        user.set_password(password)
-                        name_parts = full_name.split(' ', 1)
-                        user.first_name = name_parts[0][:30]
-                        if len(name_parts) > 1:
-                            user.last_name = name_parts[1][:30]
-                        user.save()
-                    else:
-                        # Create an inactive user (this triggers signal that creates UserProfile)
-                        user = User.objects.create_user(
-                            username=email,
-                            email=email,
-                            password=password,
-                            is_active=False
-                        )
-                        name_parts = full_name.split(' ', 1)
-                        user.first_name = name_parts[0][:30]
-                        if len(name_parts) > 1:
-                            user.last_name = name_parts[1][:30]
-                        user.save()
-
-                    # Safely handle the UserProfile
-                    from .models import UserProfile
-                    profile, created = UserProfile.objects.get_or_create(user=user)
-                    if profile.role != UserProfile.ADMIN:
-                        profile.role = UserProfile.ADMIN
-                        profile.save()
-
-                    # Generate OTP
-                    raw_otp = ''.join(random.choices(string.digits, k=6))
-                    otp_record = AdminOTP(
-                        user=user,
-                        expires_at=timezone.now() + timedelta(minutes=5)
+                    # Safe recovery of a pending/inactive user
+                    user.set_password(password)
+                    name_parts = full_name.split(' ', 1)
+                    user.first_name = name_parts[0][:30]
+                    if len(name_parts) > 1:
+                        user.last_name = name_parts[1][:30]
+                    user.save()
+                else:
+                    # Create an inactive user
+                    user = User.objects.create_user(
+                        username=email,
+                        email=email,
+                        password=password,
+                        is_active=False
                     )
-                    otp_record.set_otp(raw_otp)
-                    otp_record.save()
+                    name_parts = full_name.split(' ', 1)
+                    user.first_name = name_parts[0][:30]
+                    if len(name_parts) > 1:
+                        user.last_name = name_parts[1][:30]
+                    user.save()
 
-            except Exception as e:
-                return Response({"detail": f"Database transaction failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                # Safely handle the UserProfile
+                from .models import UserProfile
+                profile, created = UserProfile.objects.get_or_create(user=user)
+                if profile.role != UserProfile.ADMIN:
+                    profile.role = UserProfile.ADMIN
+                    profile.save()
 
-            # Send Email outside the transaction
-            try:
+                # Generate OTP
+                raw_otp = ''.join(random.choices(string.digits, k=6))
+                otp_record = AdminOTP(
+                    user=user,
+                    expires_at=timezone.now() + timedelta(minutes=5)
+                )
+                otp_record.set_otp(raw_otp)
+                otp_record.save()
+
+                # Send Email within transaction scope
                 email_body = (
                     f"Hello,\n\n"
                     f"Your verification code for Artisan Brew is:\n\n"
@@ -1714,19 +1715,32 @@ class AdminSignupView(APIView):
                     f"This code will expire in 5 minutes.\n\n"
                     f"If you did not request this registration, please ignore this email."
                 )
-                send_mail(
-                    subject='Your Admin Registration OTP',
-                    message=email_body,
-                    from_email=None,
-                    recipient_list=[user.email],
-                    fail_silently=True,
-                )
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"Email delivery error during admin signup: {e}")
+                try:
+                    send_mail(
+                        subject='Your Admin Registration OTP',
+                        message=email_body,
+                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                        recipient_list=[user.email],
+                        fail_silently=False,
+                    )
+                except Exception as mail_err:
+                    logger.error(f"Email delivery error during admin signup for {user.email}: {mail_err}")
+                    raise RuntimeError(f"Unable to send verification email: {str(mail_err)}")
 
-            return Response({"success": True, "message": "Signup successful. OTP sent to email."})
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        except RuntimeError as rt_err:
+            # Transaction rolled back cleanly
+            return Response(
+                {"detail": "Unable to send verification email. Please check server email setup or try again later."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Admin signup exception: {e}")
+            return Response(
+                {"detail": f"Signup failed: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return Response({"success": True, "message": "Signup successful. OTP sent to email."})
 
 
 class AdminVerifySignupOTPView(APIView):
@@ -1829,33 +1843,47 @@ class ResendSignupOTPView(APIView):
         if recent_otp:
             return Response({"detail": "Please wait a minute before requesting another OTP."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
 
-        # Generate OTP
-        raw_otp = ''.join(random.choices(string.digits, k=6))
-        otp_record = AdminOTP(
-            user=user,
-            expires_at=timezone.now() + timedelta(minutes=5)
-        )
-        otp_record.set_otp(raw_otp)
-        otp_record.save()
+        import logging
+        from django.conf import settings
+        from django.db import transaction
+        logger = logging.getLogger(__name__)
 
         try:
-            email_body = (
-                f"Hello,\n\n"
-                f"Your verification code for Artisan Brew is:\n\n"
-                f"{raw_otp}\n\n"
-                f"This code will expire in 5 minutes.\n\n"
-                f"If you did not request this registration, please ignore this email."
-            )
-            send_mail(
-                subject='Your Admin Registration OTP',
-                message=email_body,
-                from_email=None,
-                recipient_list=[user.email],
-                fail_silently=True,
+            with transaction.atomic():
+                raw_otp = ''.join(random.choices(string.digits, k=6))
+                otp_record = AdminOTP(
+                    user=user,
+                    expires_at=timezone.now() + timedelta(minutes=5)
+                )
+                otp_record.set_otp(raw_otp)
+                otp_record.save()
+
+                email_body = (
+                    f"Hello,\n\n"
+                    f"Your verification code for Artisan Brew is:\n\n"
+                    f"{raw_otp}\n\n"
+                    f"This code will expire in 5 minutes.\n\n"
+                    f"If you did not request this registration, please ignore this email."
+                )
+                try:
+                    send_mail(
+                        subject='Your Admin Registration OTP',
+                        message=email_body,
+                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                        recipient_list=[user.email],
+                        fail_silently=False,
+                    )
+                except Exception as mail_err:
+                    logger.error(f"Resend OTP email error for {user.email}: {mail_err}")
+                    raise RuntimeError(f"Unable to send verification email: {str(mail_err)}")
+
+        except RuntimeError as rt_err:
+            return Response(
+                {"detail": "Unable to send verification email. Please check server email setup or try again later."},
+                status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Email delivery error on resend OTP: {e}")
+            return Response({"detail": f"Failed to resend OTP: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({"success": True, "message": "OTP sent to email."})
 
