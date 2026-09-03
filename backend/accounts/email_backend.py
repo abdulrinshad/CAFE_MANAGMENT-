@@ -68,12 +68,16 @@ class ResendEmailBackend(BaseEmailBackend):
         if email_message.reply_to:
             payload['reply_to'] = email_message.reply_to
 
-        response = requests.post(
-            'https://api.resend.com/emails',
-            json=payload,
-            headers=headers,
-            timeout=10
-        )
-        
-        response.raise_for_status()
+        try:
+            response = requests.post(
+                'https://api.resend.com/emails',
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            error_msg = response.text if hasattr(e, 'response') and e.response else str(e)
+            raise Exception(f"Resend API Error: {error_msg}")
+            
         return True
