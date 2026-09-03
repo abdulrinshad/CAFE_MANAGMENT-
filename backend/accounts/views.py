@@ -1728,16 +1728,16 @@ class AdminSignupView(APIView):
                     raise RuntimeError(f"Unable to send verification email: {str(mail_err)}")
 
         except RuntimeError as rt_err:
-            # Transaction rolled back cleanly
+            # Transaction rolled back cleanly due to email send failure
             return Response(
-                {"detail": "Unable to send verification email. Please check server email setup or try again later."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Unable to send verification email. Please check server email configuration or try again later."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
             logger.exception(f"Admin signup exception: {e}")
             return Response(
-                {"detail": "Signup process encountered an error. Please check server configuration or try again."},
-                status=status.HTTP_400_BAD_REQUEST
+                {"detail": "Signup process encountered a server error. Please check server configuration or try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
         return Response({"success": True, "message": "Signup successful. OTP sent to email."})

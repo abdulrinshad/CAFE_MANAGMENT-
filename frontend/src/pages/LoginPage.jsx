@@ -88,8 +88,20 @@ export default function LoginPage() {
     e.preventDefault()
     setSignupError('')
     setSignupSuccess('')
-    if (!signupData.full_name || !signupData.email || !signupData.password || !signupData.confirm_password) {
+    if (!signupData.full_name || !signupData.email || !signupData.phone || !signupData.password || !signupData.confirm_password) {
       setSignupError('All fields are required.')
+      return
+    }
+    if (!/^\d{10}$/.test(signupData.phone.trim())) {
+      setSignupError('Phone number must contain exactly 10 digits.')
+      return
+    }
+    if (signupData.password.length < 8) {
+      setSignupError('Password must be at least 8 characters long.')
+      return
+    }
+    if (signupData.password !== signupData.confirm_password) {
+      setSignupError('Passwords do not match.')
       return
     }
     setSignupLoading(true)
