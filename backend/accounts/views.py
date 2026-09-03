@@ -1724,7 +1724,7 @@ class AdminSignupView(APIView):
                         fail_silently=False,
                     )
                 except Exception as mail_err:
-                    logger.error(f"Email delivery error during admin signup for {user.email}: {mail_err}")
+                    logger.exception(f"Email delivery error during admin signup for {user.email}: {mail_err}")
                     raise RuntimeError(f"Unable to send verification email: {str(mail_err)}")
 
         except RuntimeError as rt_err:
@@ -1734,9 +1734,9 @@ class AdminSignupView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            logger.error(f"Admin signup exception: {e}")
+            logger.exception(f"Admin signup exception: {e}")
             return Response(
-                {"detail": f"Signup failed: {str(e)}"},
+                {"detail": "Signup process encountered an error. Please check server configuration or try again."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -1874,7 +1874,7 @@ class ResendSignupOTPView(APIView):
                         fail_silently=False,
                     )
                 except Exception as mail_err:
-                    logger.error(f"Resend OTP email error for {user.email}: {mail_err}")
+                    logger.exception(f"Resend OTP email error for {user.email}: {mail_err}")
                     raise RuntimeError(f"Unable to send verification email: {str(mail_err)}")
 
         except RuntimeError as rt_err:
@@ -1883,7 +1883,8 @@ class ResendSignupOTPView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            return Response({"detail": f"Failed to resend OTP: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            logger.exception(f"Resend OTP exception for {email}: {e}")
+            return Response({"detail": "Failed to resend OTP. Please check server email setup or try again later."}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({"success": True, "message": "OTP sent to email."})
 
