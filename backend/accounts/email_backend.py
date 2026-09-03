@@ -1,7 +1,10 @@
 import os
 import requests
+import logging
 from django.core.mail.backends.base import BaseEmailBackend
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 class ResendEmailBackend(BaseEmailBackend):
     """
@@ -9,7 +12,8 @@ class ResendEmailBackend(BaseEmailBackend):
     """
     def __init__(self, fail_silently=False, **kwargs):
         super().__init__(fail_silently=fail_silently, **kwargs)
-        self.api_key = os.getenv('RESEND_API_KEY')
+        raw_key = os.getenv('RESEND_API_KEY')
+        self.api_key = raw_key.strip().strip('\'"') if raw_key else None
         if not self.api_key and not self.fail_silently:
             raise ValueError("RESEND_API_KEY environment variable is not set.")
 
@@ -22,13 +26,16 @@ class ResendEmailBackend(BaseEmailBackend):
             try:
                 self._send(message)
                 sent_count += 1
-            except Exception:
+            except Exception as e:
+                logger.error(f"Resend send_messages error: {type(e).__name__}: {e}")
                 if not self.fail_silently:
                     raise
         return sent_count
 
     def _send(self, email_message):
         if not self.api_key:
+            if not self.fail_silently:
+                raise ValueError("RESEND_API_KEY environment variable is not configured.")
             return False
 
         headers = {
@@ -36,14 +43,16 @@ class ResendEmailBackend(BaseEmailBackend):
             'Content-Type': 'application/json'
         }
 
-        # Django EmailMessage allows multiple recipients in 'to', 'cc', 'bcc'
+        from_addr = email_message.from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', None)
+        if not from_addr or from_addr == 'webmaster@localhost':
+            from_addr = 'onboarding@resend.dev'
+
         payload = {
-            'from': email_message.from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', 'admin@example.com'),
+            'from': from_addr,
             'to': email_message.to,
             'subject': email_message.subject,
         }
         
-        # If the email is HTML, pass it in the html key. Else text.
         # Check if the message has HTML alternatives
         html_body = None
         if hasattr(email_message, 'alternatives'):
@@ -77,7 +86,11 @@ class ResendEmailBackend(BaseEmailBackend):
             )
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
-            error_msg = response.text if hasattr(e, 'response') and e.response else str(e)
-            raise Exception(f"Resend API Error: {error_msg}")
+            res_status = getattr(e.response, 'status_code', 'Unknown')
+            res_text = getattr(e.response, 'text', str(e))
+            logger.error(f"Resend HTTP Status: {res_status} | Resend Error Response: {res_text}")
+            if not self.fail_silently:
+                raise Exception(f"Resend API Error (HTTP {res_status}): {res_text}")
+            return False
             
         return True
