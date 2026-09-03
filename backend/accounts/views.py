@@ -1648,9 +1648,16 @@ class AdminSignupView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("ADMIN SIGNUP: request received")
+
         serializer = AdminSignupSerializer(data=request.data)
         if not serializer.is_valid():
+            logger.warning(f"ADMIN SIGNUP: serializer validation failed: {serializer.errors}")
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        logger.info("ADMIN SIGNUP: serializer valid")
 
         email = serializer.validated_data['email']
         password = serializer.validated_data['password']
@@ -1659,15 +1666,15 @@ class AdminSignupView(APIView):
         from django.db import transaction
         from django.db.models import Q
         from django.conf import settings
-        import logging
-        logger = logging.getLogger(__name__)
 
         try:
             with transaction.atomic():
+                logger.info("ADMIN SIGNUP: user creation started")
                 user = User.objects.filter(Q(email__iexact=email) | Q(username__iexact=email)).first()
                 
                 if user:
                     if user.is_active:
+                        logger.info("ADMIN SIGNUP: account with email already active")
                         return Response({"email": ["An account with this email already exists and is active."]}, status=status.HTTP_400_BAD_REQUEST)
                     
                     # Safe recovery of a pending/inactive user
@@ -1677,6 +1684,7 @@ class AdminSignupView(APIView):
                     if len(name_parts) > 1:
                         user.last_name = name_parts[1][:30]
                     user.save()
+                    logger.info(f"ADMIN SIGNUP: pending user updated (id={user.id})")
                 else:
                     # Create an inactive user
                     user = User.objects.create_user(
@@ -1690,6 +1698,7 @@ class AdminSignupView(APIView):
                     if len(name_parts) > 1:
                         user.last_name = name_parts[1][:30]
                     user.save()
+                    logger.info(f"ADMIN SIGNUP: user created (id={user.id})")
 
                 # Safely handle the UserProfile
                 from .models import UserProfile
@@ -1697,8 +1706,10 @@ class AdminSignupView(APIView):
                 if profile.role != UserProfile.ADMIN:
                     profile.role = UserProfile.ADMIN
                     profile.save()
+                logger.info("ADMIN SIGNUP: UserProfile configured")
 
                 # Generate OTP
+                logger.info("ADMIN SIGNUP: OTP creation started")
                 raw_otp = ''.join(random.choices(string.digits, k=6))
                 otp_record = AdminOTP(
                     user=user,
@@ -1706,8 +1717,10 @@ class AdminSignupView(APIView):
                 )
                 otp_record.set_otp(raw_otp)
                 otp_record.save()
+                logger.info("ADMIN SIGNUP: OTP created")
 
                 # Send Email within transaction scope
+                logger.info("ADMIN SIGNUP: email sending started")
                 email_body = (
                     f"Hello,\n\n"
                     f"Your verification code for Artisan Brew is:\n\n"
@@ -1723,23 +1736,25 @@ class AdminSignupView(APIView):
                         recipient_list=[user.email],
                         fail_silently=False,
                     )
+                    logger.info("ADMIN SIGNUP: email sent successfully")
                 except Exception as mail_err:
-                    logger.exception(f"Email delivery error during admin signup for {user.email}: {mail_err}")
+                    logger.exception(f"ADMIN SIGNUP: email delivery error for recipient {user.email}: {type(mail_err).__name__}: {mail_err}")
                     raise RuntimeError(f"Unable to send verification email: {str(mail_err)}")
 
         except RuntimeError as rt_err:
-            # Transaction rolled back cleanly due to email send failure
+            logger.error(f"ADMIN SIGNUP: process failed due to email exception: {rt_err}", exc_info=True)
             return Response(
                 {"detail": "Unable to send verification email. Please check server email configuration or try again later."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
-            logger.exception(f"Admin signup exception: {e}")
+            logger.exception(f"ADMIN SIGNUP: process failed due to unexpected exception: {type(e).__name__}: {e}")
             return Response(
                 {"detail": "Signup process encountered a server error. Please check server configuration or try again."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+        logger.info("ADMIN SIGNUP: signup completed successfully")
         return Response({"success": True, "message": "Signup successful. OTP sent to email."})
 
 

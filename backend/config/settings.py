@@ -215,13 +215,25 @@ _csrf_env_origins = [o.strip().strip('\'"').rstrip('/') for o in _csrf_env_raw.s
 CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_default_csrf_origins + _csrf_env_origins))
 
 # ── Email Settings ─────────────────────────────────────────────────────────────
-if os.getenv('RESEND_API_KEY'):
-    EMAIL_BACKEND = 'accounts.email_backend.ResendEmailBackend'
-else:
-    # Safe fallback for local development if Resend is not configured
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND')
+if not EMAIL_BACKEND:
+    if os.getenv('RESEND_API_KEY'):
+        EMAIL_BACKEND = 'accounts.email_backend.ResendEmailBackend'
+    elif os.getenv('EMAIL_HOST'):
+        EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    else:
+        EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'admin@artisanbrew.com')
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 'yes')
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in ('true', '1', 'yes')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+_default_from = os.getenv('DEFAULT_FROM_EMAIL', '').strip()
+if not _default_from:
+    _default_from = EMAIL_HOST_USER if EMAIL_HOST_USER else 'admin@artisanbrew.com'
+DEFAULT_FROM_EMAIL = _default_from
 EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '10'))
 
 LOGGING = {

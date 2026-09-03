@@ -648,7 +648,8 @@ class OwnerSettingsSerializer(serializers.ModelSerializer):
 class AdminSignupSerializer(serializers.Serializer):
     full_name = serializers.CharField(required=True, max_length=150)
     email = serializers.EmailField(required=True)
-    phone_number = serializers.CharField(required=True, max_length=15)
+    phone = serializers.CharField(required=False, allow_blank=True, max_length=15)
+    phone_number = serializers.CharField(required=False, allow_blank=True, max_length=15)
     password = serializers.CharField(write_only=True, required=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=True)
     business_code = serializers.CharField(required=False, allow_blank=True, max_length=20)
@@ -667,13 +668,24 @@ class AdminSignupSerializer(serializers.Serializer):
             raise serializers.ValidationError("An account with this email already exists.")
         return value
 
-    def validate_phone_number(self, value):
+    def _validate_phone_str(self, value):
         import re
-        if not re.match(r'^\+?\d{10,15}$', value):
+        if value and not re.match(r'^\+?\d{10,15}$', value.strip()):
             raise serializers.ValidationError("Phone number must contain between 10 and 15 digits.")
-        return value
+        return value.strip() if value else value
+
+    def validate_phone(self, value):
+        return self._validate_phone_str(value)
+
+    def validate_phone_number(self, value):
+        return self._validate_phone_str(value)
 
     def validate(self, attrs):
+        phone_val = attrs.get('phone') or attrs.get('phone_number')
+        if not phone_val:
+            raise serializers.ValidationError({"phone": "Phone number is required."})
+        attrs['phone'] = phone_val
+        attrs['phone_number'] = phone_val
         if attrs.get('password') != attrs.get('confirm_password'):
             raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
         return attrs

@@ -6,7 +6,7 @@ url = 'http://127.0.0.1:8000/api/v1/auth/admin-signup/'
 data = {
     "full_name": "dil",
     "email": "dilfarasheed55@gmail.com",
-    "phone_number": "735654674878",
+    "phone": "7356546748",
     "password": "enteredpassword",
     "confirm_password": "enteredpassword",
     "business_code": "dil123"
