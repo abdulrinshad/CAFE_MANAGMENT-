@@ -648,7 +648,7 @@ class OwnerSettingsSerializer(serializers.ModelSerializer):
 class AdminSignupSerializer(serializers.Serializer):
     full_name = serializers.CharField(required=True, max_length=150)
     email = serializers.EmailField(required=True)
-    phone = serializers.CharField(required=True, max_length=15)
+    phone_number = serializers.CharField(required=True, max_length=15)
     password = serializers.CharField(write_only=True, required=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=True)
     business_code = serializers.CharField(required=False, allow_blank=True, max_length=20)
@@ -667,10 +667,10 @@ class AdminSignupSerializer(serializers.Serializer):
             raise serializers.ValidationError("An account with this email already exists.")
         return value
 
-    def validate_phone(self, value):
+    def validate_phone_number(self, value):
         import re
-        if not re.match(r'^\d{10}$', value):
-            raise serializers.ValidationError("Phone number must contain exactly 10 digits.")
+        if not re.match(r'^\+?\d{10,15}$', value):
+            raise serializers.ValidationError("Phone number must contain between 10 and 15 digits.")
         return value
 
     def validate(self, attrs):

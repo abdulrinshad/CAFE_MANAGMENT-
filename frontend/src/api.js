@@ -23,6 +23,7 @@ export async function request(method, path, body = null, isFormData = false, isR
   if (body && !isForm) {
     headers['Content-Type'] = 'application/json'
   }
+  headers['Accept'] = 'application/json'
 
   const token = localStorage.getItem('artisan_access')
   if (token) {
