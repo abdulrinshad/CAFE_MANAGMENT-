@@ -11,13 +11,26 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from accounts.views import BranchManagerLoginView, OwnerPOSTerminalViewSet
+from accounts.views import (
+    BranchManagerLoginView,
+    OwnerPOSTerminalViewSet,
+    AdminSignupView,
+    AdminVerifySignupOTPView,
+    ResendSignupOTPView,
+)
 from accounts.branch_views import BranchPOSTerminalViewSet
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/accounts/branch-manager/login/', BranchManagerLoginView.as_view(), name='root_branch_manager_login'),
     path('api/v1/accounts/branch-manager/login/', BranchManagerLoginView.as_view(), name='root_branch_manager_login_v1'),
+    path('api/accounts/admin-signup/', AdminSignupView.as_view(), name='root_admin_signup'),
+    path('api/v1/accounts/admin-signup/', AdminSignupView.as_view(), name='root_admin_signup_v1'),
+    path('api/accounts/admin-verify-signup-otp/', AdminVerifySignupOTPView.as_view(), name='root_admin_verify_signup_otp'),
+    path('api/v1/accounts/admin-verify-signup-otp/', AdminVerifySignupOTPView.as_view(), name='root_admin_verify_signup_otp_v1'),
+    path('api/accounts/resend-signup-otp/', ResendSignupOTPView.as_view(), name='root_resend_signup_otp'),
+    path('api/v1/accounts/resend-signup-otp/', ResendSignupOTPView.as_view(), name='root_resend_signup_otp_v1'),
+
     
     # Exact non-v1 routing support for POS Terminals:
     path('api/owner/pos/', OwnerPOSTerminalViewSet.as_view({'get': 'list', 'post': 'create'}), name='owner_pos_root_fallback'),

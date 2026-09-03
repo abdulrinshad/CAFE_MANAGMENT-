@@ -5,7 +5,15 @@
  * No base URL hardcoding needed; the proxy handles routing.
  */
 
-const BASE = import.meta.env.VITE_API_URL || '/api/v1'
+const rawEnvUrl = import.meta.env.VITE_API_URL
+function getApiBaseUrl() {
+  if (!rawEnvUrl) return '/api/v1'
+  const url = rawEnvUrl.trim().replace(/\/+$/, '')
+  if (url.endsWith('/api/v1')) return url
+  if (url.endsWith('/api')) return `${url}/v1`
+  return `${url}/api/v1`
+}
+const BASE = getApiBaseUrl()
 
 // ── Generic fetch helper ──────────────────────────────────────────────────────
 
