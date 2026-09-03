@@ -23,7 +23,7 @@ export default function LoginPage() {
 
   // ── Admin Signup State ──────────────────────────────────────────────────────
   const [signupStep, setSignupStep] = useState('none') // 'none' | 'form' | 'otp'
-  const [signupData, setSignupData] = useState({ full_name: '', email: '', phone_number: '', password: '', confirm_password: '', business_code: '' })
+  const [signupData, setSignupData] = useState({ full_name: '', email: '', phone: '', password: '', confirm_password: '', business_code: '' })
   const [signupOTP, setSignupOTP] = useState('')
   const [signupError, setSignupError] = useState('')
   const [signupSuccess, setSignupSuccess] = useState('')
@@ -128,7 +128,7 @@ export default function LoginPage() {
       await authApi.adminVerifySignupOTP({ email: signupData.email, otp: signupOTP, business_code: signupData.business_code })
       setSignupStep('none')
       setForgotSuccess('Signup successful! You can now log in.')
-      setSignupData({ full_name: '', email: '', phone_number: '', password: '', confirm_password: '', business_code: '' })
+      setSignupData({ full_name: '', email: '', phone: '', password: '', confirm_password: '', business_code: '' })
       setSignupOTP('')
     } catch (err) {
       setSignupError(err.message || 'Invalid OTP.')
@@ -493,7 +493,7 @@ export default function LoginPage() {
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Phone Number</label>
-              <input type="text" className="login-form__input" placeholder="1234567890" value={signupData.phone_number} onChange={e => setSignupData({ ...signupData, phone_number: e.target.value })} />
+              <input type="text" className="login-form__input" placeholder="1234567890" value={signupData.phone} onChange={e => setSignupData({ ...signupData, phone: e.target.value })} />
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Password</label>
