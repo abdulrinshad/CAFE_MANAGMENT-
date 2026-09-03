@@ -106,7 +106,14 @@ export default function LoginPage() {
     }
     setSignupLoading(true)
     try {
-      await authApi.adminSignup(signupData)
+      await authApi.adminSignup({
+        full_name: signupData.full_name,
+        email: signupData.email,
+        phone_number: signupData.phone,
+        password: signupData.password,
+        confirm_password: signupData.confirm_password,
+        business_code: signupData.business_code,
+      })
       setSignupStep('otp')
       setSignupSuccess('OTP sent to your email.')
     } catch (err) {
