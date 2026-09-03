@@ -167,6 +167,7 @@ SIMPLE_JWT = {
 # ── CORS & CSRF ────────────────────────────────────────────────────────────────
 _default_cors_origins = [
     'https://cafe-managment-ruddy.vercel.app',
+    'https://cafe-managment-git-main-abdulrinshads-projects.vercel.app',
     'http://localhost:5173',
     'http://localhost:5174',
     'http://127.0.0.1:5173',
@@ -185,6 +186,7 @@ CORS_ALLOW_CREDENTIALS = True
 # CSRF Trusted Origins for cross-origin requests
 _default_csrf_origins = [
     'https://cafe-managment-ruddy.vercel.app',
+    'https://cafe-managment-git-main-abdulrinshads-projects.vercel.app',
     'http://localhost:5173',
     'http://localhost:5174',
     'http://127.0.0.1:5173',
