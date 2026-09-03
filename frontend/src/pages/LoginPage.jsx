@@ -23,9 +23,10 @@ export default function LoginPage() {
 
   // ── Admin Signup State ──────────────────────────────────────────────────────
   const [signupStep, setSignupStep] = useState('none') // 'none' | 'form' | 'otp'
-  const [signupData, setSignupData] = useState({ full_name: '', email: '', phone: '', password: '', confirm_password: '', business_code: '' })
+  const [signupData, setSignupData] = useState({ full_name: '', email: '', phone_number: '', password: '', confirm_password: '', business_code: '' })
   const [signupOTP, setSignupOTP] = useState('')
   const [signupError, setSignupError] = useState('')
+  const [signupFieldErrors, setSignupFieldErrors] = useState({})
   const [signupSuccess, setSignupSuccess] = useState('')
   const [signupLoading, setSignupLoading] = useState(false)
 
@@ -87,12 +88,13 @@ export default function LoginPage() {
   const handleSignupSubmit = async (e) => {
     e.preventDefault()
     setSignupError('')
+    setSignupFieldErrors({})
     setSignupSuccess('')
-    if (!signupData.full_name || !signupData.email || !signupData.phone || !signupData.password || !signupData.confirm_password) {
+    if (!signupData.full_name || !signupData.email || !signupData.phone_number || !signupData.password || !signupData.confirm_password) {
       setSignupError('All fields are required.')
       return
     }
-    if (!/^\d{10}$/.test(signupData.phone.trim())) {
+    if (!/^\d{10}$/.test(signupData.phone_number.trim())) {
       setSignupError('Phone number must contain exactly 10 digits.')
       return
     }
@@ -109,7 +111,7 @@ export default function LoginPage() {
       await authApi.adminSignup({
         full_name: signupData.full_name,
         email: signupData.email,
-        phone_number: signupData.phone,
+        phone_number: signupData.phone_number,
         password: signupData.password,
         confirm_password: signupData.confirm_password,
         business_code: signupData.business_code,
@@ -117,7 +119,16 @@ export default function LoginPage() {
       setSignupStep('otp')
       setSignupSuccess('OTP sent to your email.')
     } catch (err) {
-      setSignupError(err.message || 'Signup failed.')
+      if (err.data && typeof err.data === 'object' && !Array.isArray(err.data)) {
+        // DRF validation errors are usually arrays of strings per field
+        const formattedErrors = {}
+        for (const [key, value] of Object.entries(err.data)) {
+          formattedErrors[key] = Array.isArray(value) ? value[0] : value
+        }
+        setSignupFieldErrors(formattedErrors)
+      } else {
+        setSignupError(err.message || 'Signup failed.')
+      }
     } finally {
       setSignupLoading(false)
     }
@@ -135,7 +146,7 @@ export default function LoginPage() {
       await authApi.adminVerifySignupOTP({ email: signupData.email, otp: signupOTP, business_code: signupData.business_code })
       setSignupStep('none')
       setForgotSuccess('Signup successful! You can now log in.')
-      setSignupData({ full_name: '', email: '', phone: '', password: '', confirm_password: '', business_code: '' })
+      setSignupData({ full_name: '', email: '', phone_number: '', password: '', confirm_password: '', business_code: '' })
       setSignupOTP('')
     } catch (err) {
       setSignupError(err.message || 'Invalid OTP.')
@@ -493,26 +504,32 @@ export default function LoginPage() {
             <div className="login-form__field">
               <label className="login-form__label">Full Name</label>
               <input type="text" className="login-form__input" placeholder="John Doe" value={signupData.full_name} onChange={e => setSignupData({ ...signupData, full_name: e.target.value })} />
+              {signupFieldErrors.full_name && <div className="pin-error-msg" style={{marginTop: '4px', fontSize: '0.85rem'}}>{signupFieldErrors.full_name}</div>}
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Email</label>
               <input type="email" className="login-form__input" placeholder="john@example.com" value={signupData.email} onChange={e => setSignupData({ ...signupData, email: e.target.value })} />
+              {signupFieldErrors.email && <div className="pin-error-msg" style={{marginTop: '4px', fontSize: '0.85rem'}}>{signupFieldErrors.email}</div>}
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Phone Number</label>
-              <input type="text" className="login-form__input" placeholder="1234567890" value={signupData.phone} onChange={e => setSignupData({ ...signupData, phone: e.target.value })} />
+              <input type="text" className="login-form__input" placeholder="1234567890" value={signupData.phone_number} onChange={e => setSignupData({ ...signupData, phone_number: e.target.value })} />
+              {signupFieldErrors.phone_number && <div className="pin-error-msg" style={{marginTop: '4px', fontSize: '0.85rem'}}>{signupFieldErrors.phone_number}</div>}
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Password</label>
               <PasswordInput className="login-form__input" placeholder="••••••••" value={signupData.password} onChange={e => setSignupData({ ...signupData, password: e.target.value })} title="Password" />
+              {signupFieldErrors.password && <div className="pin-error-msg" style={{marginTop: '4px', fontSize: '0.85rem'}}>{signupFieldErrors.password}</div>}
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Confirm Password</label>
               <PasswordInput className="login-form__input" placeholder="••••••••" value={signupData.confirm_password} onChange={e => setSignupData({ ...signupData, confirm_password: e.target.value })} title="Confirm Password" />
+              {signupFieldErrors.confirm_password && <div className="pin-error-msg" style={{marginTop: '4px', fontSize: '0.85rem'}}>{signupFieldErrors.confirm_password}</div>}
             </div>
             <div className="login-form__field">
               <label className="login-form__label">Business Code / Secret PIN (Optional)</label>
               <input type="text" className="login-form__input" placeholder="Leave blank to auto-generate" value={signupData.business_code} onChange={e => setSignupData({ ...signupData, business_code: e.target.value })} />
+              {signupFieldErrors.business_code && <div className="pin-error-msg" style={{marginTop: '4px', fontSize: '0.85rem'}}>{signupFieldErrors.business_code}</div>}
             </div>
             {signupError && <div className="pin-error-msg">{signupError}</div>}
             <button type="submit" className="login-form__submit" disabled={signupLoading}>{signupLoading ? 'Creating Account...' : 'Sign Up'}</button>
