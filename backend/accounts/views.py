@@ -1709,10 +1709,10 @@ class AdminSignupView(APIView):
                 # Safely handle the UserProfile
                 logger.info("ADMIN SIGNUP DEBUG: 6 USERPROFILE STARTED")
                 from .models import UserProfile
-                profile, created = UserProfile.objects.get_or_create(user=user)
-                if profile.role != UserProfile.ADMIN:
-                    profile.role = UserProfile.ADMIN
-                    profile.save()
+                profile, created = UserProfile.objects.update_or_create(
+                    user=user,
+                    defaults={'role': UserProfile.ADMIN}
+                )
                 logger.info("ADMIN SIGNUP DEBUG: 7 USERPROFILE COMPLETED")
 
                 # Generate OTP
@@ -1817,20 +1817,22 @@ class AdminVerifySignupOTPView(APIView):
                 from .models import OwnerSettings
                 tenant_name = f"{user.first_name} {user.last_name}".strip() + "'s Business"
                 if business_code:
-                    tenant = Tenant.objects.create(admin_user=user, name=tenant_name, business_code=business_code)
+                    tenant, _ = Tenant.objects.get_or_create(admin_user=user, defaults={'name': tenant_name, 'business_code': business_code})
                 else:
-                    tenant = Tenant.objects.create(admin_user=user, name=tenant_name)
+                    tenant, _ = Tenant.objects.get_or_create(admin_user=user, defaults={'name': tenant_name})
                 
                 # Link UserProfile to Tenant
                 user.profile.tenant = tenant
                 user.profile.save()
 
-                # Initialize OwnerSettings
-                OwnerSettings.objects.create(
+                # Initialize OwnerSettings safely
+                OwnerSettings.objects.update_or_create(
                     tenant=tenant,
-                    owner_name=user.get_full_name(),
-                    email=user.email,
-                    business_name=tenant_name
+                    defaults={
+                        'owner_name': user.get_full_name(),
+                        'email': user.email,
+                        'business_name': tenant_name
+                    }
                 )
 
                 # Mark OTP as used
