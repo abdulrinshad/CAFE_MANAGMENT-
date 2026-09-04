@@ -110,6 +110,7 @@ import urllib.parse
 # Prefer Vercel/Neon connections in this exact priority
 _db_url = (
     os.getenv('DATABASE_URL') or
+    os.getenv('DATABASE_URL_UNPOOLED') or
     os.getenv('POSTGRES_URL') or
     os.getenv('POSTGRES_URL_NON_POOLING')
 )
