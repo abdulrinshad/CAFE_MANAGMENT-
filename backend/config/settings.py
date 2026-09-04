@@ -106,7 +106,14 @@ ASGI_APPLICATION = 'config.asgi.application'
 
 # ── Database — PostgreSQL ──────────────────────────────────────────────────────
 import urllib.parse
-_db_url = os.getenv('DATABASE_URL')
+
+# Prefer Vercel/Neon connections in this exact priority
+_db_url = (
+    os.getenv('DATABASE_URL') or
+    os.getenv('POSTGRES_URL') or
+    os.getenv('POSTGRES_URL_NON_POOLING')
+)
+
 if _db_url:
     _url = urllib.parse.urlparse(_db_url)
     DATABASES = {
