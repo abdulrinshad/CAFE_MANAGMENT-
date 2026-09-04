@@ -27,10 +27,14 @@ _render_host = 'cafe-manager-backend-bl54.onrender.com'
 if _render_host not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_render_host)
 
-# Ensure Vercel frontend host is allowed (in case it proxies requests and forwards the Host header)
-_vercel_host = 'cafe-management-ruddy.vercel.app'
-if _vercel_host not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append(_vercel_host)
+# Ensure Vercel frontend and backend hosts are allowed
+_vercel_frontend = 'cafe-managment-ruddy.vercel.app'
+if _vercel_frontend not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_vercel_frontend)
+
+_vercel_backend = 'cafe-management-mdbj.vercel.app'
+if _vercel_backend not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_vercel_backend)
 
 if 'testserver' not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append('testserver')
@@ -180,6 +184,7 @@ SIMPLE_JWT = {
 _default_cors_origins = [
     'https://cafe-management-ruddy.vercel.app',
     'https://cafe-managment-ruddy.vercel.app',
+    'https://cafe-management-mdbj.vercel.app',
     'https://cafe-management-git-main-abdulrinshads-projects.vercel.app',
     'https://cafe-managment-git-main-abdulrinshads-projects.vercel.app',
     'http://localhost:5173',
@@ -201,6 +206,7 @@ CORS_ALLOW_CREDENTIALS = True
 _default_csrf_origins = [
     'https://cafe-management-ruddy.vercel.app',
     'https://cafe-managment-ruddy.vercel.app',
+    'https://cafe-management-mdbj.vercel.app',
     'https://cafe-management-git-main-abdulrinshads-projects.vercel.app',
     'https://cafe-managment-git-main-abdulrinshads-projects.vercel.app',
     'http://localhost:5173',
