@@ -105,19 +105,37 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
 # ── Database — PostgreSQL ──────────────────────────────────────────────────────
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME':     os.environ['DB_NAME'],
-        'USER':     os.environ['DB_USER'],
-        'PASSWORD': os.environ['DB_PASSWORD'],
-        'HOST':     os.getenv('DB_HOST', 'localhost'),
-        'PORT':     os.getenv('DB_PORT', '5432'),
-        'OPTIONS': {
-            'connect_timeout': 5,
-        },
+import urllib.parse
+_db_url = os.getenv('DATABASE_URL')
+if _db_url:
+    _url = urllib.parse.urlparse(_db_url)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': _url.path.lstrip('/'),
+            'USER': _url.username,
+            'PASSWORD': _url.password,
+            'HOST': _url.hostname,
+            'PORT': _url.port or 5432,
+            'OPTIONS': {
+                'connect_timeout': 5,
+            },
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME':     os.environ.get('DB_NAME'),
+            'USER':     os.environ.get('DB_USER'),
+            'PASSWORD': os.environ.get('DB_PASSWORD'),
+            'HOST':     os.getenv('DB_HOST', 'localhost'),
+            'PORT':     os.getenv('DB_PORT', '5432'),
+            'OPTIONS': {
+                'connect_timeout': 5,
+            },
+        }
+    }
 
 # ── Auth password validators ───────────────────────────────────────────────────
 AUTH_PASSWORD_VALIDATORS = [
