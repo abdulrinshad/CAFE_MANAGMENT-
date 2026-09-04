@@ -36,6 +36,15 @@ _vercel_backend = 'cafe-management-mdbj.vercel.app'
 if _vercel_backend not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_vercel_backend)
 
+# Dynamically add Vercel deployment URLs if provided by the environment
+_vercel_url = os.getenv('VERCEL_URL')
+if _vercel_url and _vercel_url not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_vercel_url)
+
+_vercel_prod_url = os.getenv('VERCEL_PROJECT_PRODUCTION_URL')
+if _vercel_prod_url and _vercel_prod_url not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_vercel_prod_url)
+
 if 'testserver' not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append('testserver')
 
