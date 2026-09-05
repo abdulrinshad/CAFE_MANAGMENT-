@@ -108,7 +108,7 @@ export default function LoginPage() {
     }
     setSignupLoading(true)
     try {
-      await authApi.adminSignup({
+      const res = await authApi.adminSignup({
         full_name: signupData.full_name,
         email: signupData.email,
         phone_number: signupData.phone_number,
@@ -117,7 +117,11 @@ export default function LoginPage() {
         business_code: signupData.business_code,
       })
       setSignupStep('otp')
-      setSignupSuccess('OTP sent to your email.')
+      if (res && res.note) {
+        setSignupSuccess(`${res.message || 'Signup successful.'} (${res.note})`)
+      } else {
+        setSignupSuccess(res?.message || 'OTP sent to your email.')
+      }
     } catch (err) {
       if (err.data && typeof err.data === 'object' && !Array.isArray(err.data)) {
         // DRF validation errors are usually arrays of strings per field
