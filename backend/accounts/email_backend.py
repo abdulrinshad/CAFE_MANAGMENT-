@@ -43,7 +43,11 @@ class BrevoEmailBackend(BaseEmailBackend):
             'content-type': 'application/json'
         }
 
-        from_addr = email_message.from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'cafemanagment6@gmail.com'
+        from_addr = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv('EMAIL_HOST_USER') or email_message.from_email
+        if not from_addr or 'localhost' in from_addr:
+            from_addr = 'cafemanagment6@gmail.com'
+
+        from_addr = from_addr.strip().strip('\'"')
 
         payload = {
             'sender': {'name': 'Cafe Manager', 'email': from_addr},
