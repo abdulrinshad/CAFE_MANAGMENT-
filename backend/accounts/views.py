@@ -1759,20 +1759,11 @@ class AdminSignupView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        if not email_sent:
-            return Response(
-                {
-                    "detail": "Account created, but verification email could not be delivered. Please configure BREVO_API_KEY or EMAIL_HOST_USER/EMAIL_HOST_PASSWORD on Render.",
-                    "email_sent": False
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         logger.info("ADMIN SIGNUP DEBUG: 12 SIGNUP COMPLETED")
         resp_data = {
             "success": True,
-            "message": "Signup successful. OTP sent to your email.",
-            "email_sent": True
+            "message": "Signup successful. OTP sent to your email." if email_sent else "Signup successful. Please enter your verification OTP.",
+            "email_sent": email_sent
         }
         return Response(resp_data, status=status.HTTP_200_OK)
 
@@ -1919,19 +1910,10 @@ class ResendSignupOTPView(APIView):
             logger.exception(f"Resend OTP exception for {email}: {e}")
             return Response({"detail": "Failed to resend OTP. Please try again later."}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not email_sent:
-            return Response(
-                {
-                    "detail": "Failed to deliver OTP email. Please configure BREVO_API_KEY or EMAIL_HOST_USER/EMAIL_HOST_PASSWORD on Render.",
-                    "email_sent": False
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
         resp_data = {
             "success": True,
-            "message": "OTP resent to your email.",
-            "email_sent": True
+            "message": "OTP resent to your email." if email_sent else "Verification OTP regenerated.",
+            "email_sent": email_sent
         }
         return Response(resp_data, status=status.HTTP_200_OK)
 
