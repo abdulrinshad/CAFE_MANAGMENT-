@@ -22,7 +22,12 @@ DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,testserver').split(',') if h.strip()]
 
-# Ensure Render backend host is allowed
+# Auto-detect Render deployment hostname if provided by environment
+_render_ext_host = os.getenv('RENDER_EXTERNAL_HOSTNAME')
+if _render_ext_host and _render_ext_host not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_render_ext_host)
+
+# Ensure fallback Render backend host is allowed
 _render_host = 'cafe-manager-backend-bl54.onrender.com'
 if _render_host not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_render_host)
@@ -73,6 +78,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -162,6 +168,15 @@ USE_TZ = True
 # ── Static & Media files ───────────────────────────────────────────────────────
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
