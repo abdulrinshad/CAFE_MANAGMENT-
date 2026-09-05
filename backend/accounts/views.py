@@ -1559,8 +1559,7 @@ class AdminForgotPasswordView(APIView):
             logger.exception(f"AdminForgotPasswordView error: {e}")
             return Response({"detail": "Failed to process request. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
 
-        resp_msg = "OTP sent to email." if email_sent else f"Verification code generated: {raw_otp}"
-        return Response({"success": True, "message": resp_msg})
+        return Response({"success": True, "message": "OTP sent to your email."})
 
 class AdminVerifyOTPView(APIView):
     permission_classes = [AllowAny]
@@ -1763,12 +1762,9 @@ class AdminSignupView(APIView):
         logger.info("ADMIN SIGNUP DEBUG: 12 SIGNUP COMPLETED")
         resp_data = {
             "success": True,
-            "message": "Signup successful. OTP sent to email." if email_sent else f"Signup successful. Verification code: {raw_otp}",
+            "message": "Signup successful. OTP sent to your email.",
             "email_sent": email_sent
         }
-        if not email_sent:
-            resp_data["note"] = f"Verification code: {raw_otp}"
-
         return Response(resp_data, status=status.HTTP_200_OK)
 
 
@@ -1916,12 +1912,9 @@ class ResendSignupOTPView(APIView):
 
         resp_data = {
             "success": True,
-            "message": "OTP resent to email." if email_sent else f"New verification code generated: {raw_otp}",
+            "message": "OTP resent to your email.",
             "email_sent": email_sent
         }
-        if not email_sent:
-            resp_data["note"] = f"Verification code: {raw_otp}"
-
         return Response(resp_data, status=status.HTTP_200_OK)
 
 

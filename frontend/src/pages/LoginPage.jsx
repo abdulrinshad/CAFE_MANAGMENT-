@@ -117,11 +117,7 @@ export default function LoginPage() {
         business_code: signupData.business_code,
       })
       setSignupStep('otp')
-      if (res && res.note) {
-        setSignupSuccess(`${res.message || 'Signup successful.'} (${res.note})`)
-      } else {
-        setSignupSuccess(res?.message || 'OTP sent to your email.')
-      }
+      setSignupSuccess(res?.message || 'OTP sent to your email.')
     } catch (err) {
       if (err.data && typeof err.data === 'object' && !Array.isArray(err.data)) {
         // DRF validation errors are usually arrays of strings per field
