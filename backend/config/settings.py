@@ -37,9 +37,13 @@ _vercel_frontend = 'cafe-managment-ruddy.vercel.app'
 if _vercel_frontend not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_vercel_frontend)
 
-_vercel_backend = 'cafe-management-mdbj.vercel.app'
-if _vercel_backend not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append(_vercel_backend)
+_disec_cafe = 'disec-cafe.vercel.app'
+if _disec_cafe not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_disec_cafe)
+
+_ashen_cafe = 'cafe-management-ashen.vercel.app'
+if _ashen_cafe not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_ashen_cafe)
 
 # Dynamically add Vercel deployment URLs if provided by the environment
 _vercel_url = os.getenv('VERCEL_URL')
@@ -233,6 +237,8 @@ SIMPLE_JWT = {
 
 # ── CORS & CSRF ────────────────────────────────────────────────────────────────
 _default_cors_origins = [
+    'https://disec-cafe.vercel.app',
+    'https://cafe-management-ashen.vercel.app',
     'https://cafe-management-ruddy.vercel.app',
     'https://cafe-managment-ruddy.vercel.app',
     'https://cafe-management-mdbj.vercel.app',
@@ -255,6 +261,8 @@ CORS_ALLOW_CREDENTIALS = True
 
 # CSRF Trusted Origins for cross-origin requests
 _default_csrf_origins = [
+    'https://disec-cafe.vercel.app',
+    'https://cafe-management-ashen.vercel.app',
     'https://cafe-management-ruddy.vercel.app',
     'https://cafe-managment-ruddy.vercel.app',
     'https://cafe-management-mdbj.vercel.app',
