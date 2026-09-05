@@ -52,11 +52,15 @@ class BrevoEmailBackend(BaseEmailBackend):
 
         from_addr = from_addr.strip().strip('\'"')
 
+        formatted_body = email_message.body.replace('\n', '<br>')
+        body_html = f"<div style='font-family: Arial, sans-serif; font-size: 15px; color: #1a1a1a; line-height: 1.6;'>{formatted_body}</div>"
+
         payload = {
             'sender': {'name': 'Cafe Manager', 'email': from_addr},
             'to': [{'email': recipient} for recipient in email_message.to],
             'subject': email_message.subject,
-            'textContent': email_message.body
+            'textContent': email_message.body,
+            'htmlContent': body_html
         }
 
         # Check for HTML content alternative
