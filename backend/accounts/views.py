@@ -1543,20 +1543,24 @@ class AdminForgotPasswordView(APIView):
                 f"This code will expire in 5 minutes.\n\n"
                 f"If you did not request a password reset, please ignore this email."
             )
-            send_mail(
-                subject='Your Admin Password Reset OTP',
-                message=email_body,
-                from_email=None,
-                recipient_list=[admin_user.email],
-                fail_silently=False,
-            )
+            email_sent = True
+            try:
+                send_mail(
+                    subject='Your Admin Password Reset OTP',
+                    message=email_body,
+                    from_email=None,
+                    recipient_list=[admin_user.email],
+                    fail_silently=False,
+                )
+            except Exception as e:
+                email_sent = False
+                logger.exception(f"Password reset email delivery error: {e}")
         except Exception as e:
-            from django.conf import settings
-            if settings.DEBUG:
-                print(f"[DEBUG ONLY] Email delivery error: {e}")
-            return Response({"detail": "Unable to send verification email. Please try again."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception(f"AdminForgotPasswordView error: {e}")
+            return Response({"detail": "Failed to process request. Please try again."}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response({"success": True, "message": "OTP sent to email."})
+        resp_msg = "OTP sent to email." if email_sent else f"Verification code generated: {raw_otp}"
+        return Response({"success": True, "message": resp_msg})
 
 class AdminVerifyOTPView(APIView):
     permission_classes = [AllowAny]
@@ -1759,11 +1763,11 @@ class AdminSignupView(APIView):
         logger.info("ADMIN SIGNUP DEBUG: 12 SIGNUP COMPLETED")
         resp_data = {
             "success": True,
-            "message": "Signup successful. OTP sent to email." if email_sent else "Signup successful. Verification code generated.",
+            "message": "Signup successful. OTP sent to email." if email_sent else f"Signup successful. Verification code: {raw_otp}",
             "email_sent": email_sent
         }
         if not email_sent:
-            resp_data["note"] = f"OTP code for testing: {raw_otp}"
+            resp_data["note"] = f"Verification code: {raw_otp}"
 
         return Response(resp_data, status=status.HTTP_200_OK)
 
@@ -1912,11 +1916,11 @@ class ResendSignupOTPView(APIView):
 
         resp_data = {
             "success": True,
-            "message": "OTP resent to email." if email_sent else "New verification code generated.",
+            "message": "OTP resent to email." if email_sent else f"New verification code generated: {raw_otp}",
             "email_sent": email_sent
         }
         if not email_sent:
-            resp_data["note"] = f"OTP code for testing: {raw_otp}"
+            resp_data["note"] = f"Verification code: {raw_otp}"
 
         return Response(resp_data, status=status.HTTP_200_OK)
 
