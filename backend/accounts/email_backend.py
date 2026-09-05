@@ -6,6 +6,70 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+class BrevoEmailBackend(BaseEmailBackend):
+    """
+    A Django Email backend that uses the Brevo (Sendinblue) HTTPS API.
+    Sends 300 free emails per day to ANY recipient address without requiring a custom domain.
+    """
+    def __init__(self, fail_silently=False, **kwargs):
+        super().__init__(fail_silently=fail_silently, **kwargs)
+        raw_key = os.getenv('BREVO_API_KEY')
+        self.api_key = raw_key.strip().strip('\'"') if raw_key else None
+
+    def send_messages(self, email_messages):
+        if not email_messages:
+            return 0
+
+        sent_count = 0
+        for message in email_messages:
+            try:
+                if self._send(message):
+                    sent_count += 1
+            except Exception as e:
+                logger.error(f"Brevo send_messages error: {type(e).__name__}: {e}")
+                if not self.fail_silently:
+                    raise
+        return sent_count
+
+    def _send(self, email_message):
+        if not self.api_key:
+            if not self.fail_silently:
+                raise ValueError("BREVO_API_KEY environment variable is not configured.")
+            return False
+
+        headers = {
+            'api-key': self.api_key,
+            'accept': 'application/json',
+            'content-type': 'application/json'
+        }
+
+        from_addr = email_message.from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'cafemanagment6@gmail.com'
+
+        payload = {
+            'sender': {'name': 'Cafe Manager', 'email': from_addr},
+            'to': [{'email': recipient} for recipient in email_message.to],
+            'subject': email_message.subject,
+            'textContent': email_message.body
+        }
+
+        try:
+            response = requests.post(
+                'https://api.brevo.com/v3/smtp/email',
+                json=payload,
+                headers=headers,
+                timeout=10
+            )
+            response.raise_for_status()
+            return True
+        except requests.exceptions.RequestException as e:
+            res_status = getattr(e.response, 'status_code', 'Unknown')
+            res_text = getattr(e.response, 'text', str(e))
+            logger.error(f"Brevo HTTP Status: {res_status} | Error Response: {res_text}")
+            if not self.fail_silently:
+                raise Exception(f"Brevo API Error (HTTP {res_status}): {res_text}")
+            return False
+
+
 class ResendEmailBackend(BaseEmailBackend):
     """
     A Django Email backend that uses the Resend HTTPS API.
@@ -24,8 +88,8 @@ class ResendEmailBackend(BaseEmailBackend):
         sent_count = 0
         for message in email_messages:
             try:
-                self._send(message)
-                sent_count += 1
+                if self._send(message):
+                    sent_count += 1
             except Exception as e:
                 logger.error(f"Resend send_messages error: {type(e).__name__}: {e}")
                 if not self.fail_silently:
@@ -85,6 +149,7 @@ class ResendEmailBackend(BaseEmailBackend):
                 timeout=10
             )
             response.raise_for_status()
+            return True
         except requests.exceptions.RequestException as e:
             res_status = getattr(e.response, 'status_code', 'Unknown')
             res_text = getattr(e.response, 'text', str(e))
@@ -92,5 +157,3 @@ class ResendEmailBackend(BaseEmailBackend):
             if not self.fail_silently:
                 raise Exception(f"Resend API Error (HTTP {res_status}): {res_text}")
             return False
-            
-        return True

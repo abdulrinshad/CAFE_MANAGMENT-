@@ -272,8 +272,12 @@ _csrf_env_origins = [o.strip().strip('\'"').rstrip('/') for o in _csrf_env_raw.s
 CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_default_csrf_origins + _csrf_env_origins))
 
 # ── Email Settings ─────────────────────────────────────────────────────────────
+_brevo_key = os.getenv('BREVO_API_KEY')
 _resend_key = os.getenv('RESEND_API_KEY')
-if _resend_key and _resend_key.strip():
+
+if _brevo_key and _brevo_key.strip():
+    EMAIL_BACKEND = 'accounts.email_backend.BrevoEmailBackend'
+elif _resend_key and _resend_key.strip():
     EMAIL_BACKEND = 'accounts.email_backend.ResendEmailBackend'
 else:
     EMAIL_BACKEND = os.getenv(
