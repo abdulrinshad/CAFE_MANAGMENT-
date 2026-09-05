@@ -274,12 +274,8 @@ CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_default_csrf_origins + _csrf_env_orig
 # ── Email Settings (Brevo HTTPS REST API) ──────────────────────────────────────
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'accounts.email_backend.BrevoEmailBackend')
 
-_default_from = os.getenv('DEFAULT_FROM_EMAIL', 'cafemanagment6@gmail.com').strip().strip('\'"')
-DEFAULT_FROM_EMAIL = _default_from if _default_from else 'cafemanagment6@gmail.com'
-if not _default_from:
-    _default_from = EMAIL_HOST_USER
-
-DEFAULT_FROM_EMAIL = _default_from
+_default_from = os.getenv('DEFAULT_FROM_EMAIL', 'dilfakottayil@gmail.com').strip().strip('\'"')
+DEFAULT_FROM_EMAIL = _default_from if _default_from else 'dilfakottayil@gmail.com'
 
 EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '10'))
 

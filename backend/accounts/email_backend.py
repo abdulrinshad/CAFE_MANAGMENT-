@@ -48,7 +48,7 @@ class BrevoEmailBackend(BaseEmailBackend):
         # Resolve sender address
         from_addr = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or os.getenv('EMAIL_HOST_USER') or email_message.from_email
         if not from_addr or 'localhost' in from_addr:
-            from_addr = 'cafemanagment6@gmail.com'
+            from_addr = 'dilfakottayil@gmail.com'
 
         from_addr = from_addr.strip().strip('\'"')
 
