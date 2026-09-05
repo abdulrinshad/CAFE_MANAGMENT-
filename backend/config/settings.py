@@ -28,7 +28,7 @@ if _render_ext_host and _render_ext_host not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_render_ext_host)
 
 # Ensure fallback Render backend host is allowed
-_render_host = 'cafe-manager-backend-bl54.onrender.com'
+_render_host = 'cafe-managment-0lpz.onrender.com'
 if _render_host not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(_render_host)
 
