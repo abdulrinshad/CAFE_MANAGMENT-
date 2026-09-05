@@ -1724,40 +1724,37 @@ class AdminSignupView(APIView):
                 )
                 otp_record.set_otp(raw_otp)
                 otp_record.save()
-                logger.info("ADMIN SIGNUP DEBUG: 9 OTP CREATED")
+                logger.info(f"ADMIN SIGNUP DEBUG: 9 OTP CREATED FOR USER {user.email}: [OTP={raw_otp}]")
 
-                # Send Email within transaction scope
-                logger.info("ADMIN SIGNUP DEBUG: 10 EMAIL SENDING STARTED")
-                email_body = (
-                    f"Hello,\n\n"
-                    f"Your verification code for Artisan Brew is:\n\n"
-                    f"{raw_otp}\n\n"
-                    f"This code will expire in 5 minutes.\n\n"
-                    f"If you did not request this registration, please ignore this email."
-                )
-                try:
-                    send_mail(
-                        subject='Your Admin Registration OTP',
-                        message=email_body,
-                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
-                        recipient_list=[user.email],
-                        fail_silently=False,
-                    )
-                    logger.info("ADMIN SIGNUP DEBUG: 11 EMAIL SENT")
-                except Exception as mail_err:
-                    logger.exception(f"ADMIN SIGNUP DEBUG: email delivery error for recipient {user.email}: {type(mail_err).__name__}: {mail_err}")
-                    raise RuntimeError(f"Unable to send verification email: {str(mail_err)}")
-
-        except RuntimeError as rt_err:
-            logger.exception(f"ADMIN SIGNUP DEBUG: process failed due to email exception: {rt_err}")
-            return Response(
-                {"detail": "Unable to send verification email. Please check server email configuration or try again later."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            # Send Email outside transaction scope
+            logger.info("ADMIN SIGNUP DEBUG: 10 EMAIL SENDING STARTED")
+            email_body = (
+                f"Hello,\n\n"
+                f"Your verification code for Artisan Brew is:\n\n"
+                f"{raw_otp}\n\n"
+                f"This code will expire in 5 minutes.\n\n"
+                f"If you did not request this registration, please ignore this email."
             )
+            try:
+                send_mail(
+                    subject='Your Admin Registration OTP',
+                    message=email_body,
+                    from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+                    recipient_list=[user.email],
+                    fail_silently=False,
+                )
+                logger.info("ADMIN SIGNUP DEBUG: 11 EMAIL SENT")
+            except Exception as mail_err:
+                logger.exception(f"ADMIN SIGNUP DEBUG: email delivery error for recipient {user.email}: {type(mail_err).__name__}: {mail_err}")
+                return Response(
+                    {"detail": f"Account created, but verification email could not be sent ({str(mail_err)}). Please check server EMAIL_HOST_USER & EMAIL_HOST_PASSWORD environment variables on Render."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         except Exception as e:
             logger.exception(f"ADMIN SIGNUP DEBUG: process failed due to unexpected exception: {type(e).__name__}: {e}")
             return Response(
-                {"detail": "Signup process encountered a server error. Please check server configuration or try again."},
+                {"detail": f"Signup process encountered an error: {str(e)}. Ensure database migrations are up-to-date on Render."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

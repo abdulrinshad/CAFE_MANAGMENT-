@@ -4,7 +4,7 @@ services:
     env: python
     region: singapore # Change to your preferred Render region (e.g. oregon, frankfurt, singapore)
     buildCommand: "./build.sh"
-    startCommand: "gunicorn config.wsgi:application"
+    startCommand: "python manage.py migrate && gunicorn config.wsgi:application"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.3
