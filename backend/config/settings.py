@@ -272,10 +272,14 @@ _csrf_env_origins = [o.strip().strip('\'"').rstrip('/') for o in _csrf_env_raw.s
 CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_default_csrf_origins + _csrf_env_origins))
 
 # ── Email Settings ─────────────────────────────────────────────────────────────
-EMAIL_BACKEND = os.getenv(
-    'EMAIL_BACKEND',
-    'django.core.mail.backends.smtp.EmailBackend'
-)
+_resend_key = os.getenv('RESEND_API_KEY')
+if _resend_key and _resend_key.strip():
+    EMAIL_BACKEND = 'accounts.email_backend.ResendEmailBackend'
+else:
+    EMAIL_BACKEND = os.getenv(
+        'EMAIL_BACKEND',
+        'django.core.mail.backends.smtp.EmailBackend'
+    )
 
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))

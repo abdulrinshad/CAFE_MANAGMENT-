@@ -44,7 +44,7 @@ class ResendEmailBackend(BaseEmailBackend):
         }
 
         from_addr = email_message.from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', None)
-        if not from_addr or from_addr == 'webmaster@localhost':
+        if not from_addr or 'localhost' in from_addr or 'gmail.com' in from_addr:
             from_addr = 'onboarding@resend.dev'
 
         payload = {
