@@ -225,4 +225,17 @@
   .profile-basic { flex-direction: column; }
   .profile-fields-row { flex-direction: column; }
   .settings-page { max-width: 100%; }
+  .settings-nav {
+    overflow-x: auto;
+    width: 100%;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .settings-toast {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    justify-content: center;
+  }
 }

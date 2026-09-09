@@ -149,10 +149,25 @@
   .pos-dashboard__row-four {
     grid-template-columns: 1fr;
   }
+  .pos-dashboard__greeting-title {
+    font-size: 28px;
+  }
 }
 
 @media (max-width: 576px) {
   .pos-dashboard__stats-grid {
     grid-template-columns: 1fr;
+  }
+  .pos-dashboard__greeting-title {
+    font-size: 22px;
+  }
+  .pos-section-card {
+    padding: 16px;
+  }
+  .pos-toast {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    text-align: center;
   }
 }

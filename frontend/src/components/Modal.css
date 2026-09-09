@@ -91,25 +91,39 @@
   gap: 10px;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 767px) {
   .modal-overlay {
     padding: 12px;
   }
+  .modal {
+    width: calc(100vw - 24px);
+    max-width: 100% !important;
+    max-height: 85vh;
+  }
   .modal__header {
     padding: 16px 16px 12px;
+  }
+  .modal__title {
+    font-size: 16px;
+  }
+  .modal__close {
+    min-width: 36px;
+    min-height: 36px;
+    justify-content: center;
   }
   .modal__body {
     padding: 16px;
   }
   .modal__footer {
     padding: 12px 16px 16px;
-    flex-direction: column;
+    flex-direction: column-reverse;
     align-items: stretch;
     gap: 8px;
   }
   .modal__footer button {
     width: 100%;
     margin: 0;
+    min-height: 42px;
   }
 }
 

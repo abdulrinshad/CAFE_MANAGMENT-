@@ -362,6 +362,9 @@
     font-size: 16px;
     font-weight: 700;
     color: var(--color-espresso);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   
   .desktop-only-search {
@@ -385,12 +388,24 @@
   
   .top-header__page-name {
     font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 160px;
   }
   
   .notif-dropdown {
-    width: 280px;
-    right: -20px;
+    width: calc(100vw - 32px);
+    max-width: 340px;
+    right: -40px;
     max-height: 400px;
+  }
+}
+
+@media (max-width: 375px) {
+  .notif-dropdown {
+    right: -60px;
+    width: calc(100vw - 24px);
   }
 }
 

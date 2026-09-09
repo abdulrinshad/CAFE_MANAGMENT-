@@ -248,6 +248,8 @@
   .qr-stats-row { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 600px) {
+  .qr-codes-page__title { font-size: 24px; }
+  .qr-codes-page__header { flex-direction: column; align-items: stretch; gap: 12px; }
   .qr-grid { grid-template-columns: 1fr; }
   .qr-stats-row { grid-template-columns: 1fr; }
 }

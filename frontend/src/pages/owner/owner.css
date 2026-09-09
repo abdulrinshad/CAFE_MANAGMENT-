@@ -535,8 +535,19 @@
 }
 
 @media (max-width: 480px) {
+  .owner-page-header__title { font-size: 22px; }
   .owner-kpi-grid, .owner-kpi-grid--3, .owner-kpi-grid--5 { grid-template-columns: 1fr !important; }
   .owner-detail-grid, .owner-detail-grid--3 { grid-template-columns: 1fr !important; }
+  .owner-filter-bar .form-select,
+  .owner-filter-bar .form-input {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 375px) {
+  .owner-page-header__title { font-size: 20px; }
+  .owner-kpi-card { padding: 14px; }
 }
 
 @media (max-width: 600px) {

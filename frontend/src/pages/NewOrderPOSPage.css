@@ -353,12 +353,15 @@
 @media (max-width: 1100px) {
   .pos-layout-container {
     grid-template-columns: 1fr 320px;
+    gap: 16px;
   }
   .pos-categories-sidebar {
     flex-direction: row;
     grid-column: span 2;
     overflow-x: auto;
-    height: 48px;
+    -webkit-overflow-scrolling: touch;
+    height: auto;
+    padding-bottom: 8px;
   }
 }
 
@@ -366,8 +369,40 @@
   .pos-layout-container {
     grid-template-columns: 1fr;
     height: auto;
+    gap: 16px;
   }
   .pos-categories-sidebar {
     grid-column: span 1;
+  }
+  .pos-active-order-panel {
+    padding: 18px;
+    height: auto;
+    min-height: 400px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pos-products-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px;
+  }
+  .pos-product-card {
+    padding: 12px;
+  }
+  .pos-active-order-panel {
+    padding: 14px;
+  }
+  .pos-bottom-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .pos-action-btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .pos-products-grid {
+    grid-template-columns: 1fr;
   }
 }

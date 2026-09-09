@@ -395,3 +395,15 @@
     position: static;
   }
 }
+
+@media (max-width: 480px) {
+  .active-order-page {
+    padding: 12px 14px;
+  }
+  .active-order-card {
+    padding: 16px;
+  }
+  .timeline-step {
+    gap: 10px;
+  }
+}
