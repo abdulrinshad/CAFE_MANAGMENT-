@@ -141,3 +141,18 @@
   background: #cccccc;
   cursor: not-allowed;
 }
+
+/* Responsive */
+@media (max-width: 800px) {
+  .branch-messages-container {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+  .branch-messages-sidebar {
+    max-height: 300px;
+  }
+  .branch-messages-thread-panel {
+    min-height: 400px;
+  }
+}

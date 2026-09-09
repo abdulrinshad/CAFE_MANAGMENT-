@@ -335,6 +335,9 @@
 }
 
 @media (max-width: 767px) {
+  .orders-page__title {
+    font-size: 24px;
+  }
   .orders-page__header {
     flex-direction: column;
     align-items: stretch;
@@ -376,6 +379,18 @@
   }
   .orders-mobile-cards-wrap {
     display: flex;
+  }
+}
+
+@media (max-width: 375px) {
+  .orders-page__title {
+    font-size: 20px;
+  }
+  .orders-mobile-card {
+    padding: 12px;
+  }
+  .card-price {
+    font-size: 14px;
   }
 }
 
